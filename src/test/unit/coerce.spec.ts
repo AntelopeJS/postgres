@@ -57,6 +57,12 @@ describe("UnifyAll", () => {
     expect(UnifyAll([TEXT, FLOAT, TIMESTAMP])).to.equal(OPAQUE);
   });
 
+  it("absorbs the bottom type in either operand position", () => {
+    expect(UnifyAll([FLOAT, OPAQUE])).to.equal(OPAQUE);
+    expect(UnifyAll([OPAQUE, FLOAT])).to.equal(OPAQUE);
+    expect(UnifyAll([FLOAT, OPAQUE, FLOAT])).to.equal(OPAQUE);
+  });
+
   it("keeps a uniform element type", () => {
     expect(UnifyAll([FLOAT, FLOAT, FLOAT])).to.equal(FLOAT);
   });

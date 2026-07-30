@@ -27,6 +27,7 @@ describe("sql", () => {
 
   it("rejects NUL bytes rather than truncating the statement", () => {
     expect(() => QuoteLiteral("a\0b")).to.throw(/NUL/);
+    expect(() => QuoteIdentifier("a\0b")).to.throw(/NUL/);
   });
 
   it("casts scalar parameters to their physical type", () => {

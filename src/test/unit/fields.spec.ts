@@ -58,6 +58,30 @@ describe("ParseFieldType", () => {
     );
     expect(() => ParseFieldType("uuid", "shop.orders.ref")).to.throw(/uuid/);
   });
+
+  it("rejects tokens inherited from Object.prototype", () => {
+    expect(() => ParseFieldType("constructor", "t.f")).to.throw(
+      /Unsupported field type/,
+    );
+    expect(() => ParseFieldType("__proto__", "t.f")).to.throw(
+      /Unsupported field type/,
+    );
+    expect(() => ParseFieldType("valueOf", "t.f")).to.throw(
+      /Unsupported field type/,
+    );
+  });
+
+  it("rejects a declaration that is neither a string, array nor object", () => {
+    expect(() => ParseFieldType(null as unknown as FieldType, "t.f")).to.throw(
+      /Unsupported field type/,
+    );
+    expect(() => ParseFieldType(123 as unknown as FieldType, "t.f")).to.throw(
+      /Unsupported field type/,
+    );
+    expect(() =>
+      ParseFieldType(undefined as unknown as FieldType, "t.f"),
+    ).to.throw(/Unsupported field type/);
+  });
 });
 
 describe("ParseTable", () => {

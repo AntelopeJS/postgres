@@ -4,9 +4,17 @@ import { EXTRA_COLUMN, ID_COLUMN } from "./utils";
 
 type Reviver = (value: unknown, type: SqlType) => unknown;
 
+function ReviveTimestamp(value: unknown): unknown {
+  if (value instanceof Date) {
+    return value;
+  }
+  const date =
+    typeof value === "number" ? new Date(value) : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? value : date;
+}
+
 const REVIVERS: Partial<Record<SqlType["kind"], Reviver>> = {
-  timestamp: (value) =>
-    value instanceof Date ? value : new Date(String(value)),
+  timestamp: (value) => ReviveTimestamp(value),
   array: (value, type) =>
     Array.isArray(value)
       ? value.map((item) => ReviveValue(item, (type as ArrayType).elem))
@@ -46,7 +54,11 @@ export function DecodeRow(
   row: Record<string, unknown>,
   table: TableShape,
 ): Record<string, unknown> {
-  const document: Record<string, unknown> = { [ID_COLUMN]: row[ID_COLUMN] };
+  const document: Record<string, unknown> = {};
+  const id = row[ID_COLUMN];
+  if (id !== null && id !== undefined) {
+    document[ID_COLUMN] = id;
+  }
   for (const [name, spec] of Object.entries(table.fields)) {
     const value = row[spec.column];
     if (value === null || value === undefined) {
@@ -54,6 +66,9 @@ export function DecodeRow(
     }
     document[name] = ReviveValue(value, spec.type);
   }
-  const extra = (row[EXTRA_COLUMN] as Record<string, unknown> | null) ?? {};
+  const extra = {
+    ...((row[EXTRA_COLUMN] as Record<string, unknown> | null) ?? {}),
+  };
+  delete extra[ID_COLUMN];
   return { ...document, ...extra };
 }

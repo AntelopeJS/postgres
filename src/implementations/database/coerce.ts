@@ -94,7 +94,7 @@ export function UnifyAll(types: SqlType[]): SqlType {
     return OPAQUE;
   }
   return types.reduce((left, right) =>
-    IsOpaque(left) ? OPAQUE : Unify(left, right),
+    IsOpaque(left) || IsOpaque(right) ? OPAQUE : Unify(left, right),
   );
 }
 

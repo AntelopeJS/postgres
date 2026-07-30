@@ -63,18 +63,21 @@ function AsCodec(value: object): IoTsCodec | undefined {
   return looksLikeCodec ? (value as IoTsCodec) : undefined;
 }
 
+function UnsupportedFieldType(token: string, path: string): Error {
+  return new Error(
+    `Unsupported field type '${token}' for '${path}'. Supported: ${SUPPORTED_TOKENS}, optionally suffixed with [], a nested record, or an io-ts codec`,
+  );
+}
+
 function ParseToken(token: string, path: string): SqlType {
   const normalized = token.trim().toLowerCase();
   if (normalized.endsWith(ARRAY_SUFFIX)) {
     return ArrayOf(ParseToken(normalized.slice(0, -ARRAY_SUFFIX.length), path));
   }
-  const type = SCALAR_TYPES[normalized];
-  if (!type) {
-    throw new Error(
-      `Unsupported field type '${token}' for '${path}'. Supported: ${SUPPORTED_TOKENS}, optionally suffixed with [], a nested record, or an io-ts codec`,
-    );
+  if (!Object.hasOwn(SCALAR_TYPES, normalized)) {
+    throw UnsupportedFieldType(token, path);
   }
-  return type;
+  return SCALAR_TYPES[normalized];
 }
 
 function ParseShape(
@@ -99,6 +102,9 @@ export function ParseFieldType(field: FieldType, path: string): ParsedField {
       );
     }
     return { type: ArrayOf(ParseFieldType(field[0], path).type) };
+  }
+  if (typeof field !== "object" || field === null) {
+    throw UnsupportedFieldType(String(field), path);
   }
   const codec = AsCodec(field);
   if (codec) {

@@ -104,12 +104,12 @@ export function DecodeFunction(
   bindings: ArgumentBinding[],
 ): Compiled | undefined {
   const ids: number[] = func.args[0];
+  const missing = ids.findIndex((_, index) => !bindings[index]);
+  if (missing >= 0) {
+    throw new Error(`Missing binding for lambda parameter ${missing}`);
+  }
   ids.forEach((id, index) => {
-    const binding = bindings[index];
-    if (!binding) {
-      throw new Error(`Missing binding for lambda parameter ${index}`);
-    }
-    context.bind(id, binding);
+    context.bind(id, bindings[index]);
   });
   try {
     return DecodeValue(func.args[1], context);

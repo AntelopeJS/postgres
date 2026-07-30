@@ -19,7 +19,9 @@ async function initialize(schemaId: string, schema: SchemaDefinition) {
  *
  * Registration is driven by a consumer's module import side effect and is not
  * awaited by the caller, so the resulting promise is tracked here and awaited by
- * the query path through {@link WaitForSchemaReady}.
+ * the query path through {@link WaitForSchemaReady}. A failed registration keeps
+ * its rejected promise so the gate rethrows the parse error rather than letting
+ * the query path proceed against a schema that was never parsed.
  */
 export const Schemas = {
   register(schemaId: string, schema: SchemaDefinition) {
@@ -27,10 +29,10 @@ export const Schemas = {
     const pending = initialize(schemaId, schema).catch((err) => {
       delete definitions[schemaId];
       delete shapes[schemaId];
-      delete ready[schemaId];
       throw err;
     });
     ready[schemaId] = pending;
+    pending.catch(() => {});
     return pending;
   },
   unregister(schemaId: string) {

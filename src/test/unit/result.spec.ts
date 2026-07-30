@@ -75,6 +75,18 @@ describe("ReviveValue", () => {
     expect(out.at).to.be.a("date");
   });
 
+  it("revives epoch milliseconds at a timestamp leaf", () => {
+    const out = ReviveValue(1712345678000, TIMESTAMP);
+    expect(out).to.be.a("date");
+    expect((out as Date).getTime()).to.equal(1712345678000);
+  });
+
+  it("leaves an unparseable timestamp untouched", () => {
+    expect(ReviveValue("not a date", TIMESTAMP)).to.equal("not a date");
+    const blob = { a: 1 };
+    expect(ReviveValue(blob, TIMESTAMP)).to.equal(blob);
+  });
+
   it("passes null and undefined through", () => {
     expect(ReviveValue(null, TIMESTAMP)).to.equal(null);
     expect(ReviveValue(undefined, TIMESTAMP)).to.equal(undefined);
@@ -92,6 +104,18 @@ describe("DecodeRow", () => {
     expect(DecodeRow(row, vehicles)).to.deep.equal({
       _id: "a",
       car: "Peugeot",
+      productIds: ["p1"],
+    });
+  });
+
+  it("does not invent an _id on a projected row", () => {
+    expect(DecodeRow({ car: "X" }, vehicles)).to.deep.equal({ car: "X" });
+  });
+
+  it("does not let a stale _extra._id shadow the primary key", () => {
+    const row = { _id: "real", _extra: { _id: "stale", productIds: ["p1"] } };
+    expect(DecodeRow(row, vehicles)).to.deep.equal({
+      _id: "real",
       productIds: ["p1"],
     });
   });

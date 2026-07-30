@@ -1,7 +1,14 @@
 import { Cast, WithDefault } from "./coerce";
 import type { TableShape } from "./fields";
 import { type Compiled, QuoteIdentifier, QuoteLiteral } from "./sql";
-import { JsonOf, OPAQUE, type SqlShape, type SqlType, TEXT } from "./types";
+import {
+  IsJsonBacked,
+  JsonOf,
+  OPAQUE,
+  type SqlShape,
+  type SqlType,
+  TEXT,
+} from "./types";
 import { EXTRA_COLUMN, ID_COLUMN } from "./utils";
 
 /**
@@ -22,8 +29,11 @@ export class ColumnRowSource implements RowSource {
   ) {}
 
   public field(name: string, def?: Compiled): Compiled {
-    const spec = this.table.fields[name];
-    if (spec) {
+    if (name === ID_COLUMN) {
+      return WithDefault({ sql: this.column(ID_COLUMN), type: TEXT }, def);
+    }
+    if (Object.hasOwn(this.table.fields, name)) {
+      const spec = this.table.fields[name];
       return WithDefault(
         { sql: this.column(spec.column), type: spec.type },
         def,
@@ -47,15 +57,22 @@ export class ColumnRowSource implements RowSource {
   }
 
   public toJson(): Compiled {
-    const entries = [QuoteLiteral(ID_COLUMN), this.column(ID_COLUMN)];
+    const scalars = [QuoteLiteral(ID_COLUMN), this.column(ID_COLUMN)];
+    const containers: string[] = [];
     for (const [name, spec] of Object.entries(this.table.fields)) {
-      entries.push(QuoteLiteral(name), this.column(spec.column));
+      if (IsJsonBacked(spec.type)) {
+        containers.push(this.container(name, spec.column));
+        continue;
+      }
+      scalars.push(QuoteLiteral(name), this.column(spec.column));
     }
-    const built = `jsonb_strip_nulls(jsonb_build_object(${entries.join(", ")}))`;
-    return {
-      sql: `(${built} || ${this.column(EXTRA_COLUMN)})`,
-      type: JsonOf(this.shape()),
-    };
+    const base = `jsonb_strip_nulls(jsonb_build_object(${scalars.join(", ")}))`;
+    const parts = [
+      base,
+      ...containers,
+      `COALESCE(${this.column(EXTRA_COLUMN)}, '{}'::jsonb)`,
+    ];
+    return { sql: `(${parts.join(" || ")})`, type: JsonOf(this.shape()) };
   }
 
   public shape(): SqlShape {
@@ -64,6 +81,12 @@ export class ColumnRowSource implements RowSource {
       shape[name] = spec.type;
     }
     return shape;
+  }
+
+  private container(name: string, column: string): string {
+    const ref = this.column(column);
+    const built = `jsonb_build_object(${QuoteLiteral(name)}, ${ref})`;
+    return `(CASE WHEN ${ref} IS NULL THEN '{}'::jsonb ELSE ${built} END)`;
   }
 
   private column(name: string): string {
@@ -76,17 +99,25 @@ export class JsonRowSource implements RowSource {
 
   public field(name: string, def?: Compiled): Compiled {
     const raw: Compiled = {
-      sql: `(${this.value.sql} -> ${QuoteLiteral(name)})`,
+      sql: `(${this.toJson().sql} -> ${QuoteLiteral(name)})`,
       type: OPAQUE,
     };
-    return WithDefault(Cast(raw, this.shape()?.[name] ?? OPAQUE), def);
+    return WithDefault(Cast(raw, this.fieldType(name)), def);
   }
 
   public dynamicField(key: Compiled, def?: Compiled): Compiled {
     return WithDefault(
-      { sql: `(${this.value.sql} -> ${Cast(key, TEXT).sql})`, type: OPAQUE },
+      { sql: `(${this.toJson().sql} -> ${Cast(key, TEXT).sql})`, type: OPAQUE },
       def,
     );
+  }
+
+  private fieldType(name: string): SqlType {
+    const shape = this.shape();
+    if (!shape || !Object.hasOwn(shape, name)) {
+      return OPAQUE;
+    }
+    return shape[name];
   }
 
   public toJson(): Compiled {

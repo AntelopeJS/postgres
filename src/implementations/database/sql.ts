@@ -19,6 +19,9 @@ export class ParamCollector {
 }
 
 export function QuoteIdentifier(name: string): string {
+  if (name.includes("\0")) {
+    throw new Error("Identifiers cannot contain NUL bytes");
+  }
   return `"${name.replace(/"/g, '""')}"`;
 }
 

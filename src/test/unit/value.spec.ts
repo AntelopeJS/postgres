@@ -205,6 +205,23 @@ describe("DecodeFunction", () => {
     expect(() => DecodeFunction(func, context, [])).to.throw(/Missing binding/);
   });
 
+  it("binds nothing when a later parameter has no binding", () => {
+    const context = NewContext(NewRecorded());
+    const left = new ColumnRowSource("l", emptyTable);
+    const func = QueryStage(
+      "func",
+      undefined,
+      [3, 4],
+      [ValueProxy.arg(3), ValueProxy.arg(4)],
+    );
+
+    expect(() => DecodeFunction(func, context, [left])).to.throw(
+      /Missing binding/,
+    );
+    expect(() => context.arg(3)).to.throw(/3/);
+    expect(() => context.arg(4)).to.throw(/4/);
+  });
+
   it("unbinds even when the body fails to decode", () => {
     const context = NewContext(NewRecorded());
     const source = new ColumnRowSource("t", emptyTable);
