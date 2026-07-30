@@ -4,24 +4,14 @@ import type {
   SchemaDefinition,
   TableDefinition,
 } from "@antelopejs/interface-database/schema";
-import { RESERVED_COLUMNS } from "./utils";
+import { ParseSchema, type SchemaShape, type TableShape } from "./fields";
 
 const definitions: Record<string, SchemaDefinition> = {};
+const shapes: Record<string, SchemaShape> = {};
 const ready: Record<string, Promise<void>> = {};
 
-function assertNoReservedFields(schemaId: string, schema: SchemaDefinition) {
-  for (const [tableId, table] of Object.entries(schema)) {
-    for (const field of Object.keys(table.fields ?? {})) {
-      assert(
-        !RESERVED_COLUMNS.includes(field),
-        `Field '${field}' on '${schemaId}.${tableId}' uses a reserved column name (${RESERVED_COLUMNS.join(", ")})`,
-      );
-    }
-  }
-}
-
 async function initialize(schemaId: string, schema: SchemaDefinition) {
-  assertNoReservedFields(schemaId, schema);
+  shapes[schemaId] = ParseSchema(schemaId, schema);
 }
 
 /**
@@ -36,6 +26,7 @@ export const Schemas = {
     definitions[schemaId] = schema;
     const pending = initialize(schemaId, schema).catch((err) => {
       delete definitions[schemaId];
+      delete shapes[schemaId];
       delete ready[schemaId];
       throw err;
     });
@@ -44,6 +35,7 @@ export const Schemas = {
   },
   unregister(schemaId: string) {
     delete definitions[schemaId];
+    delete shapes[schemaId];
     delete ready[schemaId];
   },
 };
@@ -61,6 +53,14 @@ export function GetTable(schemaId: string, tableId: string): TableDefinition {
   const schema = GetSchema(schemaId);
   assert(tableId in schema, `Unknown table '${schemaId}.${tableId}'`);
   return schema[tableId];
+}
+
+export function GetTableShape(schemaId: string, tableId: string): TableShape {
+  const shape = shapes[schemaId];
+  assert(shape, `Unknown schema '${schemaId}'`);
+  const table = shape[tableId];
+  assert(table, `Unknown table '${schemaId}.${tableId}'`);
+  return table;
 }
 
 export function GetTableNames(schemaId: string): string[] {
