@@ -105,7 +105,14 @@ describe("JsonRowSource", () => {
       type: JsonOf({ price: FLOAT }),
     });
     expect(source.field("price").sql).to.equal(
-      "(((v -> 'price') #>> '{}')::double precision)",
+      "(CASE WHEN jsonb_typeof((v -> 'price')) = 'number' THEN (((v -> 'price') #>> '{}')::double precision) END)",
+    );
+  });
+
+  it("guards a shaped text field so a stored number is not read as text", () => {
+    const source = new JsonRowSource({ sql: "v", type: JsonOf({ car: TEXT }) });
+    expect(source.field("car").sql).to.equal(
+      "(CASE WHEN jsonb_typeof((v -> 'car')) = 'string' THEN ((v -> 'car') #>> '{}') END)",
     );
   });
 

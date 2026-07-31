@@ -16,6 +16,10 @@ import {
   TIMESTAMP,
 } from "../../implementations/database/types";
 
+const MOMENT_FROM_JSON =
+  "(CASE WHEN jsonb_typeof(v) = 'string' AND pg_input_is_valid((v #>> '{}'), 'timestamptz')" +
+  " THEN ((v #>> '{}')::timestamptz) END)";
+
 describe("Unify", () => {
   it("pulls the bottom type toward a concrete operand", () => {
     expect(Unify(OPAQUE, TIMESTAMP)).to.equal(TIMESTAMP);
@@ -79,7 +83,7 @@ describe("UnifyOperands", () => {
       { sql: "$1", type: TIMESTAMP },
     );
     expect(pair.type).to.equal(TIMESTAMP);
-    expect(pair.left.sql).to.equal("((v #>> '{}')::timestamptz)");
+    expect(pair.left.sql).to.equal(MOMENT_FROM_JSON);
     expect(pair.right.sql).to.equal("$1");
   });
 });
@@ -87,12 +91,34 @@ describe("UnifyOperands", () => {
 describe("Cast", () => {
   it("extracts a scalar out of jsonb", () => {
     const out = Cast({ sql: "v", type: OPAQUE }, TIMESTAMP);
-    expect(out.sql).to.equal("((v #>> '{}')::timestamptz)");
+    expect(out.sql).to.equal(MOMENT_FROM_JSON);
     expect(out.type).to.equal(TIMESTAMP);
   });
 
-  it("extracts text without a redundant cast", () => {
-    expect(Cast({ sql: "v", type: OPAQUE }, TEXT).sql).to.equal("(v #>> '{}')");
+  it("yields null rather than failing when a jsonb value is the wrong type", () => {
+    const out = Cast({ sql: "v", type: OPAQUE }, FLOAT);
+    expect(out.sql).to.equal(
+      "(CASE WHEN jsonb_typeof(v) = 'number' THEN ((v #>> '{}')::double precision) END)",
+    );
+    expect(out.type).to.equal(FLOAT);
+  });
+
+  it("guards a timestamp projection on the parse, not only on the json type", () => {
+    expect(Cast({ sql: "v", type: OPAQUE }, TIMESTAMP).sql).to.contain(
+      "pg_input_is_valid((v #>> '{}'), 'timestamptz')",
+    );
+  });
+
+  it("guards a boolean projection on the json boolean type", () => {
+    expect(Cast({ sql: "v", type: OPAQUE }, BOOL).sql).to.equal(
+      "(CASE WHEN jsonb_typeof(v) = 'boolean' THEN ((v #>> '{}')::boolean) END)",
+    );
+  });
+
+  it("guards the text projection so a stored number is not read as its text form", () => {
+    expect(Cast({ sql: "v", type: OPAQUE }, TEXT).sql).to.equal(
+      "(CASE WHEN jsonb_typeof(v) = 'string' THEN (v #>> '{}') END)",
+    );
   });
 
   it("wraps a scalar into jsonb", () => {
@@ -134,8 +160,21 @@ describe("WithDefault", () => {
       { sql: "v", type: OPAQUE },
       { sql: "$1", type: TEXT },
     );
-    expect(out.sql).to.equal("COALESCE((v #>> '{}'), $1)");
+    expect(out.sql).to.equal(
+      "COALESCE((CASE WHEN jsonb_typeof(v) = 'string' THEN (v #>> '{}') END), $1)",
+    );
     expect(out.type).to.equal(TEXT);
+  });
+
+  it("falls back to the default when the guard rejects the stored type", () => {
+    const out = WithDefault(
+      { sql: "v", type: OPAQUE },
+      { sql: "$1", type: FLOAT },
+    );
+    expect(out.sql).to.equal(
+      "COALESCE((CASE WHEN jsonb_typeof(v) = 'number' THEN ((v #>> '{}')::double precision) END), $1)",
+    );
+    expect(out.type).to.equal(FLOAT);
   });
 
   it("returns the value untouched when no default is given", () => {

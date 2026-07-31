@@ -1,4 +1,4 @@
-import type { Compiled } from "./sql";
+import { type Compiled, QuoteLiteral } from "./sql";
 import {
   ArrayOf,
   IsJsonBacked,
@@ -59,6 +59,25 @@ function UnifyShapes(left?: SqlShape, right?: SqlShape): SqlShape | undefined {
   return shape;
 }
 
+/**
+ * Rewrites a value as the target type.
+ *
+ * Projecting *out* of jsonb is guarded by `jsonb_typeof`, so a key whose stored values are
+ * heterogeneous yields NULL for the ones that do not fit rather than failing the whole
+ * statement. A `timestamp` target carries a second guard, since `jsonb_typeof` only proves the
+ * value is a string and `'"hello"'::jsonb #>> '{}'` read as a date raises `22007` and kills the
+ * statement: the projection is offered to PostgreSQL's own input function first, which is the
+ * same test {@link ParsesAs} applies to a declared `text` operand. One residue survives — a jsonb
+ * number too large for `double precision` still raises `22003` — and it is not reachable through
+ * this adapter's own write path.
+ *
+ * The guard makes a coercion that PostgreSQL's input parsers would have accepted — the string
+ * `"42"` read as a number, the number `1` read as a boolean, the number `42` read as the text
+ * `'42'` — yield NULL instead. That is deliberate: the contract compares values of different
+ * types as unequal, and `#>> '{}'` being total is exactly what would make `eq("42")` match a
+ * stored number. The text projection therefore sits under the same guard as the others, on
+ * `'string'`, and needs no `::text` cast because `#>>` already yields text.
+ */
 export function Cast(value: Compiled, target: SqlType): Compiled {
   if (value.type.kind === target.kind) {
     return { sql: value.sql, type: target };
@@ -75,12 +94,62 @@ export function Cast(value: Compiled, target: SqlType): Compiled {
   return { sql: `((${value.sql})::${PhysicalType(target)})`, type: target };
 }
 
-function FromJson(value: Compiled, target: SqlType): Compiled {
-  const text = `(${value.sql} #>> '{}')`;
+const JSON_TYPEOF: Partial<Record<SqlType["kind"], string>> = {
+  float: "number",
+  bool: "boolean",
+  text: "string",
+  timestamp: "string",
+};
+
+const PARSED_KINDS: Partial<Record<SqlType["kind"], true>> = {
+  timestamp: true,
+};
+
+/**
+ * Tests a text expression against PostgreSQL's own input function for a type, which is the only
+ * total test of "would this cast succeed" the server offers.
+ *
+ * Wider than JavaScript's `Date.parse` for a `timestamp` target: `now`, `today`, `tomorrow`,
+ * `yesterday`, `epoch`, `infinity` and `-infinity` are all accepted spellings.
+ */
+export function ParsesAs(sql: string, target: SqlType): string {
+  return `pg_input_is_valid(${sql}, ${QuoteLiteral(PhysicalType(target))})`;
+}
+
+function ProjectedText(value: Compiled): string {
+  return `(${value.sql} #>> '{}')`;
+}
+
+function Projection(value: Compiled, target: SqlType): string {
+  const text = ProjectedText(value);
   if (target.kind === "text") {
-    return { sql: text, type: target };
+    return text;
   }
-  return { sql: `(${text}::${PhysicalType(target)})`, type: target };
+  return `(${text}::${PhysicalType(target)})`;
+}
+
+function JsonGuards(
+  value: Compiled,
+  target: SqlType,
+  expected: string,
+): string {
+  const guards = [`jsonb_typeof(${value.sql}) = '${expected}'`];
+  if (PARSED_KINDS[target.kind]) {
+    guards.push(ParsesAs(ProjectedText(value), target));
+  }
+  return guards.join(" AND ");
+}
+
+function FromJson(value: Compiled, target: SqlType): Compiled {
+  const projection = Projection(value, target);
+  const expected = JSON_TYPEOF[target.kind];
+  if (!expected) {
+    return { sql: projection, type: target };
+  }
+  return {
+    sql: `(CASE WHEN ${JsonGuards(value, target, expected)} THEN ${projection} END)`,
+    type: target,
+  };
 }
 
 /**

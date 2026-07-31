@@ -20,7 +20,14 @@ const PRIMITIVE_TYPES: Record<string, SqlType> = {
   boolean: BOOL,
 };
 
-const NULL_JSON: Compiled = { sql: "'null'::jsonb", type: OPAQUE };
+/**
+ * The single json null every `null` in a query decodes to.
+ *
+ * {@link DecodeValue} returns this exact object, so an operator that needs to recognise a null
+ * literal — `eq` and `ne`, which must become an `IS NULL` test rather than a comparison against
+ * the bottom type — can detect it by identity.
+ */
+export const NULL_JSON: Compiled = { sql: "'null'::jsonb", type: OPAQUE };
 
 /**
  * Turn a value handed to the query builder into a SQL fragment.

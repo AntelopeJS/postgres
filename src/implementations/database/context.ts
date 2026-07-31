@@ -5,7 +5,7 @@ import { type Compiled, ParamCollector } from "./sql";
 
 export type SubqueryProvider = (stages: QueryStage[]) => Compiled;
 
-export type ArgumentBinding = RowSource | SubqueryProvider;
+export type ArgumentBinding = RowSource | SubqueryProvider | Compiled;
 
 export type ExpressionCompiler = (
   stages: QueryStage[],
@@ -50,7 +50,9 @@ export class DecodingContext {
   }
 
   public arg(id: number): ArgumentBinding {
-    const binding = this.bindings[id];
+    const binding = Object.hasOwn(this.bindings, id)
+      ? this.bindings[id]
+      : undefined;
     assert(binding, `Unbound lambda parameter ${id}`);
     return binding;
   }
