@@ -5,13 +5,16 @@ import type {
   TableDefinition,
 } from "@antelopejs/interface-database/schema";
 import { ParseSchema, type SchemaShape, type TableShape } from "./fields";
+import { SyncSchema } from "./migrate";
 
 const definitions: Record<string, SchemaDefinition> = {};
 const shapes: Record<string, SchemaShape> = {};
 const ready: Record<string, Promise<void>> = {};
 
 async function initialize(schemaId: string, schema: SchemaDefinition) {
-  shapes[schemaId] = ParseSchema(schemaId, schema);
+  const shape = ParseSchema(schemaId, schema);
+  shapes[schemaId] = shape;
+  await SyncSchema(schemaId, schema, shape);
 }
 
 /**
@@ -20,8 +23,11 @@ async function initialize(schemaId: string, schema: SchemaDefinition) {
  * Registration is driven by a consumer's module import side effect and is not
  * awaited by the caller, so the resulting promise is tracked here and awaited by
  * the query path through {@link WaitForSchemaReady}. A failed registration keeps
- * its rejected promise so the gate rethrows the parse error rather than letting
- * the query path proceed against a schema that was never parsed.
+ * its rejected promise so the gate rethrows that failure rather than letting the
+ * query path proceed against a schema that was never parsed or converged.
+ *
+ * The definition is parsed before the database is touched, so a declaration the
+ * parser rejects fails with its message without opening a connection.
  */
 export const Schemas = {
   register(schemaId: string, schema: SchemaDefinition) {

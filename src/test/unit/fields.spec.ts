@@ -4,6 +4,7 @@ import {
   ParseFieldType,
   ParseTable,
 } from "../../implementations/database/fields";
+import { PgIdentifier } from "../../implementations/database/identifier";
 import {
   ArrayOf,
   FLOAT,
@@ -89,5 +90,34 @@ describe("ParseTable", () => {
     expect(() =>
       ParseTable({ fields: { _id: "string" }, indexes: {} }, "shop.orders"),
     ).to.throw(/_id/);
+  });
+
+  it("fits an oversized field name into a column name", () => {
+    const name = "n".repeat(100);
+    const shape = ParseTable(
+      { fields: { name: "string" }, indexes: {} },
+      "shop.orders",
+    );
+    expect(shape.fields.name.column).to.equal("name");
+
+    const long = ParseTable(
+      { fields: { [name]: "string" }, indexes: {} },
+      "shop.orders",
+    );
+    expect(long.fields[name].column).to.equal(PgIdentifier(name));
+    expect(long.fields[name].column).to.not.equal(name);
+  });
+
+  it("rejects two fields that collide on one column", () => {
+    const name = "c".repeat(100);
+    expect(() =>
+      ParseTable(
+        {
+          fields: { [name]: "string", [PgIdentifier(name)]: "string" },
+          indexes: {},
+        },
+        "shop.orders",
+      ),
+    ).to.throw(/both map to column/);
   });
 });

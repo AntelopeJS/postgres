@@ -36,6 +36,11 @@ export function QuoteLiteral(value: string): string {
   return `E'${quoted.replace(/\\/g, "\\\\")}'`;
 }
 
+/** Reads one static key out of a jsonb expression; the single spelling both DDL and queries use. */
+export function JsonKey(source: string, key: string): string {
+  return `(${source} -> ${QuoteLiteral(key)})`;
+}
+
 export function Param(
   params: ParamCollector,
   value: unknown,

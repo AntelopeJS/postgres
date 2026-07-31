@@ -1,6 +1,6 @@
 import { Cast, WithDefault } from "./coerce";
 import type { TableShape } from "./fields";
-import { type Compiled, QuoteIdentifier, QuoteLiteral } from "./sql";
+import { type Compiled, JsonKey, QuoteIdentifier, QuoteLiteral } from "./sql";
 import {
   IsJsonBacked,
   JsonOf,
@@ -40,10 +40,7 @@ export class ColumnRowSource implements RowSource {
       );
     }
     return WithDefault(
-      {
-        sql: `(${this.column(EXTRA_COLUMN)} -> ${QuoteLiteral(name)})`,
-        type: OPAQUE,
-      },
+      { sql: JsonKey(this.column(EXTRA_COLUMN), name), type: OPAQUE },
       def,
     );
   }
@@ -99,7 +96,7 @@ export class JsonRowSource implements RowSource {
 
   public field(name: string, def?: Compiled): Compiled {
     const raw: Compiled = {
-      sql: `(${this.toJson().sql} -> ${QuoteLiteral(name)})`,
+      sql: JsonKey(this.toJson().sql, name),
       type: OPAQUE,
     };
     return WithDefault(Cast(raw, this.fieldType(name)), def);

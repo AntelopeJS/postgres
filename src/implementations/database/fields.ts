@@ -4,6 +4,7 @@ import type {
   StringFieldType,
   TableDefinition,
 } from "@antelopejs/interface-database/schema";
+import { PgIdentifier } from "./identifier";
 import {
   ArrayOf,
   BOOL,
@@ -117,14 +118,23 @@ export function ParseFieldType(field: FieldType, path: string): ParsedField {
 
 export function ParseTable(table: TableDefinition, path: string): TableShape {
   const fields: Record<string, FieldSpec> = {};
+  const owners = new Map<string, string>();
   for (const [name, declared] of Object.entries(table.fields ?? {})) {
     if (RESERVED_COLUMNS.includes(name)) {
       throw new Error(
         `Field '${name}' on '${path}' uses a reserved column name (${RESERVED_COLUMNS.join(", ")})`,
       );
     }
+    const column = PgIdentifier(name);
+    const owner = owners.get(column);
+    if (owner !== undefined) {
+      throw new Error(
+        `Fields '${owner}' and '${name}' on '${path}' both map to column '${column}'; rename one`,
+      );
+    }
+    owners.set(column, name);
     const parsed = ParseFieldType(declared, `${path}.${name}`);
-    fields[name] = { column: name, type: parsed.type, codec: parsed.codec };
+    fields[name] = { column, type: parsed.type, codec: parsed.codec };
   }
   return { fields };
 }
