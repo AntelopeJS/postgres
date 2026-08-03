@@ -1,6 +1,19 @@
 import assert from "node:assert";
+import { Query } from "../../connection";
+import { DecodingContext } from "./context";
+import { CompileExpression } from "./expression";
 import { CreateInstance, DestroyInstance, ListInstances } from "./instances";
+import { ApplyStages } from "./pipeline";
+import {
+  OUTPUT_COLUMN,
+  type Relation,
+  Render,
+  RequireOrigin,
+} from "./relation";
+import { DecodeRow, ReviveValue } from "./result";
 import { GetTableNames, WaitForSchemaReady } from "./schema";
+import { BuildRoot, CollectSchemaIds, SCHEMA_STAGE } from "./selection";
+import type { Compiled } from "./sql";
 import { CREATE_INSTANCE, DESTROY_INSTANCE, type QueryStage } from "./utils";
 
 type LifecycleHandler = (
@@ -8,11 +21,14 @@ type LifecycleHandler = (
   stage: QueryStage,
 ) => Promise<unknown>;
 
+export type ResultRow = Record<string, unknown>;
+
 const UNIMPLEMENTED =
-  "The PostgreSQL backend does not execute queries yet (scaffold only)";
+  "The PostgreSQL backend does not implement cursors yet (scaffold only)";
+const SUBQUERY_UNIMPLEMENTED =
+  "The PostgreSQL backend does not implement correlated subqueries yet";
 const MISSING_SCHEMA_ID = "Lifecycle query is missing its schema id";
 
-const ROOT_STAGE = "schema";
 const LIFECYCLE_STAGE_COUNT = 2;
 
 const LIFECYCLE_HANDLERS: Record<string, LifecycleHandler> = {
@@ -38,7 +54,7 @@ const LIFECYCLE_HANDLERS: Record<string, LifecycleHandler> = {
 function Lifecycle(stages: QueryStage[]): Promise<unknown> | undefined {
   if (
     stages.length !== LIFECYCLE_STAGE_COUNT ||
-    stages[0].stage !== ROOT_STAGE
+    stages[0].stage !== SCHEMA_STAGE
   ) {
     return undefined;
   }
@@ -52,12 +68,44 @@ function Lifecycle(stages: QueryStage[]): Promise<unknown> | undefined {
   return WaitForSchemaReady(schemaId).then(() => handler(schemaId, stage));
 }
 
+function CompileSubquery(): Compiled {
+  throw new Error(SUBQUERY_UNIMPLEMENTED);
+}
+
+function DecodeRows(relation: Relation, rows: ResultRow[]): unknown[] {
+  const projection = relation.projection;
+  if (projection) {
+    return rows.map((row) => ReviveValue(row[OUTPUT_COLUMN], projection.type));
+  }
+  const shape = RequireOrigin(relation).shape;
+  return rows.map((row) => DecodeRow(row, shape));
+}
+
+/**
+ * Turns the driver's rows into what the caller asked for.
+ *
+ * Dispatches on the same `projection` discriminator the select list was built from, so the two
+ * output modes cannot drift apart, and honours the relation's own answer to whether it yields
+ * exactly one row: a single-row relation hands back that row rather than a one-element array,
+ * and `null` — never `undefined` — when the read found nothing, which is what `nth` past the end
+ * reaches the caller as.
+ */
+export function DecodeResult(relation: Relation, rows: ResultRow[]): unknown {
+  const decoded = DecodeRows(relation, rows);
+  return relation.single ? (decoded[0] ?? null) : decoded;
+}
+
 export async function RunQuery(stages: QueryStage[]): Promise<any> {
   const lifecycle = Lifecycle(stages);
   if (lifecycle) {
     return lifecycle;
   }
-  throw new Error(UNIMPLEMENTED);
+  await Promise.all(CollectSchemaIds(stages).map(WaitForSchemaReady));
+  const context = new DecodingContext(CompileExpression, CompileSubquery);
+  const root = BuildRoot(stages, context);
+  const relation = ApplyStages(root.relation, root.rest, context);
+  const result = await Query<ResultRow>(Render(relation), context.params.all());
+  return DecodeResult(relation, result.rows);
 }
 
 export async function ReadCursor(

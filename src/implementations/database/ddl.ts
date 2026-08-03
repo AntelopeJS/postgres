@@ -115,7 +115,11 @@ function IndexKey(indexId: string, field: string, spec?: FieldSpec): string {
   return JsonKey(QuoteIdentifier(EXTRA_COLUMN), field);
 }
 
-function IndexFields(indexId: string, index: IndexDefinition): string[] {
+/**
+ * The fields an index keys on, in order — the name itself when the definition declares none, so
+ * the DDL that creates the index and the reader that sorts by it expand it the same way.
+ */
+export function IndexFields(indexId: string, index: IndexDefinition): string[] {
   const declared = index.fields ?? [];
   return declared.length > 0 ? declared : [indexId];
 }

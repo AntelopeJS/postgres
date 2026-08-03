@@ -18,6 +18,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
+import { Occurrences } from "./spec-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
@@ -107,10 +108,6 @@ function TimeOfDay(sql: string, zone = UTC): string {
   return AsFloat(
     `EXTRACT(EPOCH FROM (${local} - date_trunc('day', ${local})))`,
   );
-}
-
-function Occurrences(haystack: string, needle: string): number {
-  return haystack.split(needle).length - 1;
 }
 
 const DATE_STAGE_NAMES = [

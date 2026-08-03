@@ -3,9 +3,11 @@ import { Cast } from "./coerce";
 import type { DecodingContext } from "./context";
 import type { Compiled } from "./sql";
 import {
+  ARRAY_TYPEOF,
   AsFloat,
   AsJson,
   BuildStages,
+  ClampToRange,
   Collected,
   FIRST_OPERAND,
   GuardJson,
@@ -14,6 +16,7 @@ import {
   Lift,
   LiftRaw,
   Numeric,
+  ORDERED_KINDS,
   ORDINAL_COLUMN,
   Predicate,
   RequireOperand,
@@ -24,18 +27,9 @@ import {
   Walk,
   WalkColumn,
 } from "./stage";
-import {
-  ArrayOf,
-  BOOL,
-  FLOAT,
-  OPAQUE,
-  type SqlType,
-  TEXT,
-  TIMESTAMP,
-} from "./types";
+import { ArrayOf, BOOL, FLOAT, OPAQUE, type SqlType } from "./types";
 import { DecodeFunction } from "./value";
 
-const ARRAY_TYPEOF = "array";
 const ELEMENTS_FUNCTION = "jsonb_array_elements";
 const LENGTH_FUNCTION = "jsonb_array_length";
 const BUILD_ARRAY = "jsonb_build_array";
@@ -93,8 +87,7 @@ function MeasureStage(measure: Measure): StageHandler {
 }
 
 function Position(key: Compiled): string {
-  const truncated = `trunc(${Numeric(key).sql})`;
-  return `(LEAST(GREATEST(${truncated}, ${INT4_MIN}), ${INT4_MAX})::int)`;
+  return `(${ClampToRange(Numeric(key).sql, INT4_MIN, INT4_MAX)}::int)`;
 }
 
 const IndexStage = Lift((value, args, stage) => {
@@ -208,14 +201,9 @@ interface Reducer {
   empty?: string;
 }
 
-const COMPARABLE: Partial<Record<SqlType["kind"], SqlType>> = {
-  text: TEXT,
-  float: FLOAT,
-  timestamp: TIMESTAMP,
-};
-
 const AS_NUMBER: ElementReading = () => FLOAT;
-const AS_COMPARABLE: ElementReading = (elem) => COMPARABLE[elem.kind] ?? FLOAT;
+const AS_COMPARABLE: ElementReading = (elem) =>
+  ORDERED_KINDS[elem.kind] ?? FLOAT;
 
 const REDUCERS: Record<string, Reducer> = {
   arr_sum: { func: "sum", reading: AS_NUMBER, empty: EMPTY_SUM },

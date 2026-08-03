@@ -1,10 +1,11 @@
 import { Cast, WithDefault } from "./coerce";
 import type { TableShape } from "./fields";
-import { type Compiled, JsonKey, QuoteIdentifier, QuoteLiteral } from "./sql";
+import { type Compiled, JsonKey, QualifiedColumn, QuoteLiteral } from "./sql";
 import {
   IsJsonBacked,
   JsonOf,
   OPAQUE,
+  ShapeOf,
   type SqlShape,
   type SqlType,
   TEXT,
@@ -20,6 +21,58 @@ export interface RowSource {
   dynamicField(key: Compiled, def?: Compiled): Compiled;
   toJson(): Compiled;
   shape(): SqlShape | undefined;
+}
+
+export interface DocumentMember extends Compiled {
+  name: string;
+}
+
+function MemberShape(members: DocumentMember[]): SqlShape {
+  const shape: Record<string, SqlType> = {};
+  for (const member of members) {
+    shape[member.name] = member.type;
+  }
+  return shape;
+}
+
+function ContainerMember(member: DocumentMember): string {
+  const built = `jsonb_build_object(${QuoteLiteral(member.name)}, ${member.sql})`;
+  return `(CASE WHEN ${member.sql} IS NULL THEN '{}'::jsonb ELSE ${built} END)`;
+}
+
+/**
+ * Materializes named members as one jsonb document.
+ *
+ * Scalar members are stripped of nulls, so a NULL column reads as an absent key. Jsonb-backed
+ * members are merged in separately under a null guard instead, because `jsonb_strip_nulls`
+ * recurses and would otherwise delete nulls the caller stored inside their own value.
+ *
+ * `overflow` is merged last, for the unstructured column a table carries beside its declared
+ * fields; a projection over a subset of the fields passes nothing. Its keys are unknown, so they
+ * are absent from the returned type, which describes the named members only.
+ *
+ * A jsonb-backed member's sql is emitted twice — once by its guard — so pass an operand that is
+ * cheap for the database to evaluate.
+ */
+export function BuildDocument(
+  members: DocumentMember[],
+  overflow?: string,
+): Compiled {
+  const scalars: string[] = [];
+  const containers: string[] = [];
+  for (const member of members) {
+    if (IsJsonBacked(member.type)) {
+      containers.push(ContainerMember(member));
+      continue;
+    }
+    scalars.push(QuoteLiteral(member.name), member.sql);
+  }
+  const stripped = `jsonb_strip_nulls(jsonb_build_object(${scalars.join(", ")}))`;
+  const parts = [stripped, ...containers];
+  if (overflow) {
+    parts.push(overflow);
+  }
+  return { sql: `(${parts.join(" || ")})`, type: JsonOf(MemberShape(members)) };
 }
 
 export class ColumnRowSource implements RowSource {
@@ -53,41 +106,22 @@ export class ColumnRowSource implements RowSource {
     );
   }
 
+  private members(): DocumentMember[] {
+    const names = [ID_COLUMN, ...Object.keys(this.table.fields)];
+    return names.map((name) => ({ name, ...this.field(name) }));
+  }
+
   public toJson(): Compiled {
-    const scalars = [QuoteLiteral(ID_COLUMN), this.column(ID_COLUMN)];
-    const containers: string[] = [];
-    for (const [name, spec] of Object.entries(this.table.fields)) {
-      if (IsJsonBacked(spec.type)) {
-        containers.push(this.container(name, spec.column));
-        continue;
-      }
-      scalars.push(QuoteLiteral(name), this.column(spec.column));
-    }
-    const base = `jsonb_strip_nulls(jsonb_build_object(${scalars.join(", ")}))`;
-    const parts = [
-      base,
-      ...containers,
-      `COALESCE(${this.column(EXTRA_COLUMN)}, '{}'::jsonb)`,
-    ];
-    return { sql: `(${parts.join(" || ")})`, type: JsonOf(this.shape()) };
+    const overflow = `COALESCE(${this.column(EXTRA_COLUMN)}, '{}'::jsonb)`;
+    return BuildDocument(this.members(), overflow);
   }
 
   public shape(): SqlShape {
-    const shape: Record<string, SqlType> = { [ID_COLUMN]: TEXT };
-    for (const [name, spec] of Object.entries(this.table.fields)) {
-      shape[name] = spec.type;
-    }
-    return shape;
-  }
-
-  private container(name: string, column: string): string {
-    const ref = this.column(column);
-    const built = `jsonb_build_object(${QuoteLiteral(name)}, ${ref})`;
-    return `(CASE WHEN ${ref} IS NULL THEN '{}'::jsonb ELSE ${built} END)`;
+    return MemberShape(this.members());
   }
 
   private column(name: string): string {
-    return `${QuoteIdentifier(this.alias)}.${QuoteIdentifier(name)}`;
+    return QualifiedColumn(this.alias, name);
   }
 }
 
@@ -125,6 +159,6 @@ export class JsonRowSource implements RowSource {
   }
 
   public shape(): SqlShape | undefined {
-    return this.value.type.kind === "json" ? this.value.type.shape : undefined;
+    return ShapeOf(this.value.type);
   }
 }

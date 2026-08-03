@@ -48,27 +48,34 @@ export const Schemas = {
   },
 };
 
+function MissingSchema(schemaId: string): string {
+  return `Unknown schema '${schemaId}'`;
+}
+
+function MissingTable(schemaId: string, tableId: string): string {
+  return `Unknown table '${schemaId}.${tableId}'`;
+}
+
 export function WaitForSchemaReady(schemaId: string): Promise<void> {
-  return ready[schemaId] ?? Promise.resolve();
+  return Object.hasOwn(ready, schemaId) ? ready[schemaId] : Promise.resolve();
 }
 
 export function GetSchema(schemaId: string): SchemaDefinition {
-  assert(schemaId in definitions, `Unknown schema '${schemaId}'`);
+  assert(Object.hasOwn(definitions, schemaId), MissingSchema(schemaId));
   return definitions[schemaId];
 }
 
 export function GetTable(schemaId: string, tableId: string): TableDefinition {
   const schema = GetSchema(schemaId);
-  assert(tableId in schema, `Unknown table '${schemaId}.${tableId}'`);
+  assert(Object.hasOwn(schema, tableId), MissingTable(schemaId, tableId));
   return schema[tableId];
 }
 
 export function GetTableShape(schemaId: string, tableId: string): TableShape {
+  assert(Object.hasOwn(shapes, schemaId), MissingSchema(schemaId));
   const shape = shapes[schemaId];
-  assert(shape, `Unknown schema '${schemaId}'`);
-  const table = shape[tableId];
-  assert(table, `Unknown table '${schemaId}.${tableId}'`);
-  return table;
+  assert(Object.hasOwn(shape, tableId), MissingTable(schemaId, tableId));
+  return shape[tableId];
 }
 
 export function GetTableNames(schemaId: string): string[] {
@@ -88,7 +95,7 @@ export function GetIndex(
   onlyIndex?: boolean,
 ): IndexDefinition {
   const table = GetTable(schemaId, tableId);
-  if (indexId in table.indexes) {
+  if (Object.hasOwn(table.indexes, indexId)) {
     return table.indexes[indexId];
   }
   assert(!onlyIndex, `Unknown index '${indexId}' on '${schemaId}.${tableId}'`);

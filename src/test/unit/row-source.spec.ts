@@ -1,7 +1,9 @@
 import { expect } from "chai";
 import type { TableShape } from "../../implementations/database/fields";
 import {
+  BuildDocument,
   ColumnRowSource,
+  type DocumentMember,
   JsonRowSource,
 } from "../../implementations/database/row-source";
 import {
@@ -95,6 +97,50 @@ describe("ColumnRowSource", () => {
       price: FLOAT,
       manufactured: TIMESTAMP,
     });
+  });
+});
+
+describe("BuildDocument", () => {
+  const scalars: DocumentMember[] = [
+    { name: "car", sql: '"t"."car"', type: TEXT },
+    { name: "price", sql: '"t"."price"', type: FLOAT },
+  ];
+
+  it("strips nulls from scalar members only", () => {
+    const out = BuildDocument(scalars);
+    expect(out.sql).to.equal(
+      `(jsonb_strip_nulls(jsonb_build_object('car', "t"."car", 'price', "t"."price")))`,
+    );
+    expect(out.type).to.deep.equal(JsonOf({ car: TEXT, price: FLOAT }));
+  });
+
+  it("merges a jsonb-backed member under a null guard", () => {
+    const out = BuildDocument([
+      ...scalars,
+      { name: "tags", sql: '"t"."tags"', type: ArrayOf(TEXT) },
+    ]);
+    expect(out.sql).to.contain(
+      `(CASE WHEN "t"."tags" IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('tags', "t"."tags") END)`,
+    );
+    expect(out.sql).to.contain(
+      `jsonb_strip_nulls(jsonb_build_object('car', "t"."car", 'price', "t"."price"))`,
+    );
+  });
+
+  it("appends an overflow part last", () => {
+    const out = BuildDocument(scalars, `COALESCE("t"."_extra", '{}'::jsonb)`);
+    expect(out.sql).to.equal(
+      `(jsonb_strip_nulls(jsonb_build_object('car', "t"."car", 'price',` +
+        ` "t"."price")) || COALESCE("t"."_extra", '{}'::jsonb))`,
+    );
+  });
+
+  it("builds an empty object when every member is jsonb-backed", () => {
+    const out = BuildDocument([
+      { name: "tags", sql: '"t"."tags"', type: ArrayOf(TEXT) },
+    ]);
+    expect(out.sql).to.contain("jsonb_strip_nulls(jsonb_build_object())");
+    expect(out.type).to.deep.equal(JsonOf({ tags: ArrayOf(TEXT) }));
   });
 });
 

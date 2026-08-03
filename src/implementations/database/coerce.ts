@@ -6,6 +6,7 @@ import {
   JsonOf,
   OPAQUE,
   PhysicalType,
+  ShapeOf,
   type SqlShape,
   type SqlType,
 } from "./types";
@@ -52,11 +53,40 @@ function UnifyShapes(left?: SqlShape, right?: SqlShape): SqlShape | undefined {
   }
   const shape: Record<string, SqlType> = {};
   for (const [name, type] of Object.entries(left)) {
-    if (name in right) {
+    if (Object.hasOwn(right, name)) {
       shape[name] = Unify(type, right[name]);
     }
   }
   return shape;
+}
+
+/**
+ * Common type for values that arrive from *alternative* sources, such as the two halves of a
+ * union.
+ *
+ * Where {@link Unify} intersects two json shapes — right for two operands of one operator, since
+ * a key only one side declares cannot take part in the comparison — this takes their union,
+ * because every row comes from exactly one side and carries that side's keys. Picking the wrong
+ * one is silent: an intersection drops the type of a key that is genuinely present in the rows,
+ * and the value then decodes as raw json.
+ *
+ * Only the shape rule differs. Anything else — two scalars, two arrays, a shaped side against an
+ * unshaped one — is {@link Unify}, so two streams of the same concrete kind widen to that kind
+ * rather than to the bottom type they would then have to decode as raw json.
+ */
+export function Widen(left: SqlType, right: SqlType): SqlType {
+  const leftShape = ShapeOf(left);
+  const rightShape = ShapeOf(right);
+  if (!leftShape || !rightShape) {
+    return Unify(left, right);
+  }
+  const shape: Record<string, SqlType> = { ...leftShape };
+  for (const [name, type] of Object.entries(rightShape)) {
+    shape[name] = Object.hasOwn(leftShape, name)
+      ? Unify(leftShape[name], type)
+      : type;
+  }
+  return JsonOf(shape);
 }
 
 /**

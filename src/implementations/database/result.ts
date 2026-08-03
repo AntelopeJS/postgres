@@ -43,7 +43,7 @@ function ReviveShape(value: unknown, shape?: SqlShape): unknown {
     ...(value as Record<string, unknown>),
   };
   for (const [name, type] of Object.entries(shape)) {
-    if (name in result) {
+    if (Object.hasOwn(result, name)) {
       result[name] = ReviveValue(result[name], type);
     }
   }

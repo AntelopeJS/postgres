@@ -71,3 +71,8 @@ export function IsOpaque(type: SqlType): boolean {
 export function IsJsonBacked(type: SqlType): type is ArrayType | JsonType {
   return type.kind === "json" || type.kind === "array";
 }
+
+/** The declared members of a json type, or nothing for any type whose members are unknown. */
+export function ShapeOf(type: SqlType): SqlShape | undefined {
+  return type.kind === "json" ? type.shape : undefined;
+}

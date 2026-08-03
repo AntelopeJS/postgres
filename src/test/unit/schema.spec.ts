@@ -2,10 +2,13 @@ import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
 import { expect } from "chai";
 import {
   GetSchema,
+  GetTableNames,
   GetTableShape,
   Schemas,
   WaitForSchemaReady,
 } from "../../implementations/database/schema";
+
+const INHERITED = "constructor";
 
 const BAD_SCHEMA = {
   orders: { fields: { ref: "uuid" }, indexes: {} },
@@ -38,5 +41,23 @@ describe("Schemas.register", () => {
 
     expect(() => GetSchema("broken")).to.throw(/Unknown schema/);
     expect(() => GetTableShape("broken", "orders")).to.throw(/Unknown schema/);
+  });
+});
+
+describe("the registry accessors", () => {
+  it("declines a schema named after an inherited member", () => {
+    expect(() => GetSchema(INHERITED)).to.throw(
+      `Unknown schema '${INHERITED}'`,
+    );
+    expect(() => GetTableShape(INHERITED, "orders")).to.throw(
+      `Unknown schema '${INHERITED}'`,
+    );
+    expect(() => GetTableNames(INHERITED)).to.throw(
+      `Unknown schema '${INHERITED}'`,
+    );
+  });
+
+  it("gates a schema named after an inherited member on a real promise", () => {
+    expect(WaitForSchemaReady(INHERITED)).to.be.an.instanceOf(Promise);
   });
 });

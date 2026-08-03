@@ -18,6 +18,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
+import { Occurrences } from "./spec-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
@@ -75,10 +76,6 @@ function Keys(operand: string, alias: string): string {
 
 function Values(operand: string, alias: string): string {
   return `(SELECT COALESCE(jsonb_agg("${alias}"."value" ORDER BY "${alias}"."ord"), '[]'::jsonb) FROM jsonb_each(${operand}) WITH ORDINALITY AS "${alias}"("key", "value", "ord"))`;
-}
-
-function Occurrences(haystack: string, needle: string): number {
-  return haystack.split(needle).length - 1;
 }
 
 describe("object stage dispatch", () => {

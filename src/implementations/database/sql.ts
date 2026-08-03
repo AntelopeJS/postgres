@@ -36,6 +36,11 @@ export function QuoteLiteral(value: string): string {
   return `E'${quoted.replace(/\\/g, "\\\\")}'`;
 }
 
+/** References a column of an aliased relation; the single spelling every compiled fragment uses. */
+export function QualifiedColumn(alias: string, column: string): string {
+  return `${QuoteIdentifier(alias)}.${QuoteIdentifier(column)}`;
+}
+
 /** Reads one static key out of a jsonb expression; the single spelling both DDL and queries use. */
 export function JsonKey(source: string, key: string): string {
   return `(${source} -> ${QuoteLiteral(key)})`;

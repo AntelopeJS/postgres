@@ -1,11 +1,5 @@
 import { expect } from "chai";
 import {
-  ClearOptions,
-  GetOptions,
-  type Options,
-  SetOptions,
-} from "../../config";
-import {
   IndexName,
   PgIdentifier,
   QualifiedName,
@@ -13,6 +7,7 @@ import {
   TableName,
   TableReference,
 } from "../../implementations/database/identifier";
+import { WithOptions } from "./spec-fixture";
 
 const LONG = "a".repeat(100);
 const MULTIBYTE = "é".repeat(40);
@@ -42,36 +37,6 @@ describe("PgIdentifier", () => {
     expect(Buffer.from(out, "utf8").toString("utf8")).to.equal(out);
   });
 });
-
-function CurrentOptions(): Options | undefined {
-  try {
-    return GetOptions();
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Reads through a temporary configuration, restoring whatever was there.
- *
- * The options are process-wide and these specs share their process with a live
- * adapter: `pnpm test` runs them alongside the conformance suites, against a
- * module that has already been constructed. Both the set and the restore happen
- * inside one synchronous call so no registration in flight can observe either.
- */
-function WithOptions<T>(options: Options, read: () => T): T {
-  const saved = CurrentOptions();
-  SetOptions(options);
-  try {
-    return read();
-  } finally {
-    if (saved) {
-      SetOptions(saved);
-    } else {
-      ClearOptions();
-    }
-  }
-}
 
 describe("generated names", () => {
   it("prefixes the schema name", () => {

@@ -1,17 +1,20 @@
-import type { QueryStage } from "@antelopejs/interface-database/common";
-import { type Compiled, QuoteIdentifier, QuoteLiteral } from "./sql";
+import { type Compiled, QuoteLiteral } from "./sql";
 import {
   AsJson,
   AsSource,
   Collected,
   FIRST_OPERAND,
+  FieldNames,
+  FieldOf,
   GuardJson,
+  HeldOnce,
   Lift,
   LiftRaw,
+  OBJECT_TYPEOF,
   RequireOperand,
-  SECOND_OPERAND,
   type StageHandler,
   type StageMap,
+  TextArray,
   VALUE_COLUMN,
   Walk,
   WalkColumn,
@@ -21,14 +24,11 @@ import {
   BOOL,
   JsonOf,
   OPAQUE,
-  PhysicalType,
-  type SqlShape,
+  ShapeOf,
   type SqlType,
   TEXT,
 } from "./types";
-import { DecodeValue } from "./value";
 
-const OBJECT_TYPEOF = "object";
 const KEY_COLUMN = "key";
 const MERGED_COLUMN = "merged";
 const KEYS_FUNCTION = "jsonb_object_keys";
@@ -37,24 +37,9 @@ const CONTAINS_KEYS = "?&";
 const CONTAINS = "@>";
 const EMPTY_OBJECT = "'{}'::jsonb";
 
-const ObjIndexStage: StageHandler = (state, stage, context) => {
-  const source = AsSource(state);
-  const def = DecodeValue(stage.args[SECOND_OPERAND], context);
-  const key = stage.args[FIRST_OPERAND];
-  if (typeof key === "string") {
-    return { current: source.field(key, def) };
-  }
-  const dynamic = RequireOperand(
-    DecodeValue(key, context),
-    stage,
-    FIRST_OPERAND,
-  );
-  return { current: source.dynamicField(dynamic, def) };
-};
-
-function ShapeOf(type: SqlType): SqlShape | undefined {
-  return type.kind === "json" ? type.shape : undefined;
-}
+const ObjIndexStage: StageHandler = (state, stage, context) => ({
+  current: FieldOf(AsSource(state), stage, context),
+});
 
 function MergedType(left: SqlType, right: SqlType): SqlType {
   const known = ShapeOf(left);
@@ -66,11 +51,14 @@ function MergedType(left: SqlType, right: SqlType): SqlType {
 }
 
 function Merged(left: Compiled, right: Compiled, alias: string): string {
-  const relation = QuoteIdentifier(alias);
-  const column = `${relation}.${QuoteIdentifier(MERGED_COLUMN)}`;
-  const concatenation = `(SELECT ${left.sql} || ${right.sql} AS ${QuoteIdentifier(MERGED_COLUMN)})`;
-  const guard = `jsonb_typeof(${column}) = ${QuoteLiteral(OBJECT_TYPEOF)}`;
-  return `(SELECT ${column} FROM ${concatenation} AS ${relation} WHERE ${guard})`;
+  return HeldOnce({
+    value: `${left.sql} || ${right.sql}`,
+    column: MERGED_COLUMN,
+    alias,
+    select: (column) => column,
+    guard: (column) =>
+      `jsonb_typeof(${column}) = ${QuoteLiteral(OBJECT_TYPEOF)}`,
+  });
 }
 
 const MergeStage = Lift((value, args, stage, context) => {
@@ -123,31 +111,13 @@ function WalkStage(walk: ObjectWalk): StageHandler {
   });
 }
 
-function FieldListError(stage: QueryStage): Error {
-  return new Error(`Stage '${stage.stage}' requires a list of field names`);
-}
-
-function FieldArray(stage: QueryStage): string {
-  const fields = stage.args[FIRST_OPERAND];
-  if (!Array.isArray(fields)) {
-    throw FieldListError(stage);
-  }
-  const literals = fields.map((field) => {
-    if (typeof field !== "string") {
-      throw FieldListError(stage);
-    }
-    return QuoteLiteral(field);
-  });
-  return `array[${literals.join(", ")}]::${PhysicalType(TEXT)}[]`;
-}
-
 function IsObject(json: Compiled): string {
   return `(${json.sql} ${CONTAINS} ${EMPTY_OBJECT})`;
 }
 
 const HasStage = LiftRaw((value, stage) => {
   const json = AsJson(value);
-  const test = `(${json.sql} ${CONTAINS_KEYS} ${FieldArray(stage)})`;
+  const test = `(${json.sql} ${CONTAINS_KEYS} ${TextArray(FieldNames(stage))})`;
   return { sql: `(${IsObject(json)} AND ${test})`, type: BOOL };
 });
 

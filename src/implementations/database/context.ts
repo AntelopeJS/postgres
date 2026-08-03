@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import type { QueryStage } from "@antelopejs/interface-database/common";
 import type { RowSource } from "./row-source";
+import type { OriginResolver } from "./selection";
 import { type Compiled, ParamCollector } from "./sql";
 
 export type SubqueryProvider = (stages: QueryStage[]) => Compiled;
@@ -29,6 +30,15 @@ const ALIAS_PREFIX = "t";
  */
 export class DecodingContext {
   public readonly params = new ParamCollector();
+
+  /**
+   * How a root nested inside the stage tree — a union's right side — learns about its table.
+   *
+   * Injected for the same reason the two compilers are; see {@link OriginResolver}. Left unset
+   * outside a spec, where `RegisteredOrigin` is what a nested root falls back to.
+   */
+  public resolveOrigin?: OriginResolver;
+
   private readonly bindings: Record<number, ArgumentBinding> = {};
   private aliasCounter = 0;
 

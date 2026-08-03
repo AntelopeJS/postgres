@@ -18,6 +18,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
+import { Occurrences } from "./spec-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
@@ -119,10 +120,6 @@ function Aliases(sql: string): string[] {
 
 function Position(param: string): string {
   return `(LEAST(GREATEST(trunc(${param}), -2147483648), 2147483647)::int)`;
-}
-
-function Occurrences(haystack: string, needle: string): number {
-  return haystack.split(needle).length - 1;
 }
 
 const FLOAT_PARAM = "($1::double precision)";

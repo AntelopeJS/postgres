@@ -8,6 +8,7 @@ import {
   JsonOf,
   OPAQUE,
   PhysicalType,
+  ShapeOf,
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
@@ -35,6 +36,13 @@ describe("SqlType", () => {
 
   it("treats a hand-built empty shape as the bottom type", () => {
     expect(IsOpaque({ kind: "json", shape: {} })).to.equal(true);
+  });
+
+  it("reads the members of a shaped json and nothing else", () => {
+    expect(ShapeOf(JsonOf({ a: TEXT }))).to.deep.equal({ a: TEXT });
+    expect(ShapeOf(OPAQUE)).to.equal(undefined);
+    expect(ShapeOf(ArrayOf(TEXT))).to.equal(undefined);
+    expect(ShapeOf(TEXT)).to.equal(undefined);
   });
 
   it("reports jsonb-backed kinds", () => {

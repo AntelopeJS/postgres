@@ -2,8 +2,21 @@ import type { QueryStage } from "@antelopejs/interface-database/common";
 import { Cast, ParsesAs } from "./coerce";
 import type { DecodingContext } from "./context";
 import { JsonRowSource, type RowSource } from "./row-source";
-import { type Compiled, QuoteIdentifier, QuoteLiteral } from "./sql";
-import { BOOL, FLOAT, OPAQUE, type SqlType, TEXT, TIMESTAMP } from "./types";
+import {
+  type Compiled,
+  QualifiedColumn,
+  QuoteIdentifier,
+  QuoteLiteral,
+} from "./sql";
+import {
+  BOOL,
+  FLOAT,
+  OPAQUE,
+  PhysicalType,
+  type SqlType,
+  TEXT,
+  TIMESTAMP,
+} from "./types";
 import { DecodeValue } from "./value";
 
 /**
@@ -53,6 +66,25 @@ export const FLOAT_CAST = "::double precision";
 export const INT4_MIN = -2147483648;
 export const INT4_MAX = 2147483647;
 
+/**
+ * Clamps a caller-supplied number into the range the cast that follows can represent, truncating
+ * rather than rounding.
+ *
+ * An out-of-range value raises `22003` and loses the whole statement rather than yielding NULL,
+ * so every position and every row bound passes through here before its cast. `double precision`
+ * rounds half to even on the way to an integer type, where both callers count whole units.
+ *
+ * `LEAST` and `GREATEST` ignore NULL, so a caller that needs an unreadable operand to stay NULL
+ * has to say so around this fragment rather than inside it.
+ */
+export function ClampToRange(
+  sql: string,
+  lowest: number,
+  highest: number,
+): string {
+  return `LEAST(GREATEST(trunc(${sql}), ${lowest}), ${highest})`;
+}
+
 const EMPTY_STATE = "Expression has no value to operate on";
 
 function RequireCurrent(state: ExpressionState): Compiled | RowSource {
@@ -87,6 +119,32 @@ export function RequireOperand(
     );
   }
   return value;
+}
+
+/**
+ * Reads an argument that is a literal list of field *names* rather than a value.
+ *
+ * Decoding it instead would bind a parameter no fragment references and produce a jsonb array
+ * where an identifier or a `text[]` was wanted, so every stage taking a field list — `obj_has`,
+ * `pluck`, `without` — reads it through here and is written as a raw stage.
+ */
+export function FieldNames(
+  stage: QueryStage,
+  index: number = FIRST_OPERAND,
+): string[] {
+  const fields = stage.args[index];
+  const named =
+    Array.isArray(fields) && fields.every((field) => typeof field === "string");
+  if (!named) {
+    throw new Error(`Stage '${stage.stage}' requires a list of field names`);
+  }
+  return fields;
+}
+
+/** A `text[]` of literal keys, which is the operand every key-set operator takes. */
+export function TextArray(names: readonly string[]): string {
+  const literals = names.map(QuoteLiteral);
+  return `array[${literals.join(", ")}]::${PhysicalType(TEXT)}[]`;
 }
 
 /**
@@ -175,6 +233,22 @@ export function Text(value: Compiled): Compiled {
   }
   return { sql: rendering(value.sql), type: TEXT };
 }
+
+/**
+ * The kinds PostgreSQL can order, each mapped to the type an ordering of it answers with.
+ *
+ * `min` and `max` exist for `text`, `double precision` and `timestamptz` and for nothing else — a
+ * `boolean` or a jsonb operand raises `42883` and loses the whole statement — so every comparison
+ * this compiler emits either reads one of these three directly or falls back to {@link Numeric}.
+ * The stream aggregates and the array reducers share the table rather than each carrying one,
+ * because a divergence would answer the same data differently through `min("x")` than through
+ * `key("x").arr_min()` with nothing failing.
+ */
+export const ORDERED_KINDS: Partial<Record<SqlType["kind"], SqlType>> = {
+  text: TEXT,
+  float: FLOAT,
+  timestamp: TIMESTAMP,
+};
 
 type Numeration = (sql: string) => string;
 
@@ -289,6 +363,10 @@ export function Predicate(value: Compiled): Compiled {
   return { sql: truthiness(value.sql), type: BOOL };
 }
 
+/** jsonb's own names for the two container kinds, which every guard in the compiler reads. */
+export const OBJECT_TYPEOF = "object";
+export const ARRAY_TYPEOF = "array";
+
 /** Yields NULL rather than an error when the operand is not the expected jsonb container. */
 export function GuardJson(
   value: Compiled,
@@ -296,6 +374,57 @@ export function GuardJson(
   body: string,
 ): string {
   return `(CASE WHEN jsonb_typeof(${value.sql}) = '${expected}' THEN ${body} END)`;
+}
+
+type ColumnRendering = (column: string) => string;
+
+export interface HeldValue {
+  value: string;
+  column: string;
+  alias: string;
+  select: ColumnRendering;
+  guard: ColumnRendering;
+}
+
+/**
+ * Guards a value the guard itself has to read, without spelling that value twice.
+ *
+ * {@link GuardJson} emits its operand once per branch, which is affordable for a bare column and
+ * is not for a materialized document — and these constructs chain, so N of them spell 2^N copies
+ * of the whole prior expression. Holding the value on a one-column derived table names it instead:
+ * the select list and the guard both read the alias, and the value is emitted exactly once. A row
+ * that fails the guard yields no row, which as a scalar subselect reaches the caller as NULL — the
+ * same reading {@link GuardJson} gives.
+ */
+export function HeldOnce(held: HeldValue): string {
+  const relation = QuoteIdentifier(held.alias);
+  const column = QualifiedColumn(held.alias, held.column);
+  const source = `(SELECT ${held.value} AS ${QuoteIdentifier(held.column)})`;
+  const selected = held.select(column);
+  return `(SELECT ${selected} FROM ${source} AS ${relation} WHERE ${held.guard(column)})`;
+}
+
+/**
+ * Resolves the field a stage names against a row source, branching on the **raw** argument.
+ *
+ * A literal name goes to `field`, which resolves a declared field to its own typed column and so
+ * keeps `key("price")` reachable by a btree index; only a recorded expression falls through to the
+ * dynamic lookup out of a materialized document. The default is a value on both branches and is
+ * decoded either way, which is what keeps it a `$n` parameter rather than a literal spliced into
+ * the statement.
+ */
+export function FieldOf(
+  source: RowSource,
+  stage: QueryStage,
+  context: DecodingContext,
+): Compiled {
+  const def = DecodeValue(stage.args[SECOND_OPERAND], context);
+  const name = stage.args[FIRST_OPERAND];
+  if (typeof name === "string") {
+    return source.field(name, def);
+  }
+  const key = RequireOperand(DecodeValue(name, context), stage, FIRST_OPERAND);
+  return source.dynamicField(key, def);
 }
 
 /** Reads a value as jsonb, which is the operand every container stage works from. */
@@ -310,7 +439,7 @@ const EMPTY_ARRAY = "'[]'::jsonb";
 const ORDINALITY = "WITH ORDINALITY";
 
 export function WalkColumn(alias: string, name: string): string {
-  return `${QuoteIdentifier(alias)}.${QuoteIdentifier(name)}`;
+  return QualifiedColumn(alias, name);
 }
 
 /**

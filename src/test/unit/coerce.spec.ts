@@ -4,6 +4,7 @@ import {
   Unify,
   UnifyAll,
   UnifyOperands,
+  Widen,
   WithDefault,
 } from "../../implementations/database/coerce";
 import {
@@ -11,6 +12,7 @@ import {
   BOOL,
   FLOAT,
   JsonOf,
+  type JsonType,
   OPAQUE,
   TEXT,
   TIMESTAMP,
@@ -73,6 +75,56 @@ describe("UnifyAll", () => {
 
   it("returns the bottom type for an empty collection", () => {
     expect(UnifyAll([])).to.equal(OPAQUE);
+  });
+});
+
+describe("Widen", () => {
+  it("keeps a key only one side declares", () => {
+    expect(
+      Widen(
+        JsonOf({ name: TEXT, createdAt: TIMESTAMP }),
+        JsonOf({ name: TEXT }),
+      ),
+    ).to.deep.equal(JsonOf({ name: TEXT, createdAt: TIMESTAMP }));
+  });
+
+  it("takes the union where Unify takes the intersection", () => {
+    const left = JsonOf({ a: TEXT });
+    const right = JsonOf({ b: FLOAT });
+    expect(Unify(left, right)).to.equal(OPAQUE);
+    expect(Widen(left, right)).to.deep.equal(JsonOf({ a: TEXT, b: FLOAT }));
+  });
+
+  it("unifies a colliding key", () => {
+    expect(Widen(JsonOf({ a: TEXT }), JsonOf({ a: FLOAT }))).to.deep.equal(
+      JsonOf({ a: OPAQUE }),
+    );
+    expect(Widen(JsonOf({ a: OPAQUE }), JsonOf({ a: FLOAT }))).to.deep.equal(
+      JsonOf({ a: FLOAT }),
+    );
+  });
+
+  it("keeps a concrete kind that both sides agree on", () => {
+    expect(Widen(TIMESTAMP, TIMESTAMP)).to.equal(TIMESTAMP);
+    expect(Widen(TEXT, TEXT)).to.equal(TEXT);
+    expect(Widen(ArrayOf(TEXT), ArrayOf(TEXT))).to.deep.equal(ArrayOf(TEXT));
+  });
+
+  it("falls back to the bottom type for distinct concrete kinds", () => {
+    expect(Widen(TEXT, FLOAT)).to.equal(OPAQUE);
+    expect(Widen(TEXT, JsonOf({ a: TEXT }))).to.equal(OPAQUE);
+  });
+
+  it("takes the shaped side when the other is unshaped", () => {
+    const shaped = JsonOf({ a: TEXT });
+    expect(Widen(OPAQUE, shaped)).to.equal(shaped);
+    expect(Widen(shaped, OPAQUE)).to.equal(shaped);
+  });
+
+  it("does not treat a key inherited from Object.prototype as a collision", () => {
+    const widened = Widen(JsonOf({ a: TEXT }), JsonOf({ toString: FLOAT }));
+    expect(widened.kind).to.equal("json");
+    expect((widened as JsonType).shape?.toString).to.equal(FLOAT);
   });
 });
 
