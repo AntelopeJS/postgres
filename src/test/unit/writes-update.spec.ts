@@ -234,6 +234,16 @@ describe("the update statement's asserted identity", () => {
   });
 
   /**
+   * `_id` is `NOT NULL`, so an asserted null matches no row on any dataset — the write would answer
+   * 0 for a payload mistake and read as "no such row". A null key is an absent one instead.
+   */
+  it("asserts nothing for a key the payload set to null", () => {
+    expect(Sql(Update({ _id: null, age: AGE }))).to.equal(
+      Sql(Update({ age: AGE })),
+    );
+  });
+
+  /**
    * The divergence the assertion is accepted with: over a selection of several rows a payload key
    * narrows the write to one rather than refusing it. Pinned so that becoming a refusal is a
    * decision someone makes rather than a change that passes.

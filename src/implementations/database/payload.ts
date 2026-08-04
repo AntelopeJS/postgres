@@ -126,6 +126,17 @@ function Collect(walk: PayloadWalk, name: string, value: unknown): void {
 }
 
 /**
+ * Whether a payload supplied no `_id`, which `null` means exactly as `undefined` does.
+ *
+ * The rule has one owner because both stages have to read a key the same way (invariant 17): one
+ * that generated a key on the way in but asserted a null on the way back would answer 0 for the
+ * document it had just written.
+ */
+export function NoIdSupplied(value: unknown): boolean {
+  return value === undefined || value === null;
+}
+
+/**
  * Routes the one reserved column a payload may name, and refuses the two it may not.
  *
  * The key is read *as* `TEXT` through {@link StoredAs} rather than cast to it, which is the same
@@ -133,13 +144,18 @@ function Collect(walk: PayloadWalk, name: string, value: unknown): void {
  * addressed a row on the way in fails to address it on the way back.
  *
  * A `_id` named with no value asserts nothing and keys nothing, exactly as every other key named
- * that way writes nothing — there is no identity to remove and none to state.
+ * that way writes nothing — there is no identity to remove and none to state. "No value" is
+ * `null` as well as `undefined`, which is the one place the two converge: `_id` is `NOT NULL`, so
+ * an asserted null matches no row on any dataset and could never be a claim a caller meant, while
+ * a key that is null is not a key. Honouring it would answer 0 for a payload mistake, which is
+ * indistinguishable from "no such row". The value is read off the raw payload before anything is
+ * decoded, so a dropped key burns no `$n` (invariant 16).
  */
 function TakeReserved(walk: PayloadWalk, name: string, value: unknown): void {
   if (name !== ID_COLUMN) {
     throw Refusal(name);
   }
-  if (value === undefined) {
+  if (NoIdSupplied(value)) {
     return;
   }
   walk.options.id(walk.split, StoredAs(Decoded(walk, value), TEXT));
@@ -192,7 +208,9 @@ function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
  * is therefore read off the raw payload here, before anything is decoded — a decoded removal is
  * indistinguishable from a key that was never written. The walk reads the payload's own entries
  * rather than its defined values, since a key present with an `undefined` value is still a key the
- * caller wrote.
+ * caller wrote. That rule holds for every declared field and every undeclared key; `_id` is its one
+ * exception and {@link TakeReserved} states why, since a null is neither a value it could store nor
+ * a claim it could make.
  *
  * Nothing is decoded that the returned split does not carry: every `DecodeValue` appends to the
  * shared parameter collector, so a value compiled and then dropped binds a `$n` the statement

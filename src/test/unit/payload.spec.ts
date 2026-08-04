@@ -261,6 +261,13 @@ describe("SplitPayload over the reserved columns", () => {
     expect(applied.context.params.all()).to.deep.equal([]);
   });
 
+  it("asserts nothing for a key column the payload set to null", () => {
+    const applied = Split({ _id: null, price: 1 });
+    expect(applied.split.identity).to.equal(undefined);
+    expect(Columns(applied)).to.deep.equal(["price"]);
+    expect(applied.context.params.all()).to.deep.equal([1]);
+  });
+
   it("refuses a reserved column the payload only names", () => {
     expect(() => Split({ _extra: undefined })).to.throw("Payload key '_extra'");
     expect(() => Split({ _instance: undefined })).to.throw(
@@ -285,6 +292,26 @@ describe("SplitPayload over the reserved columns", () => {
     const applied = Split({ _id: undefined }, INSERTED);
     expect(applied.split.members).to.deep.equal([]);
     expect(applied.split.cleared).to.deep.equal([]);
+    expect(applied.split.removed).to.deep.equal([]);
+  });
+
+  it("takes no key from a payload that set it to null", () => {
+    const applied = Split({ _id: null }, INSERTED);
+    expect(applied.split.members).to.deep.equal([]);
+    expect(applied.split.cleared).to.deep.equal([]);
+    expect(applied.split.removed).to.deep.equal([]);
+    expect(applied.context.params.all()).to.deep.equal([]);
+  });
+
+  /**
+   * The one distinction a null `_id` must not spread to: an undeclared key is a stored value and a
+   * json null is one of the values it can store, which is what tells it apart from a removal.
+   */
+  it("keeps a null under an undeclared key while dropping one under the key column", () => {
+    const applied = Split({ _id: null, tags: null }, INSERTED);
+    expect(applied.split.extra?.sql).to.equal(
+      "jsonb_build_object('tags', 'null'::jsonb)",
+    );
     expect(applied.split.removed).to.deep.equal([]);
   });
 });

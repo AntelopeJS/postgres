@@ -223,6 +223,20 @@ describe("the ids an insert answers", () => {
     ]);
   });
 
+  it("generates a key for a document that set its key to null", () => {
+    const written = Insert({ _id: null, name: "a" });
+    expect(written.statement.ids?.[0]).to.match(UUID_PATTERN);
+    expect(Sql(written)).to.equal(
+      `${INTO} ("_id", "_instance", "name", "_extra") VALUES` +
+        ` (($2::text), ($1::text), ($3::text), ${EMPTY_EXTRA})`,
+    );
+    expect(written.context.params.all()).to.deep.equal([
+      "",
+      written.statement.ids?.[0],
+      "a",
+    ]);
+  });
+
   it("refuses a key that is not a string", () => {
     expect(() => Insert({ _id: 7 })).to.throw(
       "An inserted document's '_id' must be a string, received number",

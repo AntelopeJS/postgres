@@ -6,6 +6,7 @@ import { DeclaredColumns, type TableShape } from "./fields";
 import {
   ID_AS_KEY,
   MembersByColumn,
+  NoIdSupplied,
   type PayloadOptions,
   SplitPayload,
 } from "./payload";
@@ -114,13 +115,15 @@ interface InsertRow {
  * The key a document supplies, if it supplies one at all.
  *
  * It has to be read off the raw payload as well as split out of it, because the id is part of the
- * answer `insert` returns and a compiled parameter cannot be read back.
+ * answer `insert` returns and a compiled parameter cannot be read back. What counts as supplied is
+ * {@link NoIdSupplied}'s to say, so this generates a key exactly where the split takes none; a
+ * wrong-typed key is still refused by name, since only absence has a second spelling.
  */
 function SuppliedId(document: Record<string, unknown>): string | undefined {
   const supplied = Object.hasOwn(document, ID_COLUMN)
     ? document[ID_COLUMN]
     : undefined;
-  if (supplied === undefined) {
+  if (NoIdSupplied(supplied)) {
     return undefined;
   }
   assert(

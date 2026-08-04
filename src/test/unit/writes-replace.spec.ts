@@ -131,6 +131,16 @@ describe("the replace statement's asserted identity", () => {
   it("asserts nothing for a key the payload only names", () => {
     expect(Sql(Replace({ _id: undefined }))).to.equal(Sql(Replace({})));
   });
+
+  /**
+   * `_id` is `NOT NULL`, so an asserted null is unsatisfiable and would turn writing a document
+   * whose key was cleared into a silent no-op answering 0. A null key asserts nothing instead.
+   */
+  it("asserts nothing for a key the payload set to null", () => {
+    expect(Sql(Replace({ _id: null, name: NAME }))).to.equal(
+      Sql(Replace({ name: NAME })),
+    );
+  });
 });
 
 describe("the replace statement's refusals", () => {
