@@ -9,8 +9,11 @@ import {
   QuoteLiteral,
 } from "./sql";
 import {
+  type ArrayType,
   BOOL,
   FLOAT,
+  IsJsonBacked,
+  type JsonType,
   OPAQUE,
   PhysicalType,
   type SqlType,
@@ -361,6 +364,37 @@ export function Predicate(value: Compiled): Compiled {
     return Cast(value, BOOL);
   }
   return { sql: truthiness(value.sql), type: BOOL };
+}
+
+type Reading = (value: Compiled) => Compiled;
+
+type ScalarType = Exclude<SqlType, ArrayType | JsonType>;
+
+const STORED_READINGS: Record<ScalarType["kind"], Reading> = {
+  float: Numeric,
+  text: Text,
+  bool: Predicate,
+  timestamp: Moment,
+};
+
+/**
+ * Reads a value as the type of the column it is compared against or written into.
+ *
+ * The readings are exactly the ones the expression compiler applies, so a value that went in
+ * through here means the same thing when it comes back out through an expression; a second
+ * reading table would answer the same data differently in each direction with nothing failing.
+ *
+ * Deliberately not {@link Cast}, which is only total from a jsonb source (invariant 13): a caller
+ * writing `insert({ price: "3000" })` or `getAll(0, "isActive")` would lose the whole statement to
+ * `22P02` or to a plan-time refusal rather than have one value read as best it can. The table is
+ * total over the scalar kinds so a kind added later cannot fall through to the cast unnoticed;
+ * the jsonb-backed kinds take {@link Cast}, where it is total because both sides are jsonb.
+ */
+export function StoredAs(value: Compiled, target: SqlType): Compiled {
+  if (IsJsonBacked(target)) {
+    return Cast(value, target);
+  }
+  return STORED_READINGS[target.kind](value);
 }
 
 /** jsonb's own names for the two container kinds, which every guard in the compiler reads. */

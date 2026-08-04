@@ -57,13 +57,27 @@ export function DecodeValue(
   if (Array.isArray(value)) {
     return DecodeArray(value, context);
   }
-  if (
-    typeof value === "object" &&
-    Object.getPrototypeOf(value) === Object.prototype
-  ) {
-    return DecodeObject(value as Record<string, unknown>, context);
+  if (IsPlainObject(value)) {
+    return DecodeObject(value, context);
   }
   return DecodePrimitive(value, context);
+}
+
+/**
+ * Whether a value is an object literal rather than an instance of something.
+ *
+ * The distinction is what tells a document apart from a `ValueProxy`, which is an object too: a
+ * membership test that only asked whether the value is an object would read a recorded expression
+ * as a document of the keys its class happens to carry.
+ */
+export function IsPlainObject(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
 }
 
 function DecodePrimitive(value: unknown, context: DecodingContext): Compiled {
@@ -101,6 +115,76 @@ function DecodeObject(
   };
 }
 
+const FUNCTION_STAGE = "func";
+const PARAMETER_IDS = 0;
+const FUNCTION_BODY = 1;
+
+/**
+ * The lambda a caller recorded, for a stage that accepts either a lambda or a plain document.
+ *
+ * The query builder records one as `{ stage: "func", args: [[argId], body] }` — a plain object
+ * carrying no marker class — so `update`, the one stage taking either, can only tell them apart by
+ * shape. The parameter-id list is read as well as the stage name because it is the half no
+ * caller's own document plausibly carries: testing the stage name alone refuses
+ * `{ stage: "func", args: [1] }`, which is a legitimate document of two undeclared keys, while a
+ * test that missed a lambda would store `stage` and `args` in the row as ordinary keys. Every read
+ * goes through {@link IsPlainObject} first, so the shape is tested rather than asserted. The stage
+ * itself is returned rather than a boolean, so a caller that goes on to compile the body reaches
+ * {@link DecodeFunction} without asserting the same shape a second time.
+ */
+export function RecordedFunction(value: unknown): QueryStage | undefined {
+  if (!IsPlainObject(value) || value.stage !== FUNCTION_STAGE) {
+    return undefined;
+  }
+  const args: unknown = value.args;
+  if (!Array.isArray(args)) {
+    return undefined;
+  }
+  const ids: unknown = args[PARAMETER_IDS];
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "number")) {
+    return undefined;
+  }
+  return value as unknown as QueryStage;
+}
+
+/** Whatever a recorded lambda returned, which is a value for most callers and a document for one. */
+export function FunctionBody(func: QueryStage): unknown {
+  return func.args[FUNCTION_BODY];
+}
+
+/**
+ * Runs a compilation with a recorded lambda's parameters bound to the given row sources or
+ * subquery providers, and unbound again however it ends.
+ *
+ * Separate from {@link DecodeFunction} because a lambda's body is not always compiled as a value:
+ * `update`'s mapper may return a document, whose keys are split into per-column assignments and
+ * whose *values* are the recorded expressions — so the binding has to span a walk of the body
+ * rather than one decode of it. Decoding such a body as a value instead would build the whole
+ * document as one jsonb object and lose the columns.
+ */
+export function WithBoundArguments<T>(
+  func: QueryStage,
+  context: DecodingContext,
+  bindings: ArgumentBinding[],
+  compile: () => T,
+): T {
+  const ids: number[] = func.args[PARAMETER_IDS];
+  const missing = ids.findIndex((_, index) => !bindings[index]);
+  if (missing >= 0) {
+    throw new Error(`Missing binding for lambda parameter ${missing}`);
+  }
+  ids.forEach((id, index) => {
+    context.bind(id, bindings[index]);
+  });
+  try {
+    return compile();
+  } finally {
+    ids.forEach((id) => {
+      context.unbind(id);
+    });
+  }
+}
+
 /**
  * Decode the body of a lambda recorded by the query builder, with its parameters bound to the
  * given row sources or subquery providers for the duration of the decode.
@@ -110,19 +194,7 @@ export function DecodeFunction(
   context: DecodingContext,
   bindings: ArgumentBinding[],
 ): Compiled | undefined {
-  const ids: number[] = func.args[0];
-  const missing = ids.findIndex((_, index) => !bindings[index]);
-  if (missing >= 0) {
-    throw new Error(`Missing binding for lambda parameter ${missing}`);
-  }
-  ids.forEach((id, index) => {
-    context.bind(id, bindings[index]);
-  });
-  try {
-    return DecodeValue(func.args[1], context);
-  } finally {
-    ids.forEach((id) => {
-      context.unbind(id);
-    });
-  }
+  return WithBoundArguments(func, context, bindings, () =>
+    DecodeValue(FunctionBody(func), context),
+  );
 }

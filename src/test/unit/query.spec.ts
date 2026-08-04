@@ -66,6 +66,13 @@ describe("DecodeResult in row mode", () => {
   it("decodes an empty stream as an empty array", () => {
     expect(DecodeResult(RowMode(), [])).to.deep.equal([]);
   });
+
+  it("answers the relation's own absent value, which get sets to undefined", () => {
+    const relation = RowMode();
+    relation.single = true;
+    relation.absent = undefined;
+    expect(DecodeResult(relation, [])).to.equal(undefined);
+  });
 });
 
 describe("DecodeResult in value mode", () => {
@@ -91,5 +98,13 @@ describe("DecodeResult in value mode", () => {
     const relation = ValueMode();
     relation.single = true;
     expect(DecodeResult(relation, [{ value: null }])).to.equal(null);
+  });
+
+  it("distinguishes a row that decoded to null from a read that found none", () => {
+    const relation = ValueMode();
+    relation.single = true;
+    relation.absent = undefined;
+    expect(DecodeResult(relation, [{ value: null }])).to.equal(null);
+    expect(DecodeResult(relation, [])).to.equal(undefined);
   });
 });

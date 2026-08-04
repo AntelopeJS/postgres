@@ -67,6 +67,23 @@ const SIGNATURE_VENDOR = "antelopejs";
 const SIGNATURE_VERSION = "1";
 const SIGNATURE_PREFIX = `${SIGNATURE_VENDOR}:${SIGNATURE_VERSION}`;
 
+/**
+ * The columns a row's identity is the primary key of, in the order the constraint declares them.
+ *
+ * Exported because a write's `ON CONFLICT` has to name a unique constraint *identically* to reach
+ * it — a different order or a different pair is `42P10 there is no unique or exclusion constraint
+ * matching the ON CONFLICT specification`, at execution and only on the upsert path (invariant 17).
+ */
+export const PRIMARY_KEY_COLUMNS: readonly string[] = [
+  INSTANCE_COLUMN,
+  ID_COLUMN,
+];
+
+/** That same list as the constraint declares it, so the two spellings cannot drift apart. */
+export const PRIMARY_KEY_LIST = PRIMARY_KEY_COLUMNS.map((column) =>
+  QuoteIdentifier(column),
+).join(", ");
+
 const ID_PLAN: ColumnPlan = {
   name: ID_COLUMN,
   type: PhysicalType(TEXT),
@@ -236,7 +253,7 @@ export function CreateSchemaSql(schemaName: string): string {
 export function CreateTableSql(schemaName: string, plan: TablePlan): string {
   const body = [
     ...plan.columns.map(ColumnDdl),
-    `PRIMARY KEY (${QuoteIdentifier(INSTANCE_COLUMN)}, ${QuoteIdentifier(ID_COLUMN)})`,
+    `PRIMARY KEY (${PRIMARY_KEY_LIST})`,
   ];
   const target = QualifiedName(schemaName, plan.table);
   return `CREATE TABLE IF NOT EXISTS ${target} (${body.join(", ")})`;

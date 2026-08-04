@@ -11,13 +11,17 @@ import {
   PipelineStages,
   REJECTED_STAGES,
 } from "../../implementations/database/pipeline";
+import { WRITE_STAGES } from "../../implementations/database/writes";
 
 const VOCABULARY: readonly string[] = [
   "avg",
+  "between",
   "count",
   "default",
   "distinct",
   "filter",
+  "get",
+  "getAll",
   "key",
   "map",
   "max",
@@ -31,7 +35,14 @@ const VOCABULARY: readonly string[] = [
   "without",
 ];
 
-const STAGE_COUNT = 16;
+const STAGE_COUNT = 19;
+
+const WRITE_VOCABULARY: readonly string[] = [
+  "delete",
+  "insert",
+  "replace",
+  "update",
+];
 
 const NON_STAGE_METHODS: readonly string[] = [
   "constructor",
@@ -136,6 +147,27 @@ function ContractStages(): string[] {
   return [...names];
 }
 
+/**
+ * The maps that compile a stage, named so a collision reports which one it was in.
+ *
+ * A terminal write is not a pipeline stage — it produces a statement rather than a relation — so
+ * the accounting reads both dispatch maps, and a name in either one may not also be declined.
+ */
+function DispatchedStages(): Record<string, string[]> {
+  return {
+    pipeline: Object.keys(PipelineStages()),
+    write: Object.keys(WRITE_STAGES),
+  };
+}
+
+function DeclinedStages(): string[] {
+  return [...Object.keys(DEFERRED_STAGES), ...Object.keys(REJECTED_STAGES)];
+}
+
+function AnsweredStages(): string[] {
+  return [...Object.values(DispatchedStages()).flat(), ...DeclinedStages()];
+}
+
 describe("the pipeline stage vocabulary", () => {
   it("dispatches exactly the stages this backend reads, and no others", () => {
     expect(Sorted(Object.keys(PipelineStages()))).to.deep.equal(
@@ -159,6 +191,25 @@ describe("the pipeline stage vocabulary", () => {
     expect(PipelineStages()).to.not.equal(PipelineStages());
   });
 
+  it("compiles exactly the writes this backend implements, and no others", () => {
+    expect(Sorted(Object.keys(WRITE_STAGES))).to.deep.equal(
+      Sorted(WRITE_VOCABULARY),
+    );
+  });
+
+  it("binds every write to a callable compiler", () => {
+    for (const name of WRITE_VOCABULARY) {
+      expect(WRITE_STAGES[name].compile, name).to.be.a("function");
+    }
+  });
+
+  it("records for every write whether it reads the relation it follows", () => {
+    const reading = Object.entries(WRITE_STAGES)
+      .filter(([, spec]) => !spec.readsRelation)
+      .map(([name]) => name);
+    expect(reading).to.deep.equal(["insert"]);
+  });
+
   it("declines a stage either permanently or for now, never both", () => {
     expect(
       Intersection(Object.keys(DEFERRED_STAGES), Object.keys(REJECTED_STAGES)),
@@ -166,48 +217,92 @@ describe("the pipeline stage vocabulary", () => {
   });
 
   it("never both dispatches and declines the same stage", () => {
-    const declined = [
-      ...Object.keys(DEFERRED_STAGES),
-      ...Object.keys(REJECTED_STAGES),
-    ];
-    expect(Intersection(Object.keys(PipelineStages()), declined)).to.deep.equal(
-      [],
-    );
+    for (const [map, dispatched] of Object.entries(DispatchedStages())) {
+      expect(Intersection(dispatched, DeclinedStages()), map).to.deep.equal([]);
+    }
+  });
+
+  it("never dispatches a terminal write through the pipeline as well", () => {
+    expect(
+      Intersection(Object.keys(WRITE_STAGES), Object.keys(PipelineStages())),
+    ).to.deep.equal([]);
   });
 
   it("accounts for every stage the interface records", () => {
-    const answered = [
-      ...Object.keys(PipelineStages()),
-      ...Object.keys(DEFERRED_STAGES),
-      ...Object.keys(REJECTED_STAGES),
-    ];
-    expect(Sorted(ContractStages())).to.deep.equal(Sorted(answered));
+    expect(Sorted(ContractStages())).to.deep.equal(Sorted(AnsweredStages()));
   });
 });
 
 const DATABASE_DIR = join(__dirname, "..", "..", "implementations", "database");
 
-const FAMILY_MODULES: readonly string[] = [
-  "stages-rows",
-  "stages-projection",
-  "stages-aggregate",
-  "selection",
+/**
+ * One dispatch map, how a fresh process reads it, and the family modules loaded ahead of it.
+ *
+ * `dispatch` is the expression that reaches a family's own handler out of one entry, which is what
+ * a half-written family binds to `undefined`: the pipeline's entries are the handlers themselves,
+ * while a write's entry states a second fact beside its compiler.
+ */
+interface MergedVocabulary {
+  merger: string;
+  access: string;
+  dispatch: string;
+  families: readonly string[];
+  expected: readonly string[];
+}
+
+const MERGED_VOCABULARIES: readonly MergedVocabulary[] = [
+  {
+    merger: "pipeline",
+    access: "PipelineStages()",
+    dispatch: "entry",
+    families: [
+      "stages-rows",
+      "stages-selection",
+      "stages-projection",
+      "stages-aggregate",
+      "selection",
+    ],
+    expected: VOCABULARY,
+  },
+  {
+    merger: "writes",
+    access: "WRITE_STAGES",
+    dispatch: "entry?.compile",
+    families: ["writes-identity", "writes-insert"],
+    expected: WRITE_VOCABULARY,
+  },
 ];
 
 /**
- * The merged vocabulary as a fresh process sees it when a family module is loaded before
- * `pipeline`.
+ * A dispatch map as a fresh process sees it when a family module is loaded before the module that
+ * assembles it.
  *
- * `union` compiles through `ApplyStages`, so `pipeline` and the family modules form a require
- * cycle, and an eagerly merged map spreads a half-written module as `undefined` — measured at 11
- * keys instead of 16, with no error. Mocha loads every spec into one registry and every one of
- * them reaches `pipeline` first, so the order that exposes this can only be forced from outside;
- * `delete require.cache` would instead leave duplicate module instances behind for later specs.
+ * `union` compiles through `ApplyStages`, so `pipeline.ts` and its families are mutually dependent
+ * whichever way the process loads them, and an eagerly merged map reads a half-written module as
+ * `undefined` — measured the day `union` landed at 11 of the 16 stages it then had, with no error.
+ * Mocha loads every spec into one registry and every one of them reaches the merger first, so the
+ * order that exposes this can only be forced from outside; `delete require.cache` would instead
+ * leave duplicate module instances behind for later specs.
+ *
+ * The write half has no such cycle to expose — its families reach sideways into `writes-shared.ts`,
+ * which leads nowhere back — and is kept as the assertion that would notice one being introduced:
+ * `WRITE_STAGES` is a module-scope constant, which is exactly the form that binds `undefined` and
+ * dispatches nothing the day a compiler reaches back for the seam that called it.
+ *
+ * The names are filtered by what they dispatch to rather than read off the keys, because the two
+ * failures differ: a spread of a half-written family drops its keys entirely, while a named member
+ * of one keeps its key and binds it to `undefined`.
  */
-function StagesAfterRequiring(familyModule: string): string[] {
+function StagesAfterRequiring(
+  vocabulary: MergedVocabulary,
+  familyModule: string,
+): string[] {
   const script =
     `require("./${familyModule}"); ` +
-    `console.log(Object.keys(require("./pipeline").PipelineStages()).sort().join(","))`;
+    `const merged = require("./${vocabulary.merger}").${vocabulary.access}; ` +
+    `console.log(Object.entries(merged)` +
+    `.filter(([, entry]) => typeof (${vocabulary.dispatch}) === "function")` +
+    `.map(([name]) => name).sort().join(","))`;
   const printed = execFileSync(process.execPath, ["-e", script], {
     cwd: DATABASE_DIR,
     encoding: "utf8",
@@ -215,12 +310,14 @@ function StagesAfterRequiring(familyModule: string): string[] {
   return printed.split(",");
 }
 
-describe("the pipeline stage vocabulary under an adversarial require order", () => {
-  for (const familyModule of FAMILY_MODULES) {
-    it(`merges every family when '${familyModule}' is required first`, () => {
-      expect(StagesAfterRequiring(familyModule)).to.deep.equal(
-        Sorted(VOCABULARY),
-      );
-    });
+describe("the stage vocabularies under an adversarial require order", () => {
+  for (const vocabulary of MERGED_VOCABULARIES) {
+    for (const familyModule of vocabulary.families) {
+      it(`merges every family of '${vocabulary.merger}' when '${familyModule}' is required first`, () => {
+        expect(StagesAfterRequiring(vocabulary, familyModule)).to.deep.equal(
+          Sorted(vocabulary.expected),
+        );
+      });
+    }
   }
 });

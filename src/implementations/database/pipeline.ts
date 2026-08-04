@@ -3,6 +3,7 @@ import type { Relation } from "./relation";
 import { AGGREGATE_STAGES } from "./stages-aggregate";
 import { PROJECTION_STAGES } from "./stages-projection";
 import { ROW_STAGES } from "./stages-rows";
+import { SELECTION_STAGES } from "./stages-selection";
 import type { QueryStage } from "./utils";
 
 /**
@@ -33,6 +34,7 @@ export type PipelineStageMap = Record<string, PipelineStage>;
 export function PipelineStages(): PipelineStageMap {
   return {
     ...ROW_STAGES,
+    ...SELECTION_STAGES,
     ...PROJECTION_STAGES,
     ...AGGREGATE_STAGES,
   };
@@ -42,15 +44,13 @@ function Deferred(feature: string): string {
   return `The PostgreSQL backend does not implement ${feature} yet`;
 }
 
-/** Stages this backend will support, named so a caller gets that answer rather than "unknown". */
+/**
+ * Stages this backend will support, named so a caller gets that answer rather than "unknown".
+ *
+ * A terminal write is never dispatched through the pipeline, so a write this backend does
+ * implement leaves this map for `WRITE_STAGES` rather than joining {@link PipelineStages}.
+ */
 export const DEFERRED_STAGES: Record<string, string> = {
-  get: Deferred("primary-key selection"),
-  getAll: Deferred("secondary-index selection"),
-  between: Deferred("index ranges"),
-  insert: Deferred("inserts"),
-  update: Deferred("updates"),
-  replace: Deferred("replaces"),
-  delete: Deferred("deletes"),
   join: Deferred("joins"),
   lookup: Deferred("lookups"),
   group: Deferred("grouping"),

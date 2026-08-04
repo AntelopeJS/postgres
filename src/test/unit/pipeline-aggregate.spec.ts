@@ -9,16 +9,13 @@ import {
   FROM_TABLE,
   Occurrences,
   ROOT_ALIAS,
+  ROW_COLUMNS,
   Root,
   Sql,
   Stages,
   TABLE,
   TABLE_ID,
 } from "./pipeline-fixture";
-
-const ROW_COLUMNS =
-  `"t0"."_id", "t0"."_instance", "t0"."name", "t0"."age",` +
-  ` "t0"."isActive", "t0"."joined", "t0"."meta", "t0"."_extra"`;
 
 const COUNT_ALL = QueryStage("count", {});
 

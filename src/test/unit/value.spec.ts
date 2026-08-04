@@ -18,6 +18,7 @@ import {
 import {
   DecodeFunction,
   DecodeValue,
+  WithBoundArguments,
 } from "../../implementations/database/value";
 
 const STUB_EXPRESSION: Compiled = { sql: "EXPR", type: OPAQUE };
@@ -228,6 +229,24 @@ describe("DecodeFunction", () => {
     const func = QueryStage("func", undefined, [7], () => 1);
 
     expect(() => DecodeFunction(func, context, [source])).to.throw(/function/);
+    expect(() => context.arg(7)).to.throw(/7/);
+  });
+});
+
+describe("WithBoundArguments", () => {
+  const emptyTable = { fields: {} };
+  const REFUSED = "the compilation this spans refuses the body";
+
+  it("unbinds even when a compilation that is not a decode throws", () => {
+    const context = NewContext(NewRecorded());
+    const source = new ColumnRowSource("t", emptyTable);
+    const func = QueryStage("func", undefined, [7], ValueProxy.arg(7));
+
+    expect(() =>
+      WithBoundArguments(func, context, [source], () => {
+        throw new Error(REFUSED);
+      }),
+    ).to.throw(REFUSED);
     expect(() => context.arg(7)).to.throw(/7/);
   });
 });

@@ -1,5 +1,5 @@
 import { Cast, WithDefault } from "./coerce";
-import type { TableShape } from "./fields";
+import { DocumentKeys, type TableShape } from "./fields";
 import { type Compiled, JsonKey, QualifiedColumn, QuoteLiteral } from "./sql";
 import {
   IsJsonBacked,
@@ -107,8 +107,10 @@ export class ColumnRowSource implements RowSource {
   }
 
   private members(): DocumentMember[] {
-    const names = [ID_COLUMN, ...Object.keys(this.table.fields)];
-    return names.map((name) => ({ name, ...this.field(name) }));
+    return DocumentKeys(this.table).map((name) => ({
+      name,
+      ...this.field(name),
+    }));
   }
 
   public toJson(): Compiled {

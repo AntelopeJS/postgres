@@ -22,7 +22,7 @@ const VEHICLES: TableShape = {
 const TABLE = '"shop"."vehicles"';
 const ROOT_ALIAS = "t0";
 const INHERITED_STAGE = "constructor";
-const DEFERRED_STAGE = "insert";
+const DEFERRED_STAGE = "join";
 const REJECTED_STAGE = "changes";
 
 function NewContext(): DecodingContext {
@@ -67,7 +67,7 @@ describe("ApplyStages", () => {
 
   it("names the stage a deferred message belongs to", () => {
     expect(() => Apply(DEFERRED_STAGE)).to.throw(
-      "The PostgreSQL backend does not implement inserts yet (stage 'insert')",
+      "The PostgreSQL backend does not implement joins yet (stage 'join')",
     );
   });
 

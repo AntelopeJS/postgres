@@ -87,6 +87,12 @@ export function GetTableNames(schemaId: string): string[] {
  *
  * The contract allows `getAll`/`between`/`orderBy` to name an undeclared field,
  * which must still resolve to a usable predicate.
+ *
+ * A definition that declares no indexes at all reads as an empty set rather than
+ * as nothing, which is how `ddl.ts` already reads the same field: the contract
+ * types it as required, so a caller omitting it is only reachable from
+ * JavaScript — and it then fails here with a message naming neither the schema
+ * nor the index, on a table the DDL converged happily.
  */
 export function GetIndex(
   schemaId: string,
@@ -94,9 +100,9 @@ export function GetIndex(
   indexId: string,
   onlyIndex?: boolean,
 ): IndexDefinition {
-  const table = GetTable(schemaId, tableId);
-  if (Object.hasOwn(table.indexes, indexId)) {
-    return table.indexes[indexId];
+  const indexes = GetTable(schemaId, tableId).indexes ?? {};
+  if (Object.hasOwn(indexes, indexId)) {
+    return indexes[indexId];
   }
   assert(!onlyIndex, `Unknown index '${indexId}' on '${schemaId}.${tableId}'`);
   return { fields: [indexId] };

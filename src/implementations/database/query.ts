@@ -15,6 +15,8 @@ import { GetTableNames, WaitForSchemaReady } from "./schema";
 import { BuildRoot, CollectSchemaIds, SCHEMA_STAGE } from "./selection";
 import type { Compiled } from "./sql";
 import { CREATE_INSTANCE, DESTROY_INSTANCE, type QueryStage } from "./utils";
+import { CompileWrite, SplitWrite } from "./writes";
+import { type WriteTarget, WriteTargetOf } from "./writes-shared";
 
 type LifecycleHandler = (
   schemaId: string,
@@ -30,6 +32,9 @@ const SUBQUERY_UNIMPLEMENTED =
 const MISSING_SCHEMA_ID = "Lifecycle query is missing its schema id";
 
 const LIFECYCLE_STAGE_COUNT = 2;
+
+/** What the driver's nullable `rowCount` means when it declines to count. */
+const NO_ROWS = 0;
 
 const LIFECYCLE_HANDLERS: Record<string, LifecycleHandler> = {
   [CREATE_INSTANCE]: (schemaId, stage) =>
@@ -86,13 +91,47 @@ function DecodeRows(relation: Relation, rows: ResultRow[]): unknown[] {
  *
  * Dispatches on the same `projection` discriminator the select list was built from, so the two
  * output modes cannot drift apart, and honours the relation's own answer to whether it yields
- * exactly one row: a single-row relation hands back that row rather than a one-element array,
- * and `null` — never `undefined` — when the read found nothing, which is what `nth` past the end
- * reaches the caller as.
+ * exactly one row: a single-row relation hands back that row rather than a one-element array, and
+ * the absent value the relation itself carries for a read that found nothing.
+ *
+ * Emptiness is decided by the row count, not by the decoded value being nullish, so a `get` whose
+ * row decodes to `null` answers `null` — not the `undefined` that means there is no such row.
  */
 export function DecodeResult(relation: Relation, rows: ResultRow[]): unknown {
   const decoded = DecodeRows(relation, rows);
-  return relation.single ? (decoded[0] ?? null) : decoded;
+  if (!relation.single) {
+    return decoded;
+  }
+  return decoded.length > 0 ? decoded[0] : relation.absent;
+}
+
+async function RunRead(
+  relation: Relation,
+  context: DecodingContext,
+): Promise<unknown> {
+  const result = await Query<ResultRow>(Render(relation), context.params.all());
+  return DecodeResult(relation, result.rows);
+}
+
+/**
+ * Executes a terminal write and answers what its stage promised.
+ *
+ * `insert` knows its keys before the statement runs and answers them in input order; everything
+ * else answers the number of rows the statement matched. A compiler that produced no statement had
+ * nothing to do, and the answer it already carries is returned without a round trip — asking
+ * instead whether that answer is empty would make one compiler's rule the runner's.
+ */
+async function RunWrite(
+  target: WriteTarget,
+  stage: QueryStage,
+  context: DecodingContext,
+): Promise<unknown> {
+  const statement = CompileWrite(target, stage, context);
+  if (!statement.sql) {
+    return statement.ids ?? NO_ROWS;
+  }
+  const result = await Query(statement.sql, context.params.all());
+  return statement.ids ?? result.rowCount ?? NO_ROWS;
 }
 
 export async function RunQuery(stages: QueryStage[]): Promise<any> {
@@ -103,9 +142,12 @@ export async function RunQuery(stages: QueryStage[]): Promise<any> {
   await Promise.all(CollectSchemaIds(stages).map(WaitForSchemaReady));
   const context = new DecodingContext(CompileExpression, CompileSubquery);
   const root = BuildRoot(stages, context);
-  const relation = ApplyStages(root.relation, root.rest, context);
-  const result = await Query<ResultRow>(Render(relation), context.params.all());
-  return DecodeResult(relation, result.rows);
+  const split = SplitWrite(root.rest);
+  const relation = ApplyStages(root.relation, split.pipeline, context);
+  if (!split.write) {
+    return RunRead(relation, context);
+  }
+  return RunWrite(WriteTargetOf(root, relation), split.write, context);
 }
 
 export async function ReadCursor(

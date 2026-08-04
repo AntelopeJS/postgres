@@ -10,6 +10,7 @@ import {
 } from "./pipeline";
 import {
   CurrentValue,
+  IndexColumns,
   type OrderTerm,
   Prepare,
   type Relation,
@@ -17,6 +18,7 @@ import {
   Render,
   SetProjection,
   ValueRelation,
+  WHERE_BLOCKERS,
 } from "./relation";
 import { BuildRoot } from "./selection";
 import type { Compiled } from "./sql";
@@ -31,23 +33,6 @@ import {
 } from "./stage";
 import type { SqlType } from "./types";
 import { DecodeFunction, DecodeValue } from "./value";
-
-/**
- * A `WHERE` runs before the clauses that choose rows and cannot mention an aggregate at all.
- *
- * Absorbing past a limit, an offset or a `DISTINCT` would filter the rows the relation had
- * *before* those clauses picked from them — `slice(0, 2).filter(…)` would test the whole table
- * and then take two — and absorbing past an aggregate raises
- * `42803 aggregate functions are not allowed in WHERE`. A pending projection blocks it for the
- * same reason it blocks every stage that resolves a field.
- */
-const FILTER_BLOCKERS: readonly RelationFlag[] = [
-  "projection",
-  "limit",
-  "offset",
-  "distinct",
-  "aggregated",
-];
 
 /**
  * An `ORDER BY` runs before the row bounds, so those and an aggregate are what block it.
@@ -137,7 +122,7 @@ function Bound(
  * silently rebind against every other conjunct (invariant 5).
  */
 const FilterStage: PipelineStage = (relation, stage, context) => {
-  const prepared = Prepare(relation, FILTER_BLOCKERS, context);
+  const prepared = Prepare(relation, WHERE_BLOCKERS, context);
   const body = DecodeFunction(stage.args[FIRST_OPERAND], context, [
     prepared.source,
   ]);
@@ -155,10 +140,6 @@ function SortName(stage: QueryStage): string {
   return name;
 }
 
-function SortFields(relation: Relation, name: string): string[] {
-  return relation.origin ? relation.origin.index(name) : [name];
-}
-
 /**
  * Prepends the sort terms, so a later `orderBy` dominates an earlier one.
  *
@@ -170,11 +151,8 @@ function SortFields(relation: Relation, name: string): string[] {
 const OrderByStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, ORDER_BLOCKERS, context);
   const descending = stage.options?.direction === DESCENDING;
-  const terms = SortFields(prepared, SortName(stage)).map(
-    (field): OrderTerm => ({
-      sql: prepared.source.field(field).sql,
-      descending,
-    }),
+  const terms = IndexColumns(prepared, SortName(stage)).map(
+    (column): OrderTerm => ({ sql: column.sql, descending }),
   );
   prepared.orderBy.unshift(...terms);
   return prepared;

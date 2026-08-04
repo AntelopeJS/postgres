@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import type { DecodingContext } from "./context";
-import type { TableShape } from "./fields";
+import { DeclaredColumns, type TableShape } from "./fields";
 import { ColumnRowSource, JsonRowSource, type RowSource } from "./row-source";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import type { SqlType } from "./types";
@@ -30,6 +30,15 @@ export interface OrderTerm {
 }
 
 /**
+ * What a single-row relation answers with when it read no row.
+ *
+ * `null` everywhere but `get`, which the contract asserts answers `undefined` for a row that is
+ * not there. It is a value the relation carries rather than an optional field holding the answer,
+ * because an optional field set to `undefined` cannot be told apart from one that was never set.
+ */
+export type AbsentValue = null | undefined;
+
+/**
  * An unrendered `SELECT`, and the accumulator the pipeline folds over.
  *
  * `from` is already-rendered FROM text — a qualified table, a parenthesised subselect or a
@@ -46,6 +55,7 @@ export interface Relation {
   offset?: string;
   distinct: boolean;
   single: boolean;
+  absent: AbsentValue;
   aggregated: boolean;
   source: RowSource;
   projection?: Compiled;
@@ -64,6 +74,7 @@ function NewRelation(seed: RelationSeed): Relation {
     orderBy: [],
     distinct: false,
     single: false,
+    absent: null,
     aggregated: false,
   };
 }
@@ -75,11 +86,22 @@ export function RequireOrigin(relation: Relation): TableOrigin {
   return origin;
 }
 
+/**
+ * The columns an index name addresses, in the order the index declares them.
+ *
+ * `orderBy`, `getAll` and `between` all name an index the same way and must expand it the same
+ * way: a second expansion would sort by one field list and match against another, and the btree
+ * scan would quietly stop being served with nothing failing. A relation that no longer knows its
+ * table can only read the name as a field, which is what keeps `map(…).orderBy("age")` working.
+ */
+export function IndexColumns(relation: Relation, name: string): Compiled[] {
+  const fields = relation.origin ? relation.origin.index(name) : [name];
+  return fields.map((field) => relation.source.field(field));
+}
+
 function RowColumns(relation: Relation): string[] {
   const origin = RequireOrigin(relation);
-  const declared = Object.values(origin.shape.fields).map(
-    (spec) => spec.column,
-  );
+  const declared = DeclaredColumns(origin.shape);
   const columns = [ID_COLUMN, INSTANCE_COLUMN, ...declared, EXTRA_COLUMN];
   return columns.map((column) => QualifiedColumn(relation.alias, column));
 }
@@ -186,6 +208,7 @@ function Wrap(relation: Relation, context: DecodingContext): Relation {
     ? ValueRelation(from, alias, projection.type)
     : TableRelation(from, alias, RequireOrigin(relation));
   wrapped.single = relation.single;
+  wrapped.absent = relation.absent;
   return wrapped;
 }
 
@@ -196,6 +219,28 @@ export type RelationFlag =
   | "distinct"
   | "ordered"
   | "aggregated";
+
+/**
+ * The flags that block absorbing a predicate into `WHERE`, which is the relation's own clause order.
+ *
+ * A `WHERE` runs before the clauses that choose rows and cannot mention an aggregate at all.
+ * Absorbing past a limit, an offset or a `DISTINCT` would filter the rows the relation had *before*
+ * those clauses picked from them — `slice(0, 2).filter(…)` would test the whole table and then take
+ * two — and absorbing past an aggregate raises
+ * `42803 aggregate functions are not allowed in WHERE`. A pending projection blocks it for the same
+ * reason it blocks every stage that resolves a field.
+ *
+ * Stated here rather than in the family that first needed it: every stage pushing onto
+ * {@link Relation.where} blocks on exactly these, and a second copy of the list would be free to
+ * drift from this one with nothing failing (invariant 17).
+ */
+export const WHERE_BLOCKERS: readonly RelationFlag[] = [
+  "projection",
+  "limit",
+  "offset",
+  "distinct",
+  "aggregated",
+];
 
 type RelationPredicate = (relation: Relation) => boolean;
 
@@ -218,9 +263,10 @@ const FLAG_PREDICATES: Record<RelationFlag, RelationPredicate> = {
  * same argument that makes a projection block another projection.
  *
  * Row mode survives a wrap because the rendered select list preserves the physical column names,
- * which is what keeps a filter after a slice reading a btree-indexed column. `single` carries
- * through; `aggregated` does not, since the wrapping relation is not itself an aggregate, and
- * the remaining clauses are already expressed in the rendered text.
+ * which is what keeps a filter after a slice reading a btree-indexed column. `single` and the
+ * {@link AbsentValue} beside it carry through; `aggregated` does not, since the wrapping relation
+ * is not itself an aggregate, and the remaining clauses are already expressed in the rendered
+ * text.
  */
 export function Prepare(
   relation: Relation,

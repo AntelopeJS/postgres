@@ -16,7 +16,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "./types";
-import { RESERVED_COLUMNS } from "./utils";
+import { ID_COLUMN, RESERVED_COLUMNS } from "./utils";
 
 export interface IoTsCodec {
   is(value: unknown): boolean;
@@ -37,6 +37,32 @@ export interface FieldSpec {
 
 export interface TableShape {
   fields: Record<string, FieldSpec>;
+}
+
+/**
+ * The columns a table declares, in declaration order.
+ *
+ * The one owner of that expansion: the select list a row-mode relation reads back and the column
+ * list a write names have to agree on both the set and the order, and `FieldSpec.column` is not
+ * the field name whenever `PgIdentifier` truncated it (invariant 8), so a second spelling would
+ * write one column and read another with nothing failing.
+ */
+export function DeclaredColumns(shape: TableShape): string[] {
+  return Object.values(shape.fields).map((spec) => spec.column);
+}
+
+/**
+ * The keys a row's document has of its own, in declaration order, which is not the column list.
+ *
+ * `_id` is prepended because the parser refuses it as a field and it is a document key all the
+ * same (invariant 3), and the names are logical rather than physical for the reason
+ * {@link DeclaredColumns} is the opposite (invariant 8). The one owner of that expansion: the
+ * document a row materializes into and the keys a write subtracts from an overflow document have
+ * to be the same set, or a key is both stored in its column and left behind in `_extra`, where
+ * the stale copy is the one every later read answers with.
+ */
+export function DocumentKeys(shape: TableShape): string[] {
+  return [ID_COLUMN, ...Object.keys(shape.fields)];
 }
 
 export interface SchemaShape {

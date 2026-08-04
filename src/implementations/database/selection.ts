@@ -6,7 +6,7 @@ import { IndexFields } from "./ddl";
 import { TableReference } from "./identifier";
 import { type Relation, type TableOrigin, TableRelation } from "./relation";
 import { GetIndex, GetTableShape } from "./schema";
-import { Param, QualifiedColumn } from "./sql";
+import { type Compiled, Param, QualifiedColumn } from "./sql";
 import { TEXT } from "./types";
 import { DEFAULT_INSTANCE_ID, INSTANCE_COLUMN, type QueryStage } from "./utils";
 
@@ -20,9 +20,25 @@ const ROOT_STAGES: readonly string[] = [
   TABLE_STAGE,
 ];
 
+/**
+ * How a query is scoped to an instance: the fragment its predicate bound, or every instance at once.
+ *
+ * One value rather than a resolved id beside an optional fragment, because the two are the same
+ * fact read twice — a named instance always bound a parameter and `CROSS_INSTANCE` never does — and
+ * a pair admits two states nothing can produce. The fragment is the one the predicate itself used:
+ * a write that does not render the relation still needs the instance, and binding a second
+ * parameter for it would leave this one bound and unreferenced (invariant 16).
+ *
+ * A relation records only the *absence* of an instance predicate, so it cannot tell a
+ * cross-instance query from a table nobody filtered; this is what the writes read instead.
+ */
+export type InstanceScope = typeof CROSS_INSTANCE | Compiled;
+
+/** The base relation of a table query, the stages still to fold over it, and the instance it reads. */
 export interface RootSelection {
   relation: Relation;
   rest: QueryStage[];
+  instance: InstanceScope;
 }
 
 /**
@@ -75,25 +91,29 @@ function RootId(stage: QueryStage): string {
 }
 
 /**
- * Restricts the relation to one instance, or to none at all.
+ * The instance a query reads, bound once for the predicate and for any write that follows.
  *
  * An absent id is the default instance, stored as the empty string so it compares like any
- * other. `CROSS_INSTANCE` reads every instance and so contributes no predicate — which is why
- * `NormalizeInstanceId` cannot serve here, since it rejects that sentinel outright.
+ * other. `CROSS_INSTANCE` reads every instance, so it binds nothing and contributes no predicate —
+ * which is also why `NormalizeInstanceId` cannot serve here, since it rejects that sentinel
+ * outright.
  */
-function InstanceFilter(
-  alias: string,
+function RootInstanceScope(
   id: unknown,
   context: DecodingContext,
-): string | undefined {
+): InstanceScope {
   if (id === CROSS_INSTANCE) {
-    return undefined;
+    return CROSS_INSTANCE;
   }
   assert(
     id === undefined || id === null || typeof id === "string",
     `An instance id must be a string or CROSS_INSTANCE, received ${typeof id}`,
   );
-  const value = Param(context.params, id ?? DEFAULT_INSTANCE_ID, TEXT);
+  return Param(context.params, id ?? DEFAULT_INSTANCE_ID, TEXT);
+}
+
+/** Restricts the relation to one instance, parenthesised as every `where` entry is (invariant 5). */
+function InstancePredicate(alias: string, value: Compiled): string {
   return `(${QualifiedColumn(alias, INSTANCE_COLUMN)} = ${value.sql})`;
 }
 
@@ -117,11 +137,15 @@ export function BuildRoot(
     alias,
     resolve(schemaId, tableId),
   );
-  const filter = InstanceFilter(alias, instance.options?.id, context);
-  if (filter) {
-    relation.where.push(filter);
+  const scope = RootInstanceScope(instance.options?.id, context);
+  if (scope !== CROSS_INSTANCE) {
+    relation.where.push(InstancePredicate(alias, scope));
   }
-  return { relation, rest: stages.slice(ROOT_STAGES.length) };
+  return {
+    relation,
+    rest: stages.slice(ROOT_STAGES.length),
+    instance: scope,
+  };
 }
 
 function CollectInto(stages: QueryStage[], ids: Set<string>): void {
