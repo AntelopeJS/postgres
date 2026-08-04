@@ -338,6 +338,16 @@ export function IdentityPredicate(
   );
 }
 
+/**
+ * The predicate a payload's own `_id` compiles to, given the parameter it bound.
+ *
+ * Transcribed here for {@link IdentityPredicate}'s reason: `update` and `replace` reach it through
+ * the same statement builder, so a second copy would let a change stay green in one of them.
+ */
+export function AssertedIdentity(param: string): string {
+  return `("${WRITE_ALIAS}"."_id" = (${param}::text))`;
+}
+
 /** The one row a `get` selects, as the identity target renders it. */
 export const SELECTED_ROW =
   `SELECT ${ROW_COLUMNS} ${FROM_TABLE}` +

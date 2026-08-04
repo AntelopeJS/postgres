@@ -3,6 +3,7 @@ import type { DecodingContext } from "./context";
 import { PRIMARY_KEY_COLUMNS } from "./ddl";
 import { DeclaredColumns, DocumentKeys, type TableShape } from "./fields";
 import {
+  ID_AS_ASSERTION,
   MembersByColumn,
   type PayloadOptions,
   type PayloadSplit,
@@ -19,7 +20,7 @@ import {
   TextArray,
 } from "./stage";
 import { JsonOf, type SqlShape } from "./types";
-import { EXTRA_COLUMN, type QueryStage } from "./utils";
+import { EXTRA_COLUMN, ID_COLUMN, type QueryStage } from "./utils";
 import {
   DecodeValue,
   FunctionBody,
@@ -44,8 +45,8 @@ import {
   type WriteTarget,
 } from "./writes-shared";
 
-/** Neither `update` nor `replace` is keyed by its payload: a write cannot change the identity it targeted. */
-const CHANGED: PayloadOptions = { acceptsId: false };
+/** Neither `update` nor `replace` is keyed by its payload: an `_id` it names states a target. */
+const CHANGED: PayloadOptions = { id: ID_AS_ASSERTION };
 
 /** The one-column derived table a mapper's document is read back out of, column and all. */
 const MAPPED_COLUMN = "doc";
@@ -82,7 +83,45 @@ function IdentityTarget(target: WriteTarget, context: DecodingContext): string {
 }
 
 /**
- * The statement `update` and `replace` compile to, given the `SET` list each built for itself.
+ * One payload's `SET` list, and the row identity that payload asserted if it named one.
+ *
+ * The two travel together because they come out of one split and are spelled into opposite halves
+ * of the same statement, and because the `update` path that returns them — a mapper's document
+ * body — has no second chance to hand back what it left behind.
+ */
+interface ChangedColumns {
+  assignments: string;
+  identity?: Compiled;
+}
+
+/**
+ * The rows the statement changes: the ones the read pipeline found, narrowed by the payload's own
+ * `_id` where it supplied one.
+ *
+ * The assertion is a predicate and never an assignment. Supplying the `_id` the row already has
+ * matches it and changes nothing about the write; supplying another row's matches nothing, and the
+ * write answers 0 — the count the contract already types the answer as, rather than an error. Over
+ * a selection of several rows that narrows the write instead of refusing it, which is the accepted
+ * cost of reading the key as an assertion at all.
+ *
+ * Parenthesised here rather than trusted to arrive that way (invariant 5): the conjuncts are joined
+ * with `AND`, where anything composed would otherwise rebind across the identity target.
+ */
+function TargetedRows(
+  target: WriteTarget,
+  identity: Compiled | undefined,
+  context: DecodingContext,
+): string {
+  const predicates = [IdentityTarget(target, context)];
+  if (identity) {
+    const key = QualifiedColumn(WRITE_ALIAS, ID_COLUMN);
+    predicates.push(`(${key} = ${identity.sql})`);
+  }
+  return predicates.join(" AND ");
+}
+
+/**
+ * The statement `update` and `replace` compile to, given the columns each built for itself.
  *
  * The assignments arrive already compiled because the two writes that share this skeleton
  * disagree about nothing else, and compiling them first is what leaves the aliases in reading
@@ -91,12 +130,13 @@ function IdentityTarget(target: WriteTarget, context: DecodingContext): string {
  */
 function UpdateStatement(
   target: WriteTarget,
-  assignments: string,
+  changed: ChangedColumns,
   context: DecodingContext,
 ): WriteStatement {
-  const where = IdentityTarget(target, context);
+  const where = TargetedRows(target, changed.identity, context);
+  const table = WriteTable(target.origin);
   return {
-    sql: `UPDATE ${WriteTable(target.origin)} SET ${assignments} WHERE ${where}`,
+    sql: `UPDATE ${table} SET ${changed.assignments} WHERE ${where}`,
   };
 }
 
@@ -147,11 +187,17 @@ function UpdatedExtra(split: PayloadSplit): string | undefined {
  *
  * An `UPDATE` with an empty `SET` list is a syntax error, and answering `0` without running one
  * would need a second statement to count the rows it did not change — so an empty payload is
- * refused by name. Nothing has been decoded at that point either: a payload with no assignments is
- * a payload with no keys, so the refusal cannot leave a parameter bound and unreferenced.
+ * refused by name.
  *
  * The refusal is `update`'s alone. `replace({})` names every column it did not name, so it is a
  * well-formed statement that empties the row rather than one with nothing to say.
+ *
+ * A payload whose only key is `_id` is refused here too, and rightly: that key states which row is
+ * written and never what to write into it, so `update({ _id })` still has nothing to say. It is
+ * also the one payload reaching this refusal that has already decoded a value, so the reassuring
+ * reading — no assignments means no keys means nothing bound — is not the reason it is safe.
+ * Invariant 16 is unhurt because the throw abandons the whole compilation: the hazard is a
+ * statement that runs while binding a `$n` its text never names, and no statement survives here.
  */
 function SetList(split: PayloadSplit, stage: QueryStage): string {
   const assignments = split.members.map((member) =>
@@ -169,6 +215,14 @@ function SetList(split: PayloadSplit, stage: QueryStage): string {
     `The '${stage.stage}' stage was given a payload with nothing to write: name a field to set, or set one to undefined to remove it`,
   );
   return assignments.join(", ");
+}
+
+/** One `update` payload as the statement takes it: what it sets, and what it says it targets. */
+function ChangedColumnsOf(
+  split: PayloadSplit,
+  stage: QueryStage,
+): ChangedColumns {
+  return { assignments: SetList(split, stage), identity: split.identity };
 }
 
 /**
@@ -276,22 +330,24 @@ function MultiAssignment(
  *
  * Both halves bind the lambda parameter to the row being written and not to the one that was read
  * — see {@link WriteRowSource} for why the read relation's alias cannot appear here.
+ *
+ * Only the object body can assert an identity, and it does so for free by being the document path:
+ * an expression body is one value whose top-level keys are not known until it runs, so there is no
+ * `_id` in it to read as a claim about the row.
  */
-function MappedAssignments(
+function MappedColumns(
   target: WriteTarget,
   stage: QueryStage,
   mapper: QueryStage,
   context: DecodingContext,
-): string {
+): ChangedColumns {
   const body = FunctionBody(mapper);
   const bindings = [WriteRowSource(target.origin)];
   if (IsPlainObject(body)) {
-    return SetList(
-      WithBoundArguments(mapper, context, bindings, () =>
-        ChangedPayload(body, target, context),
-      ),
-      stage,
+    const split = WithBoundArguments(mapper, context, bindings, () =>
+      ChangedPayload(body, target, context),
     );
+    return ChangedColumnsOf(split, stage);
   }
   const document = WithBoundArguments(mapper, context, bindings, () =>
     DecodeValue(body, context),
@@ -300,7 +356,9 @@ function MappedAssignments(
     document,
     `The '${stage.stage}' stage was given a mapper that returned nothing: return the document the rows become`,
   );
-  return MultiAssignment(target.origin, AsJson(document), context);
+  return {
+    assignments: MultiAssignment(target.origin, AsJson(document), context),
+  };
 }
 
 /**
@@ -316,13 +374,13 @@ function MappedAssignments(
 export const UpdateWrite: WriteCompiler = (target, stage, context) => {
   const argument = stage.args[FIRST_OPERAND];
   const mapper = RecordedFunction(argument);
-  const assignments = mapper
-    ? MappedAssignments(target, stage, mapper, context)
-    : SetList(
+  const changed = mapper
+    ? MappedColumns(target, stage, mapper, context)
+    : ChangedColumnsOf(
         ChangedPayload(ChangedDocument(stage, argument), target, context),
         stage,
       );
-  return UpdateStatement(target, assignments, context);
+  return UpdateStatement(target, changed, context);
 };
 
 /**
@@ -336,11 +394,11 @@ export const ReplaceWrite: WriteCompiler = (target, stage, context) => {
   RefuseCrossInstance(target, stage);
   const document = ChangedDocument(stage, stage.args[FIRST_OPERAND]);
   const split = ChangedPayload(document, target, context);
-  return UpdateStatement(
-    target,
-    ReplacedAssignments(split, target.origin.shape),
-    context,
-  );
+  const changed: ChangedColumns = {
+    assignments: ReplacedAssignments(split, target.origin.shape),
+    identity: split.identity,
+  };
+  return UpdateStatement(target, changed, context);
 };
 
 /**

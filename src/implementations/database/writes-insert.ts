@@ -3,7 +3,12 @@ import { randomUUID } from "node:crypto";
 import type { DecodingContext } from "./context";
 import { PRIMARY_KEY_LIST } from "./ddl";
 import { DeclaredColumns, type TableShape } from "./fields";
-import { MembersByColumn, type PayloadOptions, SplitPayload } from "./payload";
+import {
+  ID_AS_KEY,
+  MembersByColumn,
+  type PayloadOptions,
+  SplitPayload,
+} from "./payload";
 import type { TableOrigin } from "./relation";
 import { type Compiled, Param, QuoteIdentifier } from "./sql";
 import { FIRST_OPERAND } from "./stage";
@@ -27,7 +32,7 @@ import {
 } from "./writes-shared";
 
 const EXCLUDED_ROW = "EXCLUDED";
-const INSERTED: PayloadOptions = { acceptsId: true };
+const INSERTED: PayloadOptions = { id: ID_AS_KEY };
 
 function Excluded(column: string): string {
   return `${EXCLUDED_ROW}.${QuoteIdentifier(column)}`;

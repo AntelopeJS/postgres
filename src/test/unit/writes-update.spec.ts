@@ -1,6 +1,7 @@
 import type { DeepPartial } from "@antelopejs/interface-database/common";
 import { expect } from "chai";
 import {
+  AssertedIdentity,
   CrossInstanceRoot,
   EVERY_ROW,
   ExpectBalancedLedger,
@@ -210,6 +211,53 @@ describe("the update statement's overflow column", () => {
   });
 });
 
+describe("the update statement's asserted identity", () => {
+  it("narrows the target to the row the payload's key names, assigning nothing", () => {
+    const written = Update({ _id: KEY, age: AGE });
+    expect(Sql(written)).to.equal(
+      `${Updates('"age" = ($4::double precision)')} AND ${AssertedIdentity("$3")}`,
+    );
+    expect(Sql(written)).to.not.contain('SET "_id"');
+  });
+
+  it("asserts the key wherever in the payload it was named", () => {
+    const written = Update({ age: AGE, _id: KEY });
+    expect(Sql(written)).to.equal(
+      `${Updates('"age" = ($3::double precision)')} AND ${AssertedIdentity("$4")}`,
+    );
+  });
+
+  it("asserts nothing for a key the payload only names", () => {
+    expect(Sql(Update({ _id: undefined, age: AGE }))).to.equal(
+      Updates('"age" = ($3::double precision)'),
+    );
+  });
+
+  /**
+   * The divergence the assertion is accepted with: over a selection of several rows a payload key
+   * narrows the write to one rather than refusing it. Pinned so that becoming a refusal is a
+   * decision someone makes rather than a change that passes.
+   */
+  it("narrows a write over every row instead of refusing the key", () => {
+    const written = Write(
+      Root().update({ _id: KEY, age: AGE } as WriteDocument),
+    );
+    expect(Sql(written)).to.equal(
+      `${Changes('"age" = ($3::double precision)')} AND ${AssertedIdentity("$2")}`,
+    );
+  });
+
+  it("asserts the key a mapper's document body names, exactly as a payload does", () => {
+    const written = Write(
+      Root().update((doc) => ({ _id: KEY, age: doc.key("age").add(RAISE) })),
+    );
+    expect(Sql(written)).to.equal(
+      `${Changes('"age" = ("w0"."age" + ($3::double precision))')}` +
+        ` AND ${AssertedIdentity("$2")}`,
+    );
+  });
+});
+
 describe("the update statement's refusals", () => {
   it("refuses a payload with nothing to write, naming the stage", () => {
     expect(() => Update({})).to.throw(
@@ -229,9 +277,9 @@ describe("the update statement's refusals", () => {
     );
   });
 
-  it("refuses the key column, and says to remove it from the payload", () => {
-    expect(() => Update({ _id: "x" })).to.throw(
-      "Payload key '_id' identifies the row a write targets: a write cannot change a row's identity, so remove the key from the payload",
+  it("refuses a payload that names the key and nothing else to write", () => {
+    expect(() => Update({ _id: KEY })).to.throw(
+      "The 'update' stage was given a payload with nothing to write",
     );
   });
 
@@ -303,9 +351,9 @@ describe("the update statement's mapper, whose body is a document", () => {
 
   it("refuses a reserved key the body names, exactly as a document payload does", () => {
     expect(() =>
-      Write(Root().update((doc) => ({ _id: doc.key("name") }))),
+      Write(Root().update((doc) => ({ _instance: doc.key("name") }))),
     ).to.throw(
-      "Payload key '_id' identifies the row a write targets: a write cannot change a row's identity, so remove the key from the payload",
+      "Payload key '_instance' is a column this adapter owns and no payload may write it",
     );
   });
 });
@@ -364,6 +412,8 @@ describe("the update statement's parameter ledger", () => {
       Update({ nickname: NICKNAME }),
       Update({ nickname: undefined }),
       Update({ age: AGE, nickname: NICKNAME, stale: undefined }),
+      Update({ _id: KEY, age: AGE }),
+      Write(Root().update((doc) => ({ _id: KEY, age: doc.key("age") }))),
       Write(CrossInstanceRoot().update({ age: AGE } as DeepPartial<Person>)),
       Write(
         Root()

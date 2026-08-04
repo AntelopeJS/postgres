@@ -26,12 +26,18 @@ export interface PayloadMember {
  * to NULL, while `removed` names undeclared keys it subtracts from the overflow document. A key
  * routed to the wrong one still compiles and still writes — it just writes to the other half of
  * the row.
+ *
+ * `identity` is the odd one out: it is not something the write *writes* but something the payload
+ * *claims* about the row it targets — the `_id` a caller supplied, present only where the stage
+ * reads one that way. A write that assigned it instead would change the identity of the row it had
+ * already found.
  */
 export interface PayloadSplit {
   members: PayloadMember[];
   cleared: string[];
   extra?: Compiled;
   removed: string[];
+  identity?: Compiled;
 }
 
 /**
@@ -47,26 +53,46 @@ export function MembersByColumn(split: PayloadSplit): Map<string, Compiled> {
 }
 
 /**
- * What the stage doing the writing does with `_id`.
+ * Where a supplied `_id` lands in the split, which is what the stage doing the writing decides.
  *
- * `insert` takes it as the row's key; `update` and `replace` refuse it alongside the two columns
- * the adapter owns, since a write cannot change the identity of the row it targeted.
+ * The disposition is the whole difference between the two walks, so it is the behaviour itself
+ * rather than a flag a second `if` then reads: the value is compiled the same way for both, and
+ * only its destination differs.
+ */
+export type IdDisposition = (split: PayloadSplit, value: Compiled) => void;
+
+/** `insert` is keyed by its payload, so the `_id` it supplies is a column the new row writes. */
+export const ID_AS_KEY: IdDisposition = (split, value) => {
+  split.members.push({ column: ID_COLUMN, value });
+};
+
+/**
+ * `update` and `replace` are keyed by what they targeted, so an `_id` states which row that is.
+ *
+ * Never an assignment: the write already found its rows, and a payload's `_id` narrows them to the
+ * one it names rather than renaming what was found. A key naming some other row therefore matches
+ * nothing and the write answers 0, which is what makes writing a document straight back — `_id`
+ * and all — a no-op rather than an error.
+ */
+export const ID_AS_ASSERTION: IdDisposition = (split, value) => {
+  split.identity = value;
+};
+
+/**
+ * What the stage doing the writing does with the reserved columns.
+ *
+ * `_instance` and `_extra` are the adapter's own and are refused under every stage; `_id` is the
+ * one a read document carries, and `id` says what this stage makes of it.
  */
 export interface PayloadOptions {
-  acceptsId: boolean;
+  id: IdDisposition;
 }
 
 const ADAPTER_OWNED =
   "is a column this adapter owns and no payload may write it";
 
-const REFUSALS: Record<string, string> = {
-  [ID_COLUMN]:
-    "identifies the row a write targets: a write cannot change a row's identity, so remove the key from the payload",
-};
-
 function Refusal(name: string): Error {
-  const reason = Object.hasOwn(REFUSALS, name) ? REFUSALS[name] : ADAPTER_OWNED;
-  return new Error(`Payload key '${name}' ${reason}`);
+  return new Error(`Payload key '${name}' ${ADAPTER_OWNED}`);
 }
 
 interface PayloadWalk {
@@ -99,17 +125,24 @@ function Collect(walk: PayloadWalk, name: string, value: unknown): void {
   });
 }
 
+/**
+ * Routes the one reserved column a payload may name, and refuses the two it may not.
+ *
+ * The key is read *as* `TEXT` through {@link StoredAs} rather than cast to it, which is the same
+ * reading `get` gives the key it selects on (invariant 13): the two have to agree, or a key that
+ * addressed a row on the way in fails to address it on the way back.
+ *
+ * A `_id` named with no value asserts nothing and keys nothing, exactly as every other key named
+ * that way writes nothing — there is no identity to remove and none to state.
+ */
 function TakeReserved(walk: PayloadWalk, name: string, value: unknown): void {
-  if (name !== ID_COLUMN || !walk.options.acceptsId) {
+  if (name !== ID_COLUMN) {
     throw Refusal(name);
   }
   if (value === undefined) {
     return;
   }
-  walk.split.members.push({
-    column: ID_COLUMN,
-    value: StoredAs(Decoded(walk, value), TEXT),
-  });
+  walk.options.id(walk.split, StoredAs(Decoded(walk, value), TEXT));
 }
 
 function TakeDeclared(

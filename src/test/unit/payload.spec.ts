@@ -4,6 +4,8 @@ import { DecodingContext } from "../../implementations/database/context";
 import { CompileExpression } from "../../implementations/database/expression";
 import type { TableShape } from "../../implementations/database/fields";
 import {
+  ID_AS_ASSERTION,
+  ID_AS_KEY,
   type PayloadOptions,
   type PayloadSplit,
   SplitPayload,
@@ -28,8 +30,8 @@ const vehicles: TableShape = {
   },
 };
 
-const INSERTED: PayloadOptions = { acceptsId: true };
-const TARGETED: PayloadOptions = { acceptsId: false };
+const INSERTED: PayloadOptions = { id: ID_AS_KEY };
+const TARGETED: PayloadOptions = { id: ID_AS_ASSERTION };
 
 const NUMERIC_TEXT_PATTERN = `'^\\s*[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?\\s*$'`;
 
@@ -71,11 +73,13 @@ function Fragments(applied: SplitResult): string[] {
   return applied.split.members.map((member) => member.value.sql);
 }
 
-/** The bind ledger of everything a split carries — a member's value or the overflow document. */
+/** The bind ledger of everything a split carries — a member, the overflow document, the identity. */
 function ReadParamLedger(applied: SplitResult): ParamLedger {
-  const text = [...Fragments(applied), applied.split.extra?.sql ?? ""].join(
-    " ",
-  );
+  const text = [
+    ...Fragments(applied),
+    applied.split.extra?.sql ?? "",
+    applied.split.identity?.sql ?? "",
+  ].join(" ");
   return ParamLedgerOf(text, applied.context.params.all().length);
 }
 
@@ -237,15 +241,31 @@ describe("SplitPayload over the reserved columns", () => {
     );
   });
 
-  it("refuses the key column, saying to remove it from the payload", () => {
-    expect(() => Split({ _id: "k" })).to.throw(
-      "Payload key '_id' identifies the row a write targets: a write cannot change a row's identity, so remove the key from the payload",
+  it("takes the key column as an assertion where the stage targets rows by identity", () => {
+    const applied = Split({ _id: "k", price: 1 });
+    expect(Columns(applied)).to.deep.equal(["price"]);
+    expect(applied.split.identity?.sql).to.equal("($1::text)");
+    expect(applied.context.params.all()).to.deep.equal(["k", 1]);
+  });
+
+  it("reads the asserted key as text, the way a key is read everywhere else", () => {
+    expect(Split({ _id: 1 }).split.identity?.sql).to.equal(
+      "((($1::double precision))::text)",
     );
   });
 
+  it("asserts nothing for a key column the payload only names", () => {
+    const applied = Split({ _id: undefined });
+    expect(applied.split.identity).to.equal(undefined);
+    expect(applied.split.members).to.deep.equal([]);
+    expect(applied.context.params.all()).to.deep.equal([]);
+  });
+
   it("refuses a reserved column the payload only names", () => {
-    expect(() => Split({ _id: undefined })).to.throw("Payload key '_id'");
     expect(() => Split({ _extra: undefined })).to.throw("Payload key '_extra'");
+    expect(() => Split({ _instance: undefined })).to.throw(
+      "Payload key '_instance'",
+    );
   });
 
   it("takes the key column as a member when the stage is keyed by it", () => {
@@ -276,6 +296,7 @@ describe("SplitPayload's parameter ledger", () => {
       Split({ price: undefined, productIds: undefined }),
       Split({ productIds: ["a", "b"], price: "3000" }),
       Split({ _id: "k", tags: ["x"] }, INSERTED),
+      Split({ _id: "k", price: 1, tags: ["x"] }),
     ];
     for (const applied of splits) {
       const ledger = ReadParamLedger(applied);
