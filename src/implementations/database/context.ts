@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import type { QueryStage } from "@antelopejs/interface-database/common";
+import type { Relation } from "./relation";
 import type { RowSource } from "./row-source";
 import type { OriginResolver } from "./selection";
 import { type Compiled, ParamCollector } from "./sql";
@@ -19,14 +20,36 @@ export type SubqueryCompiler = (
   context: DecodingContext,
 ) => Compiled;
 
+export type RelationCompiler = (
+  stages: QueryStage[],
+  context: DecodingContext,
+) => Relation;
+
+/**
+ * The nested compilations a stage or an expression can ask for, injected rather than imported.
+ *
+ * Named rather than positional because `expression` and `subquery` take the same parameters and
+ * answer the same type, so swapping them still typechecks and compiles the wrong thing — and those
+ * two are exactly the pair the constructor used to carry positionally. `relation` answers a
+ * different type and would be caught, which is not a reason to leave the other two exposed.
+ *
+ * A compilation belongs here only when the caller sits *below* the compiler it needs — `value.ts`
+ * below `expression.ts`, a stage family below the dispatcher that merges it — so that importing it
+ * outright would close a require cycle. Anything a caller can import is an import, not a hook.
+ */
+export interface Compilers {
+  expression: ExpressionCompiler;
+  subquery: SubqueryCompiler;
+  relation: RelationCompiler;
+}
+
 const ALIAS_PREFIX = "t";
 
 /**
  * Mutable state shared by every layer compiling a single statement: the parameter list, the
  * table alias counter and the bindings of lambda parameters.
  *
- * The expression and subquery compilers are injected so this module stays free of a circular
- * import back onto them.
+ * The compilers are injected so this module stays free of a circular import back onto them.
  */
 export class DecodingContext {
   public readonly params = new ParamCollector();
@@ -34,7 +57,7 @@ export class DecodingContext {
   /**
    * How a root nested inside the stage tree — a union's right side — learns about its table.
    *
-   * Injected for the same reason the two compilers are; see {@link OriginResolver}. Left unset
+   * Injected for the same reason the compilers are; see {@link OriginResolver}. Left unset
    * outside a spec, where `RegisteredOrigin` is what a nested root falls back to.
    */
   public resolveOrigin?: OriginResolver;
@@ -42,10 +65,7 @@ export class DecodingContext {
   private readonly bindings: Record<number, ArgumentBinding> = {};
   private aliasCounter = 0;
 
-  public constructor(
-    private readonly compileExpression: ExpressionCompiler,
-    private readonly compileSubquery: SubqueryCompiler,
-  ) {}
+  public constructor(private readonly compilers: Compilers) {}
 
   public nextAlias(): string {
     return `${ALIAS_PREFIX}${this.aliasCounter++}`;
@@ -68,10 +88,15 @@ export class DecodingContext {
   }
 
   public expression(stages: QueryStage[], source?: RowSource): Compiled {
-    return this.compileExpression(stages, this, source);
+    return this.compilers.expression(stages, this, source);
   }
 
   public subquery(stages: QueryStage[]): Compiled {
-    return this.compileSubquery(stages, this);
+    return this.compilers.subquery(stages, this);
+  }
+
+  /** The one door to a query nested inside another one — see `CompileRelation`. */
+  public relation(stages: QueryStage[]): Relation {
+    return this.compilers.relation(stages, this);
   }
 }

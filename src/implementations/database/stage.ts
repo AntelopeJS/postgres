@@ -429,6 +429,12 @@ export interface HeldValue {
  * the select list and the guard both read the alias, and the value is emitted exactly once. A row
  * that fails the guard yields no row, which as a scalar subselect reaches the caller as NULL — the
  * same reading {@link GuardJson} gives.
+ *
+ * **It holds once in the *text*, not once at run time.** The planner pulls a one-row subquery up
+ * and substitutes the held expression into both the output and the one-time filter, so the value is
+ * evaluated twice per row either way; measured at +25 % execution against the same fragment
+ * unguarded. What this buys is text that stays linear as these constructs chain, which is the whole
+ * of the claim — a caller wanting the *evaluation* to happen once needs a lateral off the relation.
  */
 export function HeldOnce(held: HeldValue): string {
   const relation = QuoteIdentifier(held.alias);
@@ -469,7 +475,15 @@ export function AsJson(value: Compiled): Compiled {
 export const VALUE_COLUMN = "value";
 export const ORDINAL_COLUMN = "ord";
 
-const EMPTY_ARRAY = "'[]'::jsonb";
+/**
+ * What an aggregation over zero rows must answer instead of NULL, spelled once.
+ *
+ * `jsonb_agg` yields NULL over an empty input, which would turn an empty container into a null for
+ * every stage downstream — and the same is true of a nested query that read no row. Both callers
+ * coalesce onto this literal, and a second spelling would be free to drift from this one with
+ * nothing failing (invariant 17).
+ */
+export const EMPTY_ARRAY = "'[]'::jsonb";
 const ORDINALITY = "WITH ORDINALITY";
 
 export function WalkColumn(alias: string, name: string): string {

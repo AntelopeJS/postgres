@@ -20,6 +20,7 @@ import {
   DecodeValue,
   WithBoundArguments,
 } from "../../implementations/database/value";
+import { RefusingCompilers } from "./spec-fixture";
 
 const STUB_EXPRESSION: Compiled = { sql: "EXPR", type: OPAQUE };
 const STUB_SUBQUERY: Compiled = { sql: "SUB", type: OPAQUE };
@@ -35,19 +36,20 @@ function NewRecorded(): Recorded {
 }
 
 function NewContext(recorded: Recorded): DecodingContext {
-  return new DecodingContext(
-    (stages, context) => {
+  return new DecodingContext({
+    ...RefusingCompilers(),
+    expression: (stages, context) => {
       recorded.expressions.push(stages);
       if (stages[0]?.stage === "arg") {
         recorded.bindings.push(context.arg(stages[0].args[0]));
       }
       return STUB_EXPRESSION;
     },
-    (stages) => {
+    subquery: (stages) => {
       recorded.subqueries.push(stages);
       return STUB_SUBQUERY;
     },
-  );
+  });
 }
 
 describe("DecodeValue", () => {

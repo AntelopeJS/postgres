@@ -33,9 +33,9 @@ export interface WriteSplit {
 /**
  * The terminal stages, each compiling a statement that is not a `SELECT`.
  *
- * A plain constant rather than a function, unlike `PipelineStages()`: the fragments a write family
- * shares live in `writes-shared.ts`, so nothing a family imports leads back here and the two
- * directions of invariant 20's require cycle cannot form. A write is terminal — the contract gives
+ * A plain constant rather than a function: the fragments a write family shares live in
+ * `writes-shared.ts`, so nothing a family imports leads back here and the two directions of
+ * invariant 20's require cycle cannot form. A write is terminal — the contract gives
  * `Query` no chain methods — so no compiler can ever need the dispatch that called it, which is
  * what makes that cut available at all.
  */

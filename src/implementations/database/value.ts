@@ -34,6 +34,13 @@ export const NULL_JSON: Compiled = { sql: "'null'::jsonb", type: OPAQUE };
  *
  * `undefined` decodes to `undefined` — absence, which the caller interprets — while `null`
  * decodes to a json null, since a jsonb member set to null is not SQL NULL.
+ *
+ * Every case here that *recurses* — an array, a plain object, and a `StagedObject` handed to a
+ * compiler — must stay covered by `selection.ts`'s `CollectValue`, the pre-pass that gates schema
+ * readiness by walking the same shapes before any of this runs (invariant 17). A recursive case
+ * added here and missed there compiles against a shape that has not converged, and the failure
+ * surfaces nowhere near this file. {@link DecodePrimitive} refusing every other object is what
+ * keeps that obligation checkable rather than a matter of trust.
  */
 export function DecodeValue(
   value: unknown,

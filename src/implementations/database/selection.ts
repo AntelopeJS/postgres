@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { Query } from "@antelopejs/interface-database";
+import { StagedObject } from "@antelopejs/interface-database/common";
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 import type { DecodingContext } from "./context";
 import { IndexFields } from "./ddl";
@@ -9,6 +9,7 @@ import { GetIndex, GetTableShape } from "./schema";
 import { type Compiled, Param, QualifiedColumn } from "./sql";
 import { TEXT } from "./types";
 import { DEFAULT_INSTANCE_ID, INSTANCE_COLUMN, type QueryStage } from "./utils";
+import { IsPlainObject } from "./value";
 
 export const SCHEMA_STAGE = "schema";
 const INSTANCE_STAGE = "instance";
@@ -148,15 +149,50 @@ export function BuildRoot(
   };
 }
 
-function CollectInto(stages: QueryStage[], ids: Set<string>): void {
+/** The ids found so far, beside the objects already walked, carried through one collection. */
+interface SchemaWalk {
+  ids: Set<string>;
+  visited: WeakSet<object>;
+}
+
+/**
+ * Walks a stage argument, which is caller data and may be any shape a document may be.
+ *
+ * A recorded lambda is the plain object `{ stage: "func", args: [[id], body] }`, so walking plain
+ * objects reaches every body a caller wrote and no case for a recorded function is needed.
+ * {@link IsPlainObject} rather than a bare object test, so a `Date` is read as the value it is
+ * instead of a record of whatever keys it happens to carry; and the visited set, because a caller's
+ * own object may be cyclic where builder output never is.
+ */
+function CollectValue(value: unknown, walk: SchemaWalk): void {
+  if (typeof value !== "object" || value === null || walk.visited.has(value)) {
+    return;
+  }
+  walk.visited.add(value);
+  if (value instanceof StagedObject) {
+    CollectInto(value.build(), walk);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      CollectValue(item, walk);
+    }
+    return;
+  }
+  if (IsPlainObject(value)) {
+    for (const item of Object.values(value)) {
+      CollectValue(item, walk);
+    }
+  }
+}
+
+function CollectInto(stages: QueryStage[], walk: SchemaWalk): void {
   for (const stage of stages) {
     if (stage.stage === SCHEMA_STAGE && typeof stage.options?.id === "string") {
-      ids.add(stage.options.id);
+      walk.ids.add(stage.options.id);
     }
     for (const arg of stage.args ?? []) {
-      if (arg instanceof Query) {
-        CollectInto(arg.build(), ids);
-      }
+      CollectValue(arg, walk);
     }
   }
 }
@@ -165,10 +201,12 @@ function CollectInto(stages: QueryStage[], ids: Set<string>): void {
  * Every schema the stage tree reads, including those rooted in a nested query.
  *
  * Compilation is synchronous and reads shapes that only exist once a registration has
- * converged, so the caller awaits all of these before compiling anything.
+ * converged, so the caller awaits all of these before compiling anything. A nested root reaches
+ * this through a general walk of every stage argument rather than through a test for a `Query`,
+ * because a `Query` used as a value is one of the shapes a lambda body or a document may hold.
  */
 export function CollectSchemaIds(stages: QueryStage[]): string[] {
-  const ids = new Set<string>();
-  CollectInto(stages, ids);
-  return [...ids];
+  const walk: SchemaWalk = { ids: new Set<string>(), visited: new WeakSet() };
+  CollectInto(stages, walk);
+  return [...walk.ids];
 }

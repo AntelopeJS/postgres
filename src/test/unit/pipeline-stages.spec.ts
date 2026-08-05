@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { SingleSelection, Table } from "@antelopejs/interface-database";
 import {
@@ -8,7 +9,7 @@ import {
 import { expect } from "chai";
 import {
   DEFERRED_STAGES,
-  PipelineStages,
+  PIPELINE_STAGES,
   REJECTED_STAGES,
 } from "../../implementations/database/pipeline";
 import { WRITE_STAGES } from "../../implementations/database/writes";
@@ -22,7 +23,9 @@ const VOCABULARY: readonly string[] = [
   "filter",
   "get",
   "getAll",
+  "join",
   "key",
+  "lookup",
   "map",
   "max",
   "min",
@@ -35,7 +38,7 @@ const VOCABULARY: readonly string[] = [
   "without",
 ];
 
-const STAGE_COUNT = 19;
+const STAGE_COUNT = 21;
 
 const WRITE_VOCABULARY: readonly string[] = [
   "delete",
@@ -155,7 +158,7 @@ function ContractStages(): string[] {
  */
 function DispatchedStages(): Record<string, string[]> {
   return {
-    pipeline: Object.keys(PipelineStages()),
+    pipeline: Object.keys(PIPELINE_STAGES),
     write: Object.keys(WRITE_STAGES),
   };
 }
@@ -170,7 +173,7 @@ function AnsweredStages(): string[] {
 
 describe("the pipeline stage vocabulary", () => {
   it("dispatches exactly the stages this backend reads, and no others", () => {
-    expect(Sorted(Object.keys(PipelineStages()))).to.deep.equal(
+    expect(Sorted(Object.keys(PIPELINE_STAGES))).to.deep.equal(
       Sorted(VOCABULARY),
     );
   });
@@ -181,14 +184,9 @@ describe("the pipeline stage vocabulary", () => {
   });
 
   it("binds every stage to a callable handler", () => {
-    const stages = PipelineStages();
     for (const name of VOCABULARY) {
-      expect(stages[name], name).to.be.a("function");
+      expect(PIPELINE_STAGES[name], name).to.be.a("function");
     }
-  });
-
-  it("rebuilds the merged map rather than memoizing it", () => {
-    expect(PipelineStages()).to.not.equal(PipelineStages());
   });
 
   it("compiles exactly the writes this backend implements, and no others", () => {
@@ -224,7 +222,7 @@ describe("the pipeline stage vocabulary", () => {
 
   it("never dispatches a terminal write through the pipeline as well", () => {
     expect(
-      Intersection(Object.keys(WRITE_STAGES), Object.keys(PipelineStages())),
+      Intersection(Object.keys(WRITE_STAGES), Object.keys(PIPELINE_STAGES)),
     ).to.deep.equal([]);
   });
 
@@ -241,6 +239,10 @@ const DATABASE_DIR = join(__dirname, "..", "..", "implementations", "database");
  * `dispatch` is the expression that reaches a family's own handler out of one entry, which is what
  * a half-written family binds to `undefined`: the pipeline's entries are the handlers themselves,
  * while a write's entry states a second fact beside its compiler.
+ *
+ * `families` is every module the merger requires at run time rather than every stage family alone:
+ * `selection` builds the root and `writes` splits the terminal stage off a nested query, and either
+ * one leading back would make the merge unsound in exactly the way a family would.
  */
 interface MergedVocabulary {
   merger: string;
@@ -253,14 +255,16 @@ interface MergedVocabulary {
 const MERGED_VOCABULARIES: readonly MergedVocabulary[] = [
   {
     merger: "pipeline",
-    access: "PipelineStages()",
+    access: "PIPELINE_STAGES",
     dispatch: "entry",
     families: [
       "stages-rows",
       "stages-selection",
       "stages-projection",
       "stages-aggregate",
+      "stages-join",
       "selection",
+      "writes",
     ],
     expected: VOCABULARY,
   },
@@ -277,21 +281,22 @@ const MERGED_VOCABULARIES: readonly MergedVocabulary[] = [
  * A dispatch map as a fresh process sees it when a family module is loaded before the module that
  * assembles it.
  *
- * `union` compiles through `ApplyStages`, so `pipeline.ts` and its families are mutually dependent
- * whichever way the process loads them, and an eagerly merged map reads a half-written module as
- * `undefined` — measured the day `union` landed at 11 of the 16 stages it then had, with no error.
- * Mocha loads every spec into one registry and every one of them reaches the merger first, so the
- * order that exposes this can only be forced from outside; `delete require.cache` would instead
- * leave duplicate module instances behind for later specs.
+ * Both maps are module-scope constants now, and this is what proves that is sound: a constant is
+ * only safe while no family leads back to its merger, and the require order that would expose one
+ * is the one no spec takes by itself. Mocha loads every spec into one registry and every one of
+ * them reaches the merger first, so the adversarial order can only be forced from outside;
+ * `delete require.cache` would instead leave duplicate module instances behind for later specs.
  *
- * The write half has no such cycle to expose — its families reach sideways into `writes-shared.ts`,
- * which leads nowhere back — and is kept as the assertion that would notice one being introduced:
- * `WRITE_STAGES` is a module-scope constant, which is exactly the form that binds `undefined` and
- * dispatches nothing the day a compiler reaches back for the seam that called it.
+ * The failure it proves absent was measured rather than reasoned about: `union` compiled through
+ * `ApplyStages` until the fold moved onto the shared context, and an eager merge under this order
+ * read the half-written family as `undefined` and dispatched 11 of the 16 stages it then had, with
+ * no error and no failing type. The pipeline now reaches a nested root through `context.relation`
+ * and the writes reach sideways into `writes-shared.ts`, so neither map has a cycle left to expose
+ * — and reintroducing one is exactly what these cases are here to notice.
  *
  * The names are filtered by what they dispatch to rather than read off the keys, because the two
  * failures differ: a spread of a half-written family drops its keys entirely, while a named member
- * of one keeps its key and binds it to `undefined`.
+ * of one keeps its key and binds it to `undefined`. Without the filter the eager form passes.
  */
 function StagesAfterRequiring(
   vocabulary: MergedVocabulary,
@@ -310,6 +315,27 @@ function StagesAfterRequiring(
   return printed.split(",");
 }
 
+const MODULE_SUFFIX = ".js";
+
+/**
+ * Whether a family module reaches its own merger at run time, read off the emitted CommonJS.
+ *
+ * The structural half of the same proof: a `require` of the merger is the one thing that makes a
+ * module-scope merge unsound, and TypeScript erases an `import type`, so the emitted module either
+ * names the merger or does not. This answers *why* the adversarial orders above pass, where they
+ * only answer *that* they do.
+ */
+function RequiresMergerAtRuntime(
+  vocabulary: MergedVocabulary,
+  familyModule: string,
+): boolean {
+  const emitted = readFileSync(
+    join(DATABASE_DIR, `${familyModule}${MODULE_SUFFIX}`),
+    "utf8",
+  );
+  return emitted.includes(`require("./${vocabulary.merger}")`);
+}
+
 describe("the stage vocabularies under an adversarial require order", () => {
   for (const vocabulary of MERGED_VOCABULARIES) {
     for (const familyModule of vocabulary.families) {
@@ -320,4 +346,15 @@ describe("the stage vocabularies under an adversarial require order", () => {
       });
     }
   }
+
+  it("leaves no family importing its merger at run time", () => {
+    for (const vocabulary of MERGED_VOCABULARIES) {
+      for (const familyModule of vocabulary.families) {
+        expect(
+          RequiresMergerAtRuntime(vocabulary, familyModule),
+          `${familyModule} -> ${vocabulary.merger}`,
+        ).to.equal(false);
+      }
+    }
+  });
 });

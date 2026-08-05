@@ -39,6 +39,35 @@ export interface OrderTerm {
 export type AbsentValue = null | undefined;
 
 /**
+ * The join keywords {@link RenderJoin}'s template can spell, which is what makes it total.
+ *
+ * The template hard-requires both an ` AS <alias>` and an ` ON <on>`, so a `"CROSS JOIN"` would
+ * typecheck under a bare `string` and emit unparseable SQL. Only the legal set lives here; which
+ * one a stage emits is `stages-join.ts`'s to decide, so the renderer and the vocabulary it can
+ * spell cannot drift apart.
+ */
+export type JoinKind = "JOIN" | "LEFT JOIN" | "LEFT JOIN LATERAL";
+
+/**
+ * One `JOIN` the relation carries, rendered between its `FROM` and its `WHERE`.
+ *
+ * `kind` is the whole join keyword and `from` is already-rendered FROM text for the same reason
+ * {@link Relation.from} is, so a joined table and a joined subselect share one spelling.
+ *
+ * `on` is a complete boolean fragment: a parenthesised condition where a condition is what the
+ * join needs, and the bare literal `true` for a lateral that answers at most one row and carries
+ * its correlation inside the subselect instead. Invariant 5 is about fragments that later get
+ * composed and an `ON` is composed with nothing, so the parentheses are the obligation of
+ * whoever built the condition rather than of this field — `"(true)"` would be cargo.
+ */
+export interface JoinClause {
+  kind: JoinKind;
+  from: string;
+  alias: string;
+  on: string;
+}
+
+/**
  * An unrendered `SELECT`, and the accumulator the pipeline folds over.
  *
  * `from` is already-rendered FROM text — a qualified table, a parenthesised subselect or a
@@ -49,6 +78,7 @@ export type AbsentValue = null | undefined;
 export interface Relation {
   from: string;
   alias: string;
+  joins: JoinClause[];
   where: string[];
   orderBy: OrderTerm[];
   limit?: string;
@@ -70,6 +100,7 @@ type RelationSeed = Pick<
 function NewRelation(seed: RelationSeed): Relation {
   return {
     ...seed,
+    joins: [],
     where: [],
     orderBy: [],
     distinct: false,
@@ -121,8 +152,23 @@ function SelectClause(relation: Relation): string {
   return `SELECT ${modifier}${SelectList(relation)}`;
 }
 
+function FromItem(from: string, alias: string): string {
+  return `${from} AS ${QuoteIdentifier(alias)}`;
+}
+
 function FromClause(relation: Relation): string {
-  return `FROM ${relation.from} AS ${QuoteIdentifier(relation.alias)}`;
+  return `FROM ${FromItem(relation.from, relation.alias)}`;
+}
+
+function RenderJoin(join: JoinClause): string {
+  return `${join.kind} ${FromItem(join.from, join.alias)} ON ${join.on}`;
+}
+
+function JoinClauses(relation: Relation): string | undefined {
+  if (relation.joins.length === 0) {
+    return undefined;
+  }
+  return relation.joins.map(RenderJoin).join(" ");
 }
 
 function WhereClause(relation: Relation): string | undefined {
@@ -155,6 +201,7 @@ function OffsetClause(relation: Relation): string | undefined {
 const CLAUSES: ClauseBuilder[] = [
   SelectClause,
   FromClause,
+  JoinClauses,
   WhereClause,
   OrderByClause,
   LimitClause,
@@ -200,7 +247,27 @@ export function ValueRelation(
   });
 }
 
-function Wrap(relation: Relation, context: DecodingContext): Relation {
+/**
+ * Renders the relation into a subselect and starts a fresh one over it, addressing its output at a
+ * new alias.
+ *
+ * {@link Prepare} is the only door to a *conditional* wrap — the one a stage takes because a flag
+ * blocks it. `Nested` is the door for a relation that is *becoming a FROM item of another
+ * relation*, where the wrap is unconditional and the caller is not continuing the relation it
+ * wrapped. The rule that mattered is untouched: a relation is still rendered exactly once
+ * (invariant 16), and `Nested` is still the only thing that renders one into a subselect.
+ *
+ * The inner text is produced **once** and stored, so a fragment that took a guard emitting its
+ * operand twice is paid for once per wrap level instead of compounding down the chain — the same
+ * argument that makes a projection block another projection.
+ *
+ * Row mode survives, because the rendered select list preserves the physical column names, which
+ * is what keeps a filter after a slice reading a btree-indexed column. `single` and the
+ * {@link AbsentValue} beside it carry through; `aggregated` does not, since the wrapping relation
+ * is not itself an aggregate, and the remaining clauses — {@link Relation.joins} among them — are
+ * already expressed in the rendered text.
+ */
+export function Nested(relation: Relation, context: DecodingContext): Relation {
   const from = `(${Render(relation)})`;
   const alias = context.nextAlias();
   const projection = relation.projection;
@@ -254,19 +321,11 @@ const FLAG_PREDICATES: Record<RelationFlag, RelationPredicate> = {
 };
 
 /**
- * The one place a wrap is decided: every stage opens by naming the flags that block it, and
- * wrapping is reachable through nothing else.
+ * The one place a *conditional* wrap is decided: every stage continuing its own relation opens by
+ * naming the flags that block it, and reaches {@link Nested} through nothing else.
  *
- * A blocked stage renders the relation into a subselect and starts a fresh one over it. The
- * inner text is produced **once** and stored, so a fragment that took a guard emitting its
- * operand twice is paid for once per wrap level instead of compounding down the chain — the
- * same argument that makes a projection block another projection.
- *
- * Row mode survives a wrap because the rendered select list preserves the physical column names,
- * which is what keeps a filter after a slice reading a btree-indexed column. `single` and the
- * {@link AbsentValue} beside it carry through; `aggregated` does not, since the wrapping relation
- * is not itself an aggregate, and the remaining clauses are already expressed in the rendered
- * text.
+ * What a wrap preserves and what it drops is stated on {@link Nested}, which is also the door a
+ * relation becoming a FROM item of another relation takes directly.
  */
 export function Prepare(
   relation: Relation,
@@ -274,7 +333,7 @@ export function Prepare(
   context: DecodingContext,
 ): Relation {
   const blocked = blockedBy.some((flag) => FLAG_PREDICATES[flag](relation));
-  return blocked ? Wrap(relation, context) : relation;
+  return blocked ? Nested(relation, context) : relation;
 }
 
 /**

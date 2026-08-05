@@ -127,6 +127,48 @@ export class ColumnRowSource implements RowSource {
   }
 }
 
+/**
+ * A row source whose *document* is null when the row it addresses is not there, which is what a
+ * missed `LEFT JOIN` row must read as.
+ *
+ * Everything but {@link RowSource.toJson} delegates untouched, and that is the whole design rather
+ * than an economy. Every column of a missed row is already SQL NULL, so a field of it answers
+ * `null` with no help and stays a bare column a btree index can serve; the one reading that needs
+ * fixing is the whole document, because {@link BuildDocument} over all-NULL columns is `{}` — a
+ * materialized empty object where the caller was promised nothing. Guarding the value instead
+ * would spell the guarded document again for every field the caller touches, which is invariant
+ * 11's argument one layer up.
+ *
+ * `_id` is the test because it is `NOT NULL` on every row this adapter writes, so it is the one
+ * exact reading of "there was no right row"; a nullable declared column cannot tell a miss from a
+ * stored null. It is resolved through {@link RowSource.field}, which handles it explicitly —
+ * invariant 3 makes it absent from the shape.
+ */
+export class NullableRowSource implements RowSource {
+  public constructor(private readonly inner: RowSource) {}
+
+  public field(name: string, def?: Compiled): Compiled {
+    return this.inner.field(name, def);
+  }
+
+  public dynamicField(key: Compiled, def?: Compiled): Compiled {
+    return this.inner.dynamicField(key, def);
+  }
+
+  public toJson(): Compiled {
+    const document = this.inner.toJson();
+    const present = this.inner.field(ID_COLUMN).sql;
+    return {
+      sql: `(CASE WHEN ${present} IS NOT NULL THEN ${document.sql} END)`,
+      type: document.type,
+    };
+  }
+
+  public shape(): SqlShape | undefined {
+    return this.inner.shape();
+  }
+}
+
 export class JsonRowSource implements RowSource {
   public constructor(private readonly value: Compiled) {}
 

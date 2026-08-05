@@ -12,6 +12,7 @@ import {
   TableRelation,
 } from "../../implementations/database/relation";
 import { TEXT } from "../../implementations/database/types";
+import { RefusingCompilers } from "./spec-fixture";
 
 const VEHICLES: TableShape = {
   fields: {
@@ -22,18 +23,11 @@ const VEHICLES: TableShape = {
 const TABLE = '"shop"."vehicles"';
 const ROOT_ALIAS = "t0";
 const INHERITED_STAGE = "constructor";
-const DEFERRED_STAGE = "join";
+const DEFERRED_STAGE = "group";
 const REJECTED_STAGE = "changes";
 
 function NewContext(): DecodingContext {
-  return new DecodingContext(
-    () => {
-      throw new Error("this spec compiles no expression");
-    },
-    () => {
-      throw new Error("this spec compiles no subquery");
-    },
-  );
+  return new DecodingContext(RefusingCompilers());
 }
 
 function NewTable(): Relation {
@@ -67,7 +61,7 @@ describe("ApplyStages", () => {
 
   it("names the stage a deferred message belongs to", () => {
     expect(() => Apply(DEFERRED_STAGE)).to.throw(
-      "The PostgreSQL backend does not implement joins yet (stage 'join')",
+      "The PostgreSQL backend does not implement grouping yet (stage 'group')",
     );
   });
 

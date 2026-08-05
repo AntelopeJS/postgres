@@ -9,10 +9,17 @@ import {
   type InstanceId,
 } from "@antelopejs/interface-database/schema";
 import { expect } from "chai";
-import { DecodingContext } from "../../implementations/database/context";
+import {
+  type Compilers,
+  DecodingContext,
+  type SubqueryCompiler,
+} from "../../implementations/database/context";
 import { CompileExpression } from "../../implementations/database/expression";
 import type { TableShape } from "../../implementations/database/fields";
-import { ApplyStages } from "../../implementations/database/pipeline";
+import {
+  ApplyStages,
+  CompileRelation,
+} from "../../implementations/database/pipeline";
 import {
   type Relation,
   Render,
@@ -22,7 +29,9 @@ import {
   BuildRoot,
   type OriginResolver,
 } from "../../implementations/database/selection";
+import { CompileSubquery } from "../../implementations/database/subquery";
 import {
+  ArrayOf,
   BOOL,
   FLOAT,
   OPAQUE,
@@ -37,7 +46,12 @@ import {
   type WriteStatement,
   WriteTargetOf,
 } from "../../implementations/database/writes-shared";
-import { type ParamLedger, ParamLedgerOf, WithOptions } from "./spec-fixture";
+import {
+  type ParamLedger,
+  ParamLedgerOf,
+  RefusingCompilers,
+  WithOptions,
+} from "./spec-fixture";
 
 export type { ParamLedger } from "./spec-fixture";
 export { Occurrences } from "./spec-fixture";
@@ -59,11 +73,17 @@ export interface Note {
   summary: string;
 }
 
+export interface Profile {
+  name: string;
+  skills: string[];
+}
+
 export interface Directory {
   people: Person;
   products: Product;
   notes: Note;
   logs: Record<string, unknown>;
+  profiles: Profile;
 }
 
 const SCHEMA_ID = "directory";
@@ -71,10 +91,12 @@ export const TABLE_ID = "people";
 const OTHER_TABLE_ID = "products";
 const NOTES_TABLE_ID = "notes";
 const LOGS_TABLE_ID = "logs";
+const PROFILES_TABLE_ID = "profiles";
 export const TABLE = '"directory"."people"';
 export const OTHER_TABLE = '"directory"."products"';
 export const NOTES_TABLE = '"directory"."notes"';
 export const LOGS_TABLE = '"directory"."logs"';
+export const PROFILES_TABLE = '"directory"."profiles"';
 export const ROOT_ALIAS = "t0";
 export const FROM_TABLE = `FROM ${TABLE} AS "${ROOT_ALIAS}"`;
 
@@ -119,6 +141,20 @@ const NOTES: TableShape = {
 const LOGS: TableShape = { fields: {} };
 
 /**
+ * A shape declaring a field whose type is an array, which no other shape here does.
+ *
+ * The reading a subquery types differently from every scalar one: a value-mode nested query keeps
+ * the projection's own type, and an array is where that is visible without a document to hide it
+ * in.
+ */
+const PROFILES: TableShape = {
+  fields: {
+    name: { column: "name", type: TEXT },
+    skills: { column: "skills", type: ArrayOf(TEXT) },
+  },
+};
+
+/**
  * The document `ColumnRowSource.toJson` builds over the people table, at the given alias.
  *
  * Transcribed rather than derived: a spec that asked `BuildDocument` for its own expected value
@@ -158,6 +194,7 @@ const SHAPES: Record<string, TableShape> = {
   [OTHER_TABLE_ID]: PRODUCTS,
   [NOTES_TABLE_ID]: NOTES,
   [LOGS_TABLE_ID]: LOGS,
+  [PROFILES_TABLE_ID]: PROFILES,
 };
 
 const INDEXES: Record<string, string[]> = {
@@ -176,31 +213,72 @@ export function NewTable(): Relation {
   return TableRelation(TABLE, ROOT_ALIAS, StubOrigin(SCHEMA_ID, TABLE_ID));
 }
 
-interface StubCompilers {
+/** The row-mode relation over the one table declaring a field whose type is an array. */
+export function NewProfiles(): Relation {
+  return TableRelation(
+    PROFILES_TABLE,
+    ROOT_ALIAS,
+    StubOrigin(SCHEMA_ID, PROFILES_TABLE_ID),
+  );
+}
+
+interface StubContext {
   context: DecodingContext;
   subqueries: () => number;
+}
+
+function PipelineCompilers(): Compilers {
+  return {
+    ...RefusingCompilers(),
+    expression: CompileExpression,
+    relation: CompileRelation,
+  };
+}
+
+/**
+ * A pipeline context that counts the nested queries routed to the given subquery compiler.
+ *
+ * The count is what lets a spec assert that a stage read a nested query directly rather than
+ * routing it to the correlated-subquery compiler. Asserting only that compilation does not throw
+ * proves that through the refusal alone, and stops proving anything the day the compiler is one
+ * that answers instead — which is why the count wraps both of them rather than only the stub.
+ *
+ * The alias counter is advanced once here because {@link NewTable} spells {@link ROOT_ALIAS}
+ * directly rather than asking for it — the two would otherwise both claim `t0`.
+ */
+function CountingContext(subquery: SubqueryCompiler): StubContext {
+  let calls = 0;
+  const context = new DecodingContext({
+    ...PipelineCompilers(),
+    subquery: (stages, inner) => {
+      calls++;
+      return subquery(stages, inner);
+    },
+  });
+  context.resolveOrigin = StubOrigin;
+  context.nextAlias();
+  return { context, subqueries: () => calls };
 }
 
 /**
  * A context whose subquery compiler counts its calls before refusing them.
  *
- * The count is what lets a spec assert that a stage read a nested query directly rather than
- * routing it to the correlated-subquery compiler. Asserting only that compilation does not throw
- * proves that through the refusal alone, and stops proving anything the day the stub is given a
- * body that answers instead.
- *
- * The alias counter is advanced once here because {@link NewTable} spells {@link ROOT_ALIAS}
- * directly rather than asking for it — the two would otherwise both claim `t0`.
+ * It counts and then delegates rather than throwing for itself, so the refusal every other fixture
+ * raises stays owned by {@link RefusingCompilers}.
  */
-function NewContext(): StubCompilers {
-  let calls = 0;
-  const context = new DecodingContext(CompileExpression, () => {
-    calls++;
-    throw new Error("this spec compiles no subquery");
-  });
-  context.resolveOrigin = StubOrigin;
-  context.nextAlias();
-  return { context, subqueries: () => calls };
+function NewContext(): StubContext {
+  return CountingContext(RefusingCompilers().subquery);
+}
+
+/**
+ * A context whose subquery compiler is the real one, for the specs that want an answer.
+ *
+ * Deliberately a second constructor rather than a replacement for {@link NewContext}: the refusing
+ * stub is what lets `union`'s specs prove that a stage read its nested query directly, and a
+ * context that compiles one instead would make `subqueries === 0` true of both readings.
+ */
+function NewSubqueryContext(): StubContext {
+  return CountingContext(CompileSubquery);
 }
 
 function Table<Name extends keyof Directory & string>(
@@ -240,6 +318,11 @@ export function LogsRoot() {
   return Table(LOGS_TABLE_ID, undefined);
 }
 
+/** The table declaring a field whose type is an array. */
+export function ProfilesRoot() {
+  return Table(PROFILES_TABLE_ID, undefined);
+}
+
 /** The pipeline stages of a recorded query, with the `schema`/`instance`/`table` root removed. */
 export function Stages(query: StagedObject): QueryStage[] {
   return query.build().slice(ROOT_STAGE_COUNT);
@@ -251,10 +334,18 @@ export interface Applied {
   subqueries: number;
 }
 
-export function ApplyRaw(stages: QueryStage[], relation = NewTable()): Applied {
-  const { context, subqueries } = NewContext();
+function AppliedIn(
+  stub: StubContext,
+  stages: QueryStage[],
+  relation: Relation,
+): Applied {
+  const context = stub.context;
   const applied = WithOptions({}, () => ApplyStages(relation, stages, context));
-  return { relation: applied, context, subqueries: subqueries() };
+  return { relation: applied, context, subqueries: stub.subqueries() };
+}
+
+export function ApplyRaw(stages: QueryStage[], relation = NewTable()): Applied {
+  return AppliedIn(NewContext(), stages, relation);
 }
 
 export function Apply(query: StagedObject, relation = NewTable()): Applied {
@@ -263,6 +354,21 @@ export function Apply(query: StagedObject, relation = NewTable()): Applied {
 
 export function Sql(query: StagedObject, relation = NewTable()): string {
   return Render(Apply(query, relation).relation);
+}
+
+/** {@link Apply} through the context that compiles a nested query instead of refusing it. */
+export function ApplySubqueries(
+  query: StagedObject,
+  relation = NewTable(),
+): Applied {
+  return AppliedIn(NewSubqueryContext(), Stages(query), relation);
+}
+
+export function SubquerySql(
+  query: StagedObject,
+  relation = NewTable(),
+): string {
+  return Render(ApplySubqueries(query, relation).relation);
 }
 
 /** The bind ledger of a rendered relation — see {@link ParamLedgerOf} for what it catches. */
@@ -286,9 +392,7 @@ export interface Written {
  * for itself.
  */
 export function Write(query: StagedObject): Written {
-  const context = new DecodingContext(CompileExpression, () => {
-    throw new Error("this spec compiles no subquery");
-  });
+  const context = new DecodingContext(PipelineCompilers());
   context.resolveOrigin = StubOrigin;
   const statement = WithOptions({}, () => {
     const root = BuildRoot(query.build(), context);

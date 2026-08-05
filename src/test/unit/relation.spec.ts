@@ -3,6 +3,8 @@ import { DecodingContext } from "../../implementations/database/context";
 import type { TableShape } from "../../implementations/database/fields";
 import {
   CurrentValue,
+  type JoinClause,
+  Nested,
   Prepare,
   type Relation,
   Render,
@@ -17,7 +19,7 @@ import {
   OPAQUE,
   TEXT,
 } from "../../implementations/database/types";
-import { Occurrences } from "./spec-fixture";
+import { Occurrences, RefusingCompilers } from "./spec-fixture";
 
 const VEHICLES: TableShape = {
   fields: {
@@ -31,6 +33,26 @@ const ROOT_ALIAS = "t0";
 const LIMIT_TWO = "((2)::bigint)";
 const OFFSET_ONE = "((1)::bigint)";
 
+const EVERY_CLAUSE =
+  'SELECT "t0"."_id", "t0"."_instance", "t0"."car", "t0"."price",' +
+  ' "t0"."_extra" FROM "shop"."vehicles" AS "t0"' +
+  ' WHERE ("t0"."price" > $1) ORDER BY "t0"."car" ASC' +
+  " LIMIT ((2)::bigint) OFFSET ((1)::bigint)";
+
+const OWNERS_JOIN: JoinClause = {
+  kind: "JOIN",
+  from: '"shop"."owners"',
+  alias: "t1",
+  on: '("t1"."_id" = "t0"."owner")',
+};
+
+const LATERAL_JOIN: JoinClause = {
+  kind: "LEFT JOIN LATERAL",
+  from: '(SELECT "t0"."car" AS "value")',
+  alias: "t2",
+  on: "true",
+};
+
 function NewOrigin(): TableOrigin {
   return {
     schemaId: "shop",
@@ -41,14 +63,7 @@ function NewOrigin(): TableOrigin {
 }
 
 function NewContext(): DecodingContext {
-  return new DecodingContext(
-    () => {
-      throw new Error("this spec compiles no expression");
-    },
-    () => {
-      throw new Error("this spec compiles no subquery");
-    },
-  );
+  return new DecodingContext(RefusingCompilers());
 }
 
 function NewTable(): Relation {
@@ -59,6 +74,15 @@ function NestedContext(): DecodingContext {
   const context = NewContext();
   context.nextAlias();
   return context;
+}
+
+function ClauseCompleteTable(): Relation {
+  const relation = NewTable();
+  relation.where.push('("t0"."price" > $1)');
+  relation.orderBy.push({ sql: '"t0"."car"', descending: false });
+  relation.limit = LIMIT_TWO;
+  relation.offset = OFFSET_ONE;
+  return relation;
 }
 
 describe("Render", () => {
@@ -111,6 +135,31 @@ describe("Render", () => {
     );
   });
 
+  it("renders every clause unchanged while the join list is empty", () => {
+    const relation = ClauseCompleteTable();
+    expect(relation.joins).to.deep.equal([]);
+    expect(Render(relation)).to.equal(EVERY_CLAUSE);
+  });
+
+  it("emits the join clauses in array order", () => {
+    const relation = NewTable();
+    relation.joins.push(OWNERS_JOIN, LATERAL_JOIN);
+    expect(Render(relation)).to.contain(
+      'JOIN "shop"."owners" AS "t1" ON ("t1"."_id" = "t0"."owner")' +
+        ' LEFT JOIN LATERAL (SELECT "t0"."car" AS "value") AS "t2" ON true',
+    );
+  });
+
+  it("emits a join between the FROM and the WHERE", () => {
+    const relation = NewTable();
+    relation.where.push('("t0"."price" > $1)');
+    relation.joins.push(OWNERS_JOIN);
+    expect(Render(relation)).to.contain(
+      'FROM "shop"."vehicles" AS "t0" JOIN "shop"."owners" AS "t1"' +
+        ' ON ("t1"."_id" = "t0"."owner") WHERE ("t0"."price" > $1)',
+    );
+  });
+
   it("selects a single named column in value mode", () => {
     const relation = NewTable();
     SetProjection(relation, { sql: '("t0"."price" * 2)', type: FLOAT });
@@ -151,17 +200,9 @@ describe("the relation Prepare wraps", () => {
 
   it("nests the inner select verbatim, clauses and all", () => {
     const context = NestedContext();
-    const relation = NewTable();
-    relation.where.push('("t0"."price" > $1)');
-    relation.orderBy.push({ sql: '"t0"."car"', descending: false });
-    relation.limit = LIMIT_TWO;
-    relation.offset = OFFSET_ONE;
-    expect(Render(Prepare(relation, ["limit"], context))).to.equal(
+    expect(Render(Prepare(ClauseCompleteTable(), ["limit"], context))).to.equal(
       'SELECT "t1"."_id", "t1"."_instance", "t1"."car", "t1"."price",' +
-        ' "t1"."_extra" FROM (SELECT "t0"."_id", "t0"."_instance", "t0"."car",' +
-        ' "t0"."price", "t0"."_extra" FROM "shop"."vehicles" AS "t0"' +
-        ' WHERE ("t0"."price" > $1) ORDER BY "t0"."car" ASC' +
-        ' LIMIT ((2)::bigint) OFFSET ((1)::bigint)) AS "t1"',
+        ` "t1"."_extra" FROM (${EVERY_CLAUSE}) AS "t1"`,
     );
   });
 
@@ -269,6 +310,32 @@ describe("Prepare", () => {
     expect(Prepare(relation, ["aggregated"], NewContext())).to.not.equal(
       relation,
     );
+  });
+});
+
+describe("Nested", () => {
+  it("wraps a relation no flag blocks, re-addressing the physical columns", () => {
+    const context = NestedContext();
+    const relation = NewTable();
+    relation.joins.push(OWNERS_JOIN);
+    const nested = Nested(relation, context);
+    expect(nested).to.not.equal(relation);
+    expect(nested.alias).to.equal("t1");
+    expect(nested.source.field("car").sql).to.equal('"t1"."car"');
+    expect(nested.source.field("price").sql).to.equal('"t1"."price"');
+    expect(nested.origin?.tableId).to.equal("vehicles");
+    expect(nested.joins).to.deep.equal([]);
+  });
+
+  it("carries single and absent and drops aggregated", () => {
+    const relation = NewTable();
+    relation.single = true;
+    relation.absent = undefined;
+    relation.aggregated = true;
+    const nested = Nested(relation, NewContext());
+    expect(nested.single).to.equal(true);
+    expect(nested.absent).to.equal(undefined);
+    expect(nested.aggregated).to.equal(false);
   });
 });
 

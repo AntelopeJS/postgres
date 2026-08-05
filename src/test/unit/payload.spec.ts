@@ -17,7 +17,11 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
-import { type ParamLedger, ParamLedgerOf } from "./spec-fixture";
+import {
+  type ParamLedger,
+  ParamLedgerOf,
+  RefusingCompilers,
+} from "./spec-fixture";
 
 const vehicles: TableShape = {
   fields: {
@@ -44,8 +48,9 @@ function AsNumber(param: string): string {
 }
 
 function NewContext(): DecodingContext {
-  return new DecodingContext(CompileExpression, () => {
-    throw new Error("this spec compiles no subquery");
+  return new DecodingContext({
+    ...RefusingCompilers(),
+    expression: CompileExpression,
   });
 }
 

@@ -3,7 +3,7 @@ import { Query } from "../../connection";
 import { DecodingContext } from "./context";
 import { CompileExpression } from "./expression";
 import { CreateInstance, DestroyInstance, ListInstances } from "./instances";
-import { ApplyStages } from "./pipeline";
+import { ApplyStages, CompileRelation } from "./pipeline";
 import {
   OUTPUT_COLUMN,
   type Relation,
@@ -13,7 +13,7 @@ import {
 import { DecodeRow, ReviveValue } from "./result";
 import { GetTableNames, WaitForSchemaReady } from "./schema";
 import { BuildRoot, CollectSchemaIds, SCHEMA_STAGE } from "./selection";
-import type { Compiled } from "./sql";
+import { CompileSubquery } from "./subquery";
 import { CREATE_INSTANCE, DESTROY_INSTANCE, type QueryStage } from "./utils";
 import { CompileWrite, SplitWrite } from "./writes";
 import { type WriteTarget, WriteTargetOf } from "./writes-shared";
@@ -27,8 +27,6 @@ export type ResultRow = Record<string, unknown>;
 
 const UNIMPLEMENTED =
   "The PostgreSQL backend does not implement cursors yet (scaffold only)";
-const SUBQUERY_UNIMPLEMENTED =
-  "The PostgreSQL backend does not implement correlated subqueries yet";
 const MISSING_SCHEMA_ID = "Lifecycle query is missing its schema id";
 
 const LIFECYCLE_STAGE_COUNT = 2;
@@ -71,10 +69,6 @@ function Lifecycle(stages: QueryStage[]): Promise<unknown> | undefined {
   const schemaId = stages[0].options?.id;
   assert(typeof schemaId === "string", MISSING_SCHEMA_ID);
   return WaitForSchemaReady(schemaId).then(() => handler(schemaId, stage));
-}
-
-function CompileSubquery(): Compiled {
-  throw new Error(SUBQUERY_UNIMPLEMENTED);
 }
 
 function DecodeRows(relation: Relation, rows: ResultRow[]): unknown[] {
@@ -140,7 +134,11 @@ export async function RunQuery(stages: QueryStage[]): Promise<any> {
     return lifecycle;
   }
   await Promise.all(CollectSchemaIds(stages).map(WaitForSchemaReady));
-  const context = new DecodingContext(CompileExpression, CompileSubquery);
+  const context = new DecodingContext({
+    expression: CompileExpression,
+    subquery: CompileSubquery,
+    relation: CompileRelation,
+  });
   const root = BuildRoot(stages, context);
   const split = SplitWrite(root.rest);
   const relation = ApplyStages(root.relation, split.pipeline, context);

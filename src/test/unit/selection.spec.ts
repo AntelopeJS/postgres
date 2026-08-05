@@ -1,4 +1,4 @@
-import { SchemaInstance } from "@antelopejs/interface-database";
+import { SchemaInstance, ValueProxy } from "@antelopejs/interface-database";
 import {
   QueryStage,
   type StagedObject,
@@ -15,7 +15,7 @@ import {
   type RootSelection,
 } from "../../implementations/database/selection";
 import { FLOAT, TEXT } from "../../implementations/database/types";
-import { WithOptions } from "./spec-fixture";
+import { RefusingCompilers, WithOptions } from "./spec-fixture";
 
 interface Vehicle {
   car: string;
@@ -29,6 +29,8 @@ interface Shop {
 const SCHEMA_ID = "shop";
 const OTHER_SCHEMA_ID = "warehouse";
 const TABLE_ID = "vehicles";
+const LAMBDA_ID_FLOOR = 0;
+const ROW_ID = LAMBDA_ID_FLOOR - 1;
 
 const VEHICLES: TableShape = {
   fields: {
@@ -53,14 +55,7 @@ function StubOrigin(schemaId: string, tableId: string): TableOrigin {
 }
 
 function NewContext(): DecodingContext {
-  const context = new DecodingContext(
-    () => {
-      throw new Error("this spec compiles no expression");
-    },
-    () => {
-      throw new Error("this spec compiles no subquery");
-    },
-  );
+  const context = new DecodingContext(RefusingCompilers());
   context.resolveOrigin = StubOrigin;
   return context;
 }
@@ -78,6 +73,19 @@ function Root(schemaId = SCHEMA_ID, instanceId: InstanceId = undefined) {
 
 function Build(query: StagedObject, context: DecodingContext): RootSelection {
   return WithOptions({}, () => BuildRoot(query.build(), context));
+}
+
+type TableQuery = ReturnType<typeof Root>;
+
+interface CyclicPayload {
+  nested: TableQuery;
+  self?: CyclicPayload;
+}
+
+function Cyclic(): CyclicPayload {
+  const payload: CyclicPayload = { nested: Root(OTHER_SCHEMA_ID) };
+  payload.self = payload;
+  return payload;
 }
 
 describe("BuildRoot", () => {
@@ -205,5 +213,44 @@ describe("CollectSchemaIds", () => {
   it("ignores a stage argument that is not a query", () => {
     const query = Root().pluck("car", "price");
     expect(CollectSchemaIds(query.build())).to.deep.equal([SCHEMA_ID]);
+  });
+
+  it("reaches a query in the document a lambda returns", () => {
+    const query = Root().map(() => ({ other: Root(OTHER_SCHEMA_ID) }));
+    expect(CollectSchemaIds(query.build())).to.deep.equal([
+      SCHEMA_ID,
+      OTHER_SCHEMA_ID,
+    ]);
+  });
+
+  it("reaches a query inside an array inside a lambda's document", () => {
+    const query = Root().map(() => ({ others: [Root(OTHER_SCHEMA_ID)] }));
+    expect(CollectSchemaIds(query.build())).to.deep.equal([
+      SCHEMA_ID,
+      OTHER_SCHEMA_ID,
+    ]);
+  });
+
+  it("reaches a query carried by a recorded expression's own stage", () => {
+    const compared = ValueProxy.arg<number>(ROW_ID).eq(Root(OTHER_SCHEMA_ID));
+    expect(CollectSchemaIds(Root().default(compared).build())).to.deep.equal([
+      SCHEMA_ID,
+      OTHER_SCHEMA_ID,
+    ]);
+  });
+
+  it("does not walk a date as a document of its own keys", () => {
+    const dated = Object.assign(new Date(), { hidden: Root(OTHER_SCHEMA_ID) });
+    expect(CollectSchemaIds(Root().default(dated).build())).to.deep.equal([
+      SCHEMA_ID,
+    ]);
+  });
+
+  it("terminates on a cyclic payload and still reads past the cycle", () => {
+    const query = Root().default(Cyclic());
+    expect(CollectSchemaIds(query.build())).to.deep.equal([
+      SCHEMA_ID,
+      OTHER_SCHEMA_ID,
+    ]);
   });
 });

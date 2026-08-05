@@ -18,6 +18,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
+import { RefusingCompilers } from "./spec-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
@@ -35,12 +36,11 @@ const users: TableShape = {
 
 type Builder = (doc: ValueProxy<any>) => ValueProxy<any>;
 
-function NoSubqueries(): Compiled {
-  throw new Error("Subqueries are not available in this spec");
-}
-
 function NewContext(): DecodingContext {
-  const context = new DecodingContext(CompileExpression, NoSubqueries);
+  const context = new DecodingContext({
+    ...RefusingCompilers(),
+    expression: CompileExpression,
+  });
   context.bind(ROW_ID, new ColumnRowSource("t", users));
   return context;
 }

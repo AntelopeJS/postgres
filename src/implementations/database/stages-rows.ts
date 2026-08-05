@@ -3,11 +3,7 @@ import { Query } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
 import { Cast, Widen } from "./coerce";
 import type { DecodingContext } from "./context";
-import {
-  ApplyStages,
-  type PipelineStage,
-  type PipelineStageMap,
-} from "./pipeline";
+import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import {
   CurrentValue,
   IndexColumns,
@@ -20,7 +16,6 @@ import {
   ValueRelation,
   WHERE_BLOCKERS,
 } from "./relation";
-import { BuildRoot } from "./selection";
 import type { Compiled } from "./sql";
 import {
   ClampToRange,
@@ -75,7 +70,15 @@ function RowBound(sql: string): string {
   return `((${sql})::bigint)`;
 }
 
-const SINGLE_ROW = RowBound(ONE_ROW);
+/**
+ * The bound that makes a relation answer at most one row, spelled once for both its callers.
+ *
+ * `nth` takes it because the contract asks for one row, and `lookup`'s lateral takes it because a
+ * lateral answering more than one row would multiply the left side it was given. A second spelling
+ * would be free to drift from this one — a bound that stopped clamping, or that stopped casting to
+ * the type `LIMIT` takes — with nothing failing (invariant 17).
+ */
+export const SINGLE_ROW = RowBound(ONE_ROW);
 
 /**
  * Bounds a row count above as well as below, and keeps an unreadable one unreadable.
@@ -211,9 +214,11 @@ function Materialize(side: UnionSide, type: SqlType): string {
  * Compiles the query the union concatenates, from its own `schema`/`instance`/`table` root.
  *
  * The argument is read off the stage directly rather than through `DecodeValue`, which would
- * route a query to the correlated-subquery compiler; and it compiles against the *same* context,
+ * route a query to the correlated-subquery compiler; and it compiles through the *same* context,
  * so its parameters land in the one collector the statement binds and its aliases come from the
- * one counter, which is what makes them unable to collide with the left side's.
+ * one counter, which is what makes them unable to collide with the left side's. Asking the context
+ * for the fold rather than importing it is also what keeps this module free of a runtime import of
+ * its own dispatcher.
  */
 function Concatenated(stage: QueryStage, context: DecodingContext): Relation {
   const other = stage.args[FIRST_OPERAND];
@@ -221,8 +226,7 @@ function Concatenated(stage: QueryStage, context: DecodingContext): Relation {
     other instanceof Query,
     "The 'union' stage takes another query to concatenate",
   );
-  const root = BuildRoot(other.build(), context);
-  return ApplyStages(root.relation, root.rest, context);
+  return context.relation(other.build());
 }
 
 /**

@@ -4,6 +4,28 @@ import {
   type Options,
   SetOptions,
 } from "../../config";
+import type { Compilers } from "../../implementations/database/context";
+
+function Refusing(kind: string): () => never {
+  return () => {
+    throw new Error(`this spec compiles no ${kind}`);
+  };
+}
+
+/**
+ * A `Compilers` whose every hook refuses, so a spec opts in to the nesting it means to exercise.
+ *
+ * Spread with an override rather than passed as it is: a spec that reaches a hook it did not name
+ * has compiled something it did not intend, and a refusal says so where a working default would
+ * quietly answer.
+ */
+export function RefusingCompilers(): Compilers {
+  return {
+    expression: Refusing("expression"),
+    subquery: Refusing("subquery"),
+    relation: Refusing("relation"),
+  };
+}
 
 function CurrentOptions(): Options | undefined {
   try {

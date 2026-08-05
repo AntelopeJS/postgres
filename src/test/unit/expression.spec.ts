@@ -30,6 +30,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
+import { RefusingCompilers } from "./spec-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
@@ -50,12 +51,11 @@ const SUBQUERY: Compiled = { sql: "(SELECT 1)", type: FLOAT };
 
 type Builder = (doc: ValueProxy<any>) => ValueProxy<any>;
 
-function NoSubqueries(): Compiled {
-  throw new Error("Subqueries are not available in this spec");
-}
-
 function NewContext(): DecodingContext {
-  const context = new DecodingContext(CompileExpression, NoSubqueries);
+  const context = new DecodingContext({
+    ...RefusingCompilers(),
+    expression: CompileExpression,
+  });
   context.bind(ROW_ID, new ColumnRowSource("t", users));
   context.bind(VALUE_ID, ELEMENT);
   context.bind(SUBQUERY_ID, () => SUBQUERY);
@@ -89,7 +89,10 @@ describe("CompileExpression dispatch", () => {
   });
 
   it("starts from the source it was handed", () => {
-    const context = new DecodingContext(CompileExpression, NoSubqueries);
+    const context = new DecodingContext({
+      ...RefusingCompilers(),
+      expression: CompileExpression,
+    });
     const out = CompileExpression(
       ValueProxy.constant(1).build(),
       context,
