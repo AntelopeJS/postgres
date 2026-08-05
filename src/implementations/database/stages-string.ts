@@ -1,17 +1,14 @@
 import type { DecodingContext } from "./context";
+import { AsFloat, INT4_MAX, INT4_MIN, Text } from "./readings";
 import { type Compiled, Param } from "./sql";
 import {
-  AsFloat,
   BuildStages,
   FIRST_OPERAND,
-  INT4_MAX,
-  INT4_MIN,
   Lift,
   LiftRaw,
   RequireOperand,
   type StageHandler,
   type StageMap,
-  Text,
 } from "./stage";
 import { ArrayOf, BOOL, type SqlType, TEXT } from "./types";
 

@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import type { DecodingContext } from "./context";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
+import { StoredAs } from "./readings";
 import {
   IndexColumns,
   Prepare,
@@ -9,17 +10,14 @@ import {
   WHERE_BLOCKERS,
 } from "./relation";
 import type { Compiled } from "./sql";
-import {
-  FIRST_OPERAND,
-  RequireOperand,
-  SECOND_OPERAND,
-  StoredAs,
-} from "./stage";
+import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
+import { IsArray } from "./types";
 import { ID_COLUMN, type QueryStage } from "./utils";
 import { DecodeValue } from "./value";
 
 const NO_KEYS = "FALSE";
 const SINGLE_FIELD = 1;
+const CONTAINS = "@>";
 
 /**
  * One selection stage mid-compilation.
@@ -132,17 +130,62 @@ function KeyTuple(selection: KeySelection, key: unknown): string {
 }
 
 /**
+ * Matches a key against a column holding a *list* of values, which is what `multi` declares.
+ *
+ * `=` between a jsonb array and a jsonb scalar is false on every row of every dataset, so a
+ * `getAll` on a declared array field matched nothing at all; `@>` is the reading the contract's own
+ * multi index means, and the only one `jsonb_ops` GIN serves.
+ *
+ * **Deliberately unguarded** (invariant 14): a `CASE` around it is one opaque expression the
+ * planner cannot push into an `Index Cond`, measured elsewhere in this compiler as a
+ * `Bitmap Index Scan` becoming a `Parallel Seq Scan`. `@>` needs no guard — it is strict, and it
+ * answers false rather than raising for any pair of jsonb operands.
+ *
+ * A key list becomes a disjunction of containments rather than one key-set operator: `?|` would
+ * take the whole list at once and is `text[]`-only, so a `number[]` field would be refused at plan
+ * time, and its operand is a literal array where these keys are parameters (invariant 4). The
+ * planner folds the disjunction into one `BitmapOr` over the same index.
+ */
+function Contained(selection: KeySelection, keys: unknown[]): string {
+  const column = selection.columns[0];
+  const tests = keys.map(
+    (key) =>
+      `(${column.sql} ${CONTAINS} ${KeyValue(selection, key, column, FIRST_OPERAND)})`,
+  );
+  return tests.join(" OR ");
+}
+
+/**
+ * Refuses an index that keys on an array field beside others.
+ *
+ * A row-wise `IN` cannot spell containment for one member of a tuple, and a compound index over an
+ * array field is not one the DDL builds a GIN index for either, so there is nothing for such a key
+ * to reach. Refusing names the index; the alternative answers no rows on every dataset.
+ */
+function RequireAddressable(selection: KeySelection): void {
+  assert(
+    !selection.columns.some((column) => IsArray(column.type)),
+    `The '${selection.indexId}' index keys on an array field beside others, which no key addresses`,
+  );
+}
+
+/**
  * Matches a key list against one column, or a list of key tuples against a row of them.
  *
  * An empty list is `FALSE` rather than an empty `IN`, which is a syntax error. The single-field
- * form names the bare column so a btree index over it stays reachable.
+ * form names the bare column so a btree index over it stays reachable, and a column declared as an
+ * array takes {@link Contained} instead so its GIN index does.
  */
 function KeySet(selection: KeySelection, keys: unknown[]): string {
   if (keys.length === 0) {
     return NO_KEYS;
   }
-  const tuples = keys.map((key) => KeyTuple(selection, key));
   const columns = selection.columns;
+  if (columns.length === SINGLE_FIELD && IsArray(columns[0].type)) {
+    return Contained(selection, keys);
+  }
+  RequireAddressable(selection);
+  const tuples = keys.map((key) => KeyTuple(selection, key));
   const addressed =
     columns.length === SINGLE_FIELD
       ? columns[0].sql
@@ -186,6 +229,12 @@ const GetAllStage: PipelineStage = (relation, stage, context) => {
  * The contract types the argument as a key of the row, so it is a *field*: a compound index is
  * refused by name rather than given the row-wise comparison semantics nothing asks for. Both
  * bounds are required, since the contract has no open-ended spelling to offer instead.
+ *
+ * A field declared as an *array* is refused for the same reason, one layer down: a half-open range
+ * has no reading over a value that is a list of values, and the jsonb ordering the comparison would
+ * fall back on puts every array above every string, so both bounds answer a question nobody asked.
+ * `getAll` has a containment reading to offer such a field and this stage has none, so it says so
+ * rather than matching nothing on every dataset.
  */
 const BetweenStage: PipelineStage = (relation, stage, context) => {
   const name = IndexOption(stage);
@@ -197,6 +246,10 @@ const BetweenStage: PipelineStage = (relation, stage, context) => {
     `The 'between' stage ranges over one field, but '${name}' names ${columns.length}`,
   );
   const column = columns[0];
+  assert(
+    !IsArray(column.type),
+    `The 'between' stage ranges over one value, but '${name}' holds a list`,
+  );
   const low = KeyValue(
     selection,
     stage.args[FIRST_OPERAND],
@@ -214,7 +267,12 @@ const BetweenStage: PipelineStage = (relation, stage, context) => {
   return selection.relation;
 };
 
-/** The stages that pick rows by key, each absorbing one predicate exactly as `filter` does. */
+/**
+ * The stages that pick rows by key, each absorbing one predicate exactly as `filter` does.
+ *
+ * A field declared as an array is the one place they part company: `getAll` matches it by
+ * containment, which is the reading a `multi` index is created for, and `between` refuses it.
+ */
 export const SELECTION_STAGES: PipelineStageMap = {
   get: GetStage,
   getAll: GetAllStage,

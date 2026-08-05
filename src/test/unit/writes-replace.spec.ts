@@ -14,6 +14,7 @@ import {
   SELECTED_ROW,
   WrittenSql as Sql,
   TABLE,
+  UnchangedRows,
   Write,
   type WriteDocument,
   type Written,
@@ -31,8 +32,22 @@ const KEY = "k";
 const NAME = "a";
 const NICKNAME = "z";
 
-function Replaces(assignments: string, rendered = SELECTED_ROW): string {
-  return `${UPDATE} ${assignments} WHERE ${IdentityPredicate(rendered)}`;
+/**
+ * The whole statement a `replace` compiles to, given its `SET` list.
+ *
+ * The key a payload asserts is a parameter for the reason `update`'s is: the conjunct that keeps
+ * unchanged rows out of the count is spelled after it.
+ */
+function Replaces(
+  assignments: string,
+  rendered = SELECTED_ROW,
+  asserted?: string,
+): string {
+  const narrowed = asserted ? ` AND ${asserted}` : "";
+  return (
+    `${UPDATE} ${assignments} WHERE ${IdentityPredicate(rendered)}` +
+    `${narrowed} AND ${UnchangedRows(assignments)}`
+  );
 }
 
 function Replace(document: WriteDocument): Written {
@@ -110,10 +125,12 @@ describe("the replace statement's asserted identity", () => {
   it("narrows the target to the row the payload's key names, assigning nothing", () => {
     const written = Replace({ _id: KEY, name: NAME });
     expect(Sql(written)).to.equal(
-      `${Replaces(
+      Replaces(
         `"name" = ($4::text), "age" = NULL, "isActive" = NULL,` +
           ` "joined" = NULL, "meta" = NULL, ${EMPTY_EXTRA}`,
-      )} AND ${AssertedIdentity("$3")}`,
+        SELECTED_ROW,
+        AssertedIdentity("$3"),
+      ),
     );
     expect(Sql(written)).to.not.contain('SET "_id"');
   });
@@ -124,12 +141,25 @@ describe("the replace statement's asserted identity", () => {
    */
   it("empties the row for a payload that names only the key", () => {
     expect(Sql(Replace({ _id: KEY }))).to.equal(
-      `${Replaces(`${SILENT_COLUMNS}, ${EMPTY_EXTRA}`)} AND ${AssertedIdentity("$3")}`,
+      Replaces(
+        `${SILENT_COLUMNS}, ${EMPTY_EXTRA}`,
+        SELECTED_ROW,
+        AssertedIdentity("$3"),
+      ),
     );
   });
 
   it("asserts nothing for a key the payload only names", () => {
     expect(Sql(Replace({ _id: undefined }))).to.equal(Sql(Replace({})));
+  });
+
+  /** The same refusal `update` makes, reached through the statement the two share. */
+  it("refuses a key asserted over a selection of many rows, naming what to do", () => {
+    expect(() =>
+      Write(Root().replace({ _id: KEY, name: NAME } as WriteDocument)),
+    ).to.throw(
+      "The 'replace' stage was given a payload naming '_id' over a selection of many rows: address the row with get(_id) first, or leave '_id' out of the payload",
+    );
   });
 
   /**

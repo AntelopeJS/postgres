@@ -1,5 +1,7 @@
 import { WithDefault } from "./coerce";
+import { ARRAY_TYPEOF, HeldOnce, OBJECT_TYPEOF, TextArray } from "./jsonb";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
+import { AsJson } from "./readings";
 import {
   CurrentValue,
   Prepare,
@@ -8,17 +10,7 @@ import {
 } from "./relation";
 import { BuildDocument, type DocumentMember } from "./row-source";
 import { type Compiled, QuoteLiteral } from "./sql";
-import {
-  ARRAY_TYPEOF,
-  AsJson,
-  FIRST_OPERAND,
-  FieldNames,
-  FieldOf,
-  HeldOnce,
-  OBJECT_TYPEOF,
-  RequireOperand,
-  TextArray,
-} from "./stage";
+import { FIRST_OPERAND, FieldNames, FieldOf, RequireOperand } from "./stage";
 import { JsonOf, OPAQUE, ShapeOf, type SqlType } from "./types";
 import { DecodeFunction, DecodeValue } from "./value";
 

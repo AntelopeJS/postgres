@@ -3,9 +3,11 @@ import { ArrayOf, TEXT } from "../../implementations/database/types";
 import {
   ApplySubqueries,
   FROM_TABLE,
+  Occurrences,
   OTHER_TABLE,
   Other,
   PROFILES_TABLE,
+  ProductDocument,
   ProfilesRoot,
   ReadParamLedger,
   Root,
@@ -21,23 +23,13 @@ const NEXT_ALIAS = "t2";
 /** The one after *that*, which nothing in these specs opens and none of them may spell. */
 const UNCLAIMED_ALIAS = "t3";
 
-const PRODUCT_DOCUMENT =
-  `(jsonb_strip_nulls(jsonb_build_object('_id', "t1"."_id", 'name', "t1"."name",` +
-  ` 'price', "t1"."price")) || COALESCE("t1"."_extra", '{}'::jsonb))`;
+const PRODUCT_DOCUMENT = ProductDocument(NESTED_ALIAS);
 
 const NESTED_INSTANCE = '("t1"."_instance" = ($1::text))';
 
 const ONE_PRODUCT =
   `SELECT ${PRODUCT_DOCUMENT} AS "value" FROM ${OTHER_TABLE} AS "${NESTED_ALIAS}"` +
   ` WHERE ${NESTED_INSTANCE} AND ("t1"."_id" = ($2::text))`;
-
-const PRODUCTS_BY_KEY =
-  `SELECT ${PRODUCT_DOCUMENT} AS "value" FROM ${OTHER_TABLE} AS "${NESTED_ALIAS}"` +
-  ` WHERE ${NESTED_INSTANCE} AND ("t1"."_id" IN (($2::text)))`;
-
-const CORRELATED_PRODUCTS =
-  `SELECT ${PRODUCT_DOCUMENT} AS "value" FROM ${OTHER_TABLE} AS "${NESTED_ALIAS}"` +
-  ` WHERE ${NESTED_INSTANCE} AND ("t1"."name" IN ("t0"."name"))`;
 
 const ONE_PROFILE_SKILL =
   `SELECT "t1"."skills" AS "value" FROM ${PROFILES_TABLE} AS "${NESTED_ALIAS}"` +
@@ -52,12 +44,28 @@ const ONE_PROFILE_SKILL =
  */
 const PHYSICAL_COLUMNS = '"t1"."_id", "t1"."_instance"';
 
-function Aggregated(rows: string): string {
-  return (
-    `(SELECT COALESCE(jsonb_agg("${NEXT_ALIAS}"."value"), '[]'::jsonb)` +
-    ` FROM (${rows}) AS "${NEXT_ALIAS}")`
-  );
+/**
+ * The aggregate as the nested relation's own select list, which is where it is absorbed.
+ *
+ * `rows` is the relation with its projection replaced rather than a rendering wrapped in a second
+ * select: the aggregate has to sit inside the relation for `jsonb_agg`'s own `ORDER BY` to name the
+ * terms that relation carried, and a subquery's `ORDER BY` is not promised to survive into an outer
+ * aggregate at all.
+ */
+function Aggregated(value: string, rest: string, order = ""): string {
+  const collected = `COALESCE(jsonb_agg(${value}${order}), '[]'::jsonb)`;
+  return `(SELECT ${collected} AS "value" ${rest})`;
 }
+
+const PRODUCTS_SOURCE =
+  `FROM ${OTHER_TABLE} AS "${NESTED_ALIAS}"` +
+  ` WHERE ${NESTED_INSTANCE} AND ("t1"."_id" IN (($2::text)))`;
+
+const PRODUCTS_BY_NAME =
+  `FROM ${OTHER_TABLE} AS "${NESTED_ALIAS}"` +
+  ` WHERE ${NESTED_INSTANCE} AND ("t1"."name" IN ("t0"."name"))`;
+
+const ORDERED_PRODUCTS = `FROM ${OTHER_TABLE} AS "${NESTED_ALIAS}" WHERE ${NESTED_INSTANCE}`;
 
 function Projecting(value: string): string {
   return `SELECT ${value} AS "value" ${FROM_TABLE}`;
@@ -105,7 +113,7 @@ describe("a single-row query used as a value", () => {
 describe("a stream query used as a value", () => {
   it("aggregates its rows into a jsonb array, empty rather than null", () => {
     expect(SubquerySql(Root().map(() => Other().getAll("k1")))).to.equal(
-      Projecting(Aggregated(PRODUCTS_BY_KEY)),
+      Projecting(Aggregated(PRODUCT_DOCUMENT, PRODUCTS_SOURCE)),
     );
   });
 
@@ -116,10 +124,54 @@ describe("a stream query used as a value", () => {
     expect(relation.projection?.type).to.deep.equal(ArrayOf(ArrayOf(TEXT)));
   });
 
-  it("opens its own alias after the one the nested root claimed", () => {
+  it("absorbs the aggregate rather than opening a select level over it", () => {
     const sql = SubquerySql(Root().map(() => Other().getAll("k1")));
     expect(sql).to.contain(`AS "${NESTED_ALIAS}"`);
+    expect(sql).to.not.contain(`AS "${NEXT_ALIAS}"`);
+    expect(sql).to.not.contain(`FROM (SELECT`);
+  });
+
+  it("carries the nested query's own ordering into the aggregate itself", () => {
+    expect(SubquerySql(Root().map(() => Other().orderBy("name")))).to.equal(
+      Projecting(
+        Aggregated(
+          PRODUCT_DOCUMENT,
+          ORDERED_PRODUCTS,
+          ` ORDER BY "${NESTED_ALIAS}"."name" ASC`,
+        ),
+      ),
+    );
+  });
+
+  it("spells the ordering once, inside the aggregate rather than beside it", () => {
+    const sql = SubquerySql(Root().map(() => Other().orderBy("name")));
+    expect(Occurrences(sql, "ORDER BY")).to.equal(1);
+    expect(sql).to.contain(`${PRODUCT_DOCUMENT} ORDER BY`);
+  });
+
+  it("wraps a stream whose rows were already chosen, and aggregates the wrap", () => {
+    const sql = SubquerySql(Root().map(() => Other().slice(0, 2)));
     expect(sql).to.contain(`AS "${NEXT_ALIAS}"`);
+    expect(sql).to.contain("LIMIT");
+    expect(sql).to.contain(`jsonb_agg(${ProductDocument(NEXT_ALIAS)})`);
+  });
+
+  it("references every parameter it binds, ordering terms and bounds included", () => {
+    const ledgers = [
+      ReadParamLedger(
+        ApplySubqueries(Root().map(() => Other().getAll("k1").orderBy("name"))),
+      ),
+      ReadParamLedger(ApplySubqueries(Root().map(() => Other().slice(0, 2)))),
+    ];
+    for (const ledger of ledgers) {
+      expect(ledger.referenced).to.deep.equal(ledger.bound);
+    }
+  });
+
+  it("wraps a distinct stream, whose dedup the aggregate would otherwise erase", () => {
+    const sql = SubquerySql(Root().map(() => Other().distinct()));
+    expect(sql).to.contain("SELECT DISTINCT");
+    expect(sql).to.contain(`jsonb_agg(${ProductDocument(NEXT_ALIAS)})`);
   });
 });
 
@@ -127,7 +179,7 @@ describe("a subquery correlated to the query containing it", () => {
   it("spells the outer relation's own alias inside the nested select", () => {
     expect(
       SubquerySql(Root().map((doc) => Other().getAll(doc.key("name"), "name"))),
-    ).to.equal(Projecting(Aggregated(CORRELATED_PRODUCTS)));
+    ).to.equal(Projecting(Aggregated(PRODUCT_DOCUMENT, PRODUCTS_BY_NAME)));
   });
 
   it("binds two subqueries in one document to distinct parameters", () => {

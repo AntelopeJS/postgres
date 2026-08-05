@@ -1,17 +1,13 @@
 import type { QueryStage } from "@antelopejs/interface-database/common";
 import { Unify } from "./coerce";
+import { AsFloat, FLOAT_CAST, Moment, Numeric, Text } from "./readings";
 import type { Compiled } from "./sql";
 import {
-  AsFloat,
   FIRST_OPERAND,
-  FLOAT_CAST,
   Lift,
-  Moment,
-  Numeric,
   RequireOperand,
   type StageHandler,
   type StageMap,
-  Text,
 } from "./stage";
 import { FLOAT, type SqlType, TEXT, TIMESTAMP } from "./types";
 

@@ -55,9 +55,7 @@ function StubOrigin(schemaId: string, tableId: string): TableOrigin {
 }
 
 function NewContext(): DecodingContext {
-  const context = new DecodingContext(RefusingCompilers());
-  context.resolveOrigin = StubOrigin;
-  return context;
+  return new DecodingContext(RefusingCompilers(), StubOrigin);
 }
 
 function Root(schemaId = SCHEMA_ID, instanceId: InstanceId = undefined) {

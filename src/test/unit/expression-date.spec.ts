@@ -7,9 +7,9 @@ import {
   STAGES,
 } from "../../implementations/database/expression";
 import type { TableShape } from "../../implementations/database/fields";
+import { Moment } from "../../implementations/database/readings";
 import { ColumnRowSource } from "../../implementations/database/row-source";
 import type { Compiled } from "../../implementations/database/sql";
-import { Moment } from "../../implementations/database/stage";
 import {
   ArrayOf,
   BOOL,

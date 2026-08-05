@@ -2,6 +2,7 @@ import { expect } from "chai";
 import { DecodingContext } from "../../implementations/database/context";
 import type { TableShape } from "../../implementations/database/fields";
 import {
+  AbsorbOrder,
   CurrentValue,
   type JoinClause,
   Nested,
@@ -336,6 +337,25 @@ describe("Nested", () => {
     expect(nested.single).to.equal(true);
     expect(nested.absent).to.equal(undefined);
     expect(nested.aggregated).to.equal(false);
+  });
+});
+
+describe("AbsorbOrder", () => {
+  it("hands back the terms it clears, spelled as the clause spells them", () => {
+    const relation = ClauseCompleteTable();
+    relation.orderBy.push({ sql: '"t0"."price"', descending: true });
+    expect(AbsorbOrder(relation)).to.equal('"t0"."car" ASC, "t0"."price" DESC');
+    expect(relation.orderBy).to.deep.equal([]);
+  });
+
+  it("hands back nothing for a relation that carries no ordering", () => {
+    expect(AbsorbOrder(NewTable())).to.equal(undefined);
+  });
+
+  it("refuses a term carrying a parameter, which absorbing would unbind", () => {
+    const relation = NewTable();
+    relation.orderBy.push({ sql: '("t0"."car" = $1)', descending: false });
+    expect(() => AbsorbOrder(relation)).to.throw(/order term/);
   });
 });
 

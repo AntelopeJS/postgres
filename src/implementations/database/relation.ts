@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import type { DecodingContext } from "./context";
-import { DeclaredColumns, type TableShape } from "./fields";
+import { DeclaredColumns, PhysicalOrder, type TableShape } from "./fields";
 import { ColumnRowSource, JsonRowSource, type RowSource } from "./row-source";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import type { SqlType } from "./types";
@@ -133,7 +133,12 @@ export function IndexColumns(relation: Relation, name: string): Compiled[] {
 function RowColumns(relation: Relation): string[] {
   const origin = RequireOrigin(relation);
   const declared = DeclaredColumns(origin.shape);
-  const columns = [ID_COLUMN, INSTANCE_COLUMN, ...declared, EXTRA_COLUMN];
+  const columns = PhysicalOrder(
+    ID_COLUMN,
+    INSTANCE_COLUMN,
+    declared,
+    EXTRA_COLUMN,
+  );
   return columns.map((column) => QualifiedColumn(relation.alias, column));
 }
 
@@ -178,15 +183,73 @@ function WhereClause(relation: Relation): string | undefined {
   return `WHERE ${relation.where.join(" AND ")}`;
 }
 
-function OrderByClause(relation: Relation): string | undefined {
+function OrderTerms(relation: Relation): string | undefined {
   if (relation.orderBy.length === 0) {
     return undefined;
   }
   const terms = relation.orderBy.map(
     (term) => `${term.sql} ${term.descending ? "DESC" : "ASC"}`,
   );
-  return `ORDER BY ${terms.join(", ")}`;
+  return terms.join(", ");
 }
+
+function OrderByClause(relation: Relation): string | undefined {
+  const terms = OrderTerms(relation);
+  return terms === undefined ? undefined : `ORDER BY ${terms}`;
+}
+
+const BOUND_PARAMETER = /\$\d/;
+
+/**
+ * Takes the order terms off the relation, spelled exactly as the clause spells them.
+ *
+ * The one door for a stage that absorbs an aggregate (invariant 17), which each of the two do for a
+ * different reason and with a different answer: a stream aggregate discards the terms outright,
+ * since no ordering can change what it reduces to, while a subquery's aggregate re-emits them
+ * inside `jsonb_agg(… ORDER BY …)`, where they are the whole of what makes the array's order a
+ * promise rather than an observation.
+ *
+ * **The refusal is invariant 19 asserted rather than assumed.** Absorbing is the one place this
+ * pipeline discards compiled text, and a discarded term holding a `$n` leaves the statement binding
+ * a parameter no fragment references — `bind message supplies N parameters, but prepared statement
+ * requires M`, naming nothing about the query. It holds today because `orderBy` builds its terms
+ * from `source.field(name)` with no default and therefore decodes nothing; an `orderBy` that ever
+ * decoded an argument has to render its terms into a subselect instead, and this says so where the
+ * edit lands rather than in a comment nobody reads.
+ */
+export function AbsorbOrder(relation: Relation): string | undefined {
+  const terms = OrderTerms(relation);
+  assert(
+    terms === undefined || !BOUND_PARAMETER.test(terms),
+    "An order term must carry no bound parameter, since absorbing an aggregate discards it",
+  );
+  relation.orderBy = [];
+  return terms;
+}
+
+const ONE_ROW = "1";
+
+/**
+ * Reads a row bound as the `bigint` {@link LimitClause} and {@link OffsetClause} take.
+ *
+ * The one owner of that cast (invariant 17), because it is this clause's business rather than any
+ * one stage's: a decoded number is `double precision`, whose assignment cast is not guaranteed in
+ * this position. Making the fragment total against a caller's number is the caller's half — the
+ * clamp lives with the stage that decodes one.
+ */
+export function RowBound(sql: string): string {
+  return `((${sql})::bigint)`;
+}
+
+/**
+ * The bound that makes a relation answer at most one row, spelled once for all its callers.
+ *
+ * `nth` takes it because the contract asks for one row, and `lookup`'s lateral takes it because a
+ * lateral answering more than one row would multiply the left side it was given. A second spelling
+ * would be free to drift from this one — a bound that stopped clamping, or that stopped casting to
+ * the type `LIMIT` takes — with nothing failing (invariant 17).
+ */
+export const SINGLE_ROW = RowBound(ONE_ROW);
 
 function LimitClause(relation: Relation): string | undefined {
   return relation.limit === undefined ? undefined : `LIMIT ${relation.limit}`;

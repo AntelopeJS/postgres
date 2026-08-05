@@ -1,7 +1,9 @@
 import assert from "node:assert";
 import type { QueryStage } from "@antelopejs/interface-database/common";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
+import { AsFloat, Numeric, ORDERED_KINDS } from "./readings";
 import {
+  AbsorbOrder,
   CurrentValue,
   Prepare,
   type Relation,
@@ -9,7 +11,6 @@ import {
   SetProjection,
 } from "./relation";
 import type { Compiled } from "./sql";
-import { AsFloat, Numeric, ORDERED_KINDS } from "./stage";
 
 /**
  * An aggregate reads whichever rows the relation has already selected.
@@ -134,13 +135,15 @@ function Extremum(func: string): Aggregation {
  *
  * Dropping the terms is the one place this pipeline discards compiled text, which is legal only
  * because an order term never carries a `$n`: they are built from `source.field(name)` with no
- * default, so nothing in them was decoded. An `orderBy` that ever decoded an argument would have
- * to render its terms into a subselect here instead, or the statement binds a parameter no
- * fragment references and the driver rejects the whole query (invariant 12, one layer up).
+ * default, so nothing in them was decoded. {@link AbsorbOrder} is where that is asserted rather
+ * than assumed, and it is the same door a subquery's aggregate takes to *keep* the terms — an
+ * `orderBy` that ever decoded an argument would have to render its terms into a subselect here
+ * instead, or the statement binds a parameter no fragment references and the driver rejects the
+ * whole query (invariant 12, one layer up).
  */
 function SetAggregate(relation: Relation, value: Compiled): Relation {
   const aggregate = SetProjection(relation, value);
-  aggregate.orderBy = [];
+  AbsorbOrder(aggregate);
   aggregate.single = true;
   aggregate.aggregated = true;
   return aggregate;

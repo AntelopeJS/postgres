@@ -1,4 +1,4 @@
-import { type Compiled, QuoteLiteral } from "./sql";
+import { type Compiled, JSON_NULL, QuoteLiteral } from "./sql";
 import {
   ArrayOf,
   IsJsonBacked,
@@ -202,13 +202,29 @@ export function UnifyOperands(left: Compiled, right: Compiled): CompiledPair {
   return { left: Cast(left, type), right: Cast(right, type), type };
 }
 
+/**
+ * The absence a default answers, which a jsonb-backed operand spells two ways.
+ *
+ * A stored json null is `'null'::jsonb` and not SQL NULL, so `COALESCE` alone hands it straight
+ * back and the default never fires — while the contract says a default replaces the value whenever
+ * the proxy is null. Every other unified type is already the concrete kind the value was pulled to,
+ * where a json null has arrived as SQL NULL through the projection guard, so only the jsonb-backed
+ * branch needs the second spelling.
+ */
+function Absent(pair: CompiledPair): string {
+  if (!IsJsonBacked(pair.type)) {
+    return pair.left.sql;
+  }
+  return `NULLIF(${pair.left.sql}, ${JSON_NULL})`;
+}
+
 export function WithDefault(value: Compiled, def?: Compiled): Compiled {
   if (!def) {
     return value;
   }
   const pair = UnifyOperands(value, def);
   return {
-    sql: `COALESCE(${pair.left.sql}, ${pair.right.sql})`,
+    sql: `COALESCE(${Absent(pair)}, ${pair.right.sql})`,
     type: pair.type,
   };
 }

@@ -1,30 +1,32 @@
-import { type Compiled, QuoteLiteral } from "./sql";
 import {
-  AsJson,
-  AsSource,
   Collected,
-  FIRST_OPERAND,
-  FieldNames,
-  FieldOf,
   GuardJson,
   HeldOnce,
-  Lift,
-  LiftRaw,
   OBJECT_TYPEOF,
-  RequireOperand,
-  type StageHandler,
-  type StageMap,
+  ORDINAL_COLUMN,
   TextArray,
   VALUE_COLUMN,
   Walk,
   WalkColumn,
+} from "./jsonb";
+import { AsJson } from "./readings";
+import { type Compiled, QuoteLiteral } from "./sql";
+import {
+  AsSource,
+  FIRST_OPERAND,
+  FieldNames,
+  FieldOf,
+  Lift,
+  LiftRaw,
+  RequireOperand,
+  type StageHandler,
+  type StageMap,
 } from "./stage";
 import {
   ArrayOf,
   BOOL,
-  JsonOf,
+  MergeShapes,
   OPAQUE,
-  ShapeOf,
   type SqlType,
   TEXT,
 } from "./types";
@@ -41,15 +43,6 @@ const ObjIndexStage: StageHandler = (state, stage, context) => ({
   current: FieldOf(AsSource(state), stage, context),
 });
 
-function MergedType(left: SqlType, right: SqlType): SqlType {
-  const known = ShapeOf(left);
-  const overriding = ShapeOf(right);
-  if (!known || !overriding) {
-    return OPAQUE;
-  }
-  return JsonOf({ ...known, ...overriding });
-}
-
 function Merged(left: Compiled, right: Compiled, alias: string): string {
   return HeldOnce({
     value: `${left.sql} || ${right.sql}`,
@@ -65,7 +58,7 @@ const MergeStage = Lift((value, args, stage, context) => {
   const other = RequireOperand(args[FIRST_OPERAND], stage, FIRST_OPERAND);
   return {
     sql: Merged(AsJson(value), AsJson(other), context.nextAlias()),
-    type: MergedType(value.type, other.type),
+    type: MergeShapes(value.type, other.type),
   };
 });
 
@@ -96,7 +89,10 @@ function Aggregation(walk: ObjectWalk, json: string, alias: string): string {
     json,
     alias,
     columns: walk.columns,
-    aggregate: Collected(alias, WalkColumn(alias, walk.aggregated)),
+    aggregate: Collected(
+      WalkColumn(alias, ORDINAL_COLUMN),
+      WalkColumn(alias, walk.aggregated),
+    ),
   });
 }
 

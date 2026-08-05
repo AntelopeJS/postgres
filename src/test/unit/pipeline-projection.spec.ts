@@ -81,8 +81,8 @@ describe("the default stage", () => {
   it("defaults the materialized document while the relation is row-shaped", () => {
     const { relation, context } = Apply(Root().default(1));
     expect(Render(relation)).to.equal(
-      `SELECT COALESCE(${DOCUMENT}, to_jsonb(($1::double precision)))` +
-        ` AS "value" ${FROM_TABLE}`,
+      `SELECT COALESCE(NULLIF(${DOCUMENT}, 'null'::jsonb),` +
+        ` to_jsonb(($1::double precision))) AS "value" ${FROM_TABLE}`,
     );
     expect(context.params.all()).to.deep.equal([1]);
   });

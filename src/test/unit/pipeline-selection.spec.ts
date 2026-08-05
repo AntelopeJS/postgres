@@ -4,6 +4,7 @@ import { Render } from "../../implementations/database/relation";
 import {
   Apply,
   ApplyRaw,
+  NewProfiles,
   NewTable,
   ReadParamLedger,
   Root,
@@ -39,6 +40,16 @@ const LOW_TEXT_BOUND = `("t0"."age" >= ${AsNumber("$1")})`;
 const HIGH_TEXT_BOUND = `("t0"."age" < ${AsNumber("$2")})`;
 
 const COMPOUND_INDEX = "byNameAge";
+const ARRAY_FIELD = "skills";
+const COMPOUND_ARRAY_INDEX = "byNameSkills";
+
+/** One key of a `multi` index, matched against the list the column holds. */
+function Contains(param: string): string {
+  return `("t0"."skills" @> to_jsonb((${param}::text)))`;
+}
+
+const ONE_SKILL = `(${Contains("$1")})`;
+const TWO_SKILLS = `(${Contains("$1")} OR ${Contains("$2")})`;
 
 /**
  * A selection stage the typed builders cannot spell.
@@ -122,6 +133,22 @@ describe("the getAll stage", () => {
     expect(
       Apply(Root().getAll(false, "isActive")).relation.where,
     ).to.deep.equal([ACTIVE_KEY]);
+  });
+
+  it("reads a null key against a boolean column as no answer, not as false", () => {
+    const { relation, context } = ApplyRaw(
+      Recorded("getAll", "isActive", null),
+    );
+    expect(relation.where).to.deep.equal([
+      `("t0"."isActive" IN ((CASE WHEN jsonb_typeof('null'::jsonb) = 'boolean' THEN (('null'::jsonb #>> '{}')::boolean) END)))`,
+    ]);
+    expect(context.params.all()).to.deep.equal([]);
+  });
+
+  it("reads a document key against a boolean column as no answer, not as true", () => {
+    const { relation } = ApplyRaw(Recorded("getAll", "isActive", { a: 1 }));
+    expect(relation.where[0]).to.contain("jsonb_typeof");
+    expect(relation.where[0]).to.not.contain("<> ALL");
   });
 
   it("reads a key as the column's type rather than casting it", () => {
@@ -224,6 +251,64 @@ describe("the getAll stage", () => {
   });
 });
 
+describe("the getAll stage over a field declared as an array", () => {
+  it("matches by containment, which is what a multi index is created for", () => {
+    const { relation, context } = ApplyRaw(
+      Recorded("getAll", ARRAY_FIELD, "laptop"),
+      NewProfiles(),
+    );
+    expect(relation.where).to.deep.equal([ONE_SKILL]);
+    expect(context.params.all()).to.deep.equal(["laptop"]);
+  });
+
+  it("disjoins a key list, which the planner reads as a bitmap OR", () => {
+    const { relation, context } = ApplyRaw(
+      Recorded("getAll", ARRAY_FIELD, ["laptop", "phone"]),
+      NewProfiles(),
+    );
+    expect(relation.where).to.deep.equal([TWO_SKILLS]);
+    expect(context.params.all()).to.deep.equal(["laptop", "phone"]);
+  });
+
+  it("wraps the containment in no case, which a gin index cannot see through", () => {
+    const sql = Render(
+      ApplyRaw(Recorded("getAll", ARRAY_FIELD, "laptop"), NewProfiles())
+        .relation,
+    );
+    expect(sql).to.not.contain("CASE");
+    expect(sql).to.not.contain("jsonb_build_object");
+  });
+
+  it("still matches nothing rather than emitting an empty disjunction", () => {
+    const { relation } = ApplyRaw(
+      Recorded("getAll", ARRAY_FIELD, []),
+      NewProfiles(),
+    );
+    expect(relation.where).to.deep.equal([NO_MATCH]);
+  });
+
+  it("refuses a compound index that keys on an array field beside others", () => {
+    expect(() =>
+      ApplyRaw(
+        Recorded("getAll", COMPOUND_ARRAY_INDEX, [["Alice", "laptop"]]),
+        NewProfiles(),
+      ),
+    ).to.throw(
+      `The '${COMPOUND_ARRAY_INDEX}' index keys on an array field beside others`,
+    );
+  });
+
+  it("references every parameter it binds, and binds every one it references", () => {
+    const ledger = ReadParamLedger(
+      ApplyRaw(
+        Recorded("getAll", ARRAY_FIELD, ["laptop", "phone"]),
+        NewProfiles(),
+      ),
+    );
+    expect(ledger.referenced).to.deep.equal(ledger.bound);
+  });
+});
+
 describe("the between stage", () => {
   it("bounds one field low-inclusive and high-exclusive, in that order", () => {
     const { relation, context } = Apply(Root().between("age", 0, 10));
@@ -299,5 +384,13 @@ describe("the between stage", () => {
     const { relation } = Apply(Root().between("age", 0, 10));
     expect(relation.single).to.equal(false);
     expect(relation.origin?.tableId).to.equal(TABLE_ID);
+  });
+
+  it("refuses a field declared as an array, which no range orders", () => {
+    expect(() =>
+      ApplyRaw(Recorded("between", ARRAY_FIELD, "a", "b"), NewProfiles()),
+    ).to.throw(
+      `The 'between' stage ranges over one value, but '${ARRAY_FIELD}' holds a list`,
+    );
   });
 });

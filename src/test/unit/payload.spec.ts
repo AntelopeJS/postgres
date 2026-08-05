@@ -139,6 +139,25 @@ describe("SplitPayload over declared fields", () => {
     ]);
   });
 
+  it("refuses a text value for a boolean column, naming the field and both types", () => {
+    expect(() => Split({ isElectric: "false" })).to.throw(
+      /'isElectric'.*boolean.*received text/,
+    );
+  });
+
+  it("refuses every other scalar reading rather than rewriting it as truthiness", () => {
+    for (const value of [1, 0, new Date(0), ValueProxy.constant("no")]) {
+      expect(() => Split({ isElectric: value })).to.throw(/'isElectric'/);
+    }
+  });
+
+  it("reads a json value against a boolean column under the typeof guard", () => {
+    expect(Fragments(Split({ isElectric: null }))).to.deep.equal([
+      "(CASE WHEN jsonb_typeof('null'::jsonb) = 'boolean'" +
+        " THEN (('null'::jsonb #>> '{}')::boolean) END)",
+    ]);
+  });
+
   it("keeps a nested object as one jsonb document, nulls and all", () => {
     const applied = Split({ metadata: { level: 3, note: null } });
     expect(Fragments(applied)).to.deep.equal([

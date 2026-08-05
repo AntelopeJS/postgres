@@ -33,6 +33,15 @@ const UUID_PATTERN =
 
 const SLICE_START = 0;
 const SLICE_END = 5;
+const AGE = 3;
+
+const FIRST_GROUP = 0;
+const SECOND_GROUP = 1;
+
+/** One statement of a batch, as the data-modifying CTE that carries it names it. */
+function Group(index: number, statement: string): string {
+  return `"g${index}" AS (${statement})`;
+}
 
 /**
  * One recorded insert, through the contract's own builder.
@@ -179,6 +188,81 @@ describe("the insert statement's conflict modes", () => {
   });
 });
 
+describe("the insert statement's heterogeneous batch", () => {
+  it("writes one statement per supplied-key signature under a merging conflict", () => {
+    const written = Insert(
+      [
+        { _id: "a", name: "x" },
+        { _id: "b", age: AGE },
+      ],
+      { conflict: "update" },
+    );
+    const named =
+      `${INTO} ("_id", "_instance", "name", "_extra") VALUES` +
+      ` (($2::text), ($1::text), ($3::text), ${EMPTY_EXTRA})` +
+      ` ${CONFLICT} "name" = EXCLUDED."name", ${MERGED_EXTRA}`;
+    const aged =
+      `${INTO} ("_id", "_instance", "age", "_extra") VALUES` +
+      ` (($4::text), ($1::text), ($5::double precision), ${EMPTY_EXTRA})` +
+      ` ${CONFLICT} "age" = EXCLUDED."age", ${MERGED_EXTRA}`;
+    expect(Sql(written)).to.equal(
+      `WITH ${Group(FIRST_GROUP, named)}, ${Group(SECOND_GROUP, aged)} SELECT 1`,
+    );
+  });
+
+  it("assigns no column a group's rows were silent about", () => {
+    const written = Insert([{ name: "x" }, { age: AGE }], {
+      conflict: "update",
+    });
+    expect(Sql(written)).to.not.contain("NULL");
+    expect(Occurrences(Sql(written), 'EXCLUDED."name"')).to.equal(1);
+    expect(Occurrences(Sql(written), 'EXCLUDED."age"')).to.equal(1);
+  });
+
+  it("groups by the keys a row supplied rather than by where it sits in the batch", () => {
+    const written = Insert([{ name: "x" }, { age: AGE }, { name: "y" }], {
+      conflict: "update",
+    });
+    expect(Occurrences(Sql(written), "INSERT INTO")).to.equal(2);
+    expect(Sql(written)).to.contain(
+      `(($2::text), ($1::text), ($3::text), ${EMPTY_EXTRA}),` +
+        ` (($6::text), ($1::text), ($7::text), ${EMPTY_EXTRA})`,
+    );
+  });
+
+  it("keeps a batch that supplied one key set to a single statement", () => {
+    const written = Insert([{ name: "x" }, { name: "y" }], {
+      conflict: "update",
+    });
+    expect(Sql(written)).to.not.contain("WITH");
+    expect(Occurrences(Sql(written), "INSERT INTO")).to.equal(1);
+  });
+
+  it("leaves a batch with no conflict mode one statement, NULL being what an omitted key means", () => {
+    expect(Sql(Insert([{ name: "x" }, { age: AGE }]))).to.not.contain("WITH");
+  });
+
+  it("leaves a replacing batch one statement, since it names every column anyway", () => {
+    const written = Insert([{ name: "x" }, { age: AGE }], {
+      conflict: "replace",
+    });
+    expect(Sql(written)).to.not.contain("WITH");
+    expect(Occurrences(Sql(written), "INSERT INTO")).to.equal(1);
+  });
+
+  it("answers the keys in input order rather than in the order the groups write them", () => {
+    const written = Insert(
+      [
+        { _id: "a", name: "x" },
+        { _id: "b", age: AGE },
+        { _id: "c", name: "y" },
+      ],
+      { conflict: "update" },
+    );
+    expect(written.statement.ids).to.deep.equal(["a", "b", "c"]);
+  });
+});
+
 describe("the ids an insert answers", () => {
   it("generates a key for every document, in input order", () => {
     const written = Insert([{ name: "a" }, { name: "b" }]);
@@ -311,6 +395,9 @@ describe("the insert statement's parameter ledger", () => {
       Insert([{ name: "a" }, { age: 3, nickname: "z" }]),
       Insert({ _id: "k", name: "a" }, { conflict: "update" }),
       Insert({ name: "a", nickname: "z" }, { conflict: "replace" }),
+      Insert([{ name: "a" }, { age: 3, nickname: "z" }], {
+        conflict: "update",
+      }),
     ]);
   });
 });

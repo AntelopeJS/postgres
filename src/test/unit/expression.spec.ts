@@ -7,6 +7,12 @@ import {
   STAGES,
 } from "../../implementations/database/expression";
 import type { TableShape } from "../../implementations/database/fields";
+import { GuardJson } from "../../implementations/database/jsonb";
+import {
+  Numeric,
+  Predicate,
+  StoredAs,
+} from "../../implementations/database/readings";
 import {
   ColumnRowSource,
   JsonRowSource,
@@ -15,11 +21,8 @@ import type { Compiled } from "../../implementations/database/sql";
 import {
   AsSource,
   AsValue,
-  GuardJson,
   Lift,
   LiftRaw,
-  Numeric,
-  Predicate,
 } from "../../implementations/database/stage";
 import {
   ArrayOf,
@@ -45,6 +48,9 @@ const users: TableShape = {
     metadata: { column: "metadata", type: JsonOf({ level: FLOAT }) },
   },
 };
+
+/** JavaScript's own falsy table over a jsonb value, transcribed rather than imported. */
+const FALSEHOOD = `<> ALL (array['null', 'false', '0', '""']::jsonb[])`;
 
 const ELEMENT: Compiled = { sql: 'e."value"', type: TEXT };
 const SUBQUERY: Compiled = { sql: "(SELECT 1)", type: FLOAT };
@@ -253,6 +259,14 @@ describe("default", () => {
     expect(out.sql).to.equal(`COALESCE("t"."age", ($1::double precision))`);
     expect(out.type).to.equal(FLOAT);
   });
+
+  it("fires on an undeclared key holding a stored json null", () => {
+    const out = Compile((doc) => doc.key("meta").default({}));
+    expect(out.sql).to.equal(
+      `COALESCE(NULLIF(("t"."_extra" -> 'meta'), 'null'::jsonb), jsonb_build_object())`,
+    );
+    expect(out.type).to.equal(OPAQUE);
+  });
 });
 
 describe("boolean stages", () => {
@@ -283,22 +297,41 @@ describe("boolean stages", () => {
 
   it("reads a text operand as javascript truthiness", () => {
     expect(Compile((doc) => doc.key("name").not()).sql).to.equal(
-      `(NOT ("t"."name" <> ''))`,
+      `(("t"."name" <> '') IS NOT TRUE)`,
     );
   });
 
   it("reads a timestamp operand as present or absent", () => {
     expect(Compile((doc) => doc.key("createdAt").not()).sql).to.equal(
-      `(NOT ("t"."createdAt" IS NOT NULL))`,
+      `(("t"."createdAt" IS NOT NULL) IS NOT TRUE)`,
     );
   });
 
-  it("casts a jsonb operand to boolean under a typeof guard", () => {
+  it("reads a jsonb operand as javascript truthiness", () => {
     const out = Compile((doc) => doc.key("flagged").not());
     expect(out.sql).to.equal(
-      `(NOT (CASE WHEN jsonb_typeof(("t"."_extra" -> 'flagged')) = 'boolean' THEN ((("t"."_extra" -> 'flagged') #>> '{}')::boolean) END))`,
+      `((("t"."_extra" -> 'flagged') ${FALSEHOOD}) IS NOT TRUE)`,
     );
     expect(out.type).to.equal(BOOL);
+  });
+
+  it("does not assert a truthy jsonb operand into a negation", () => {
+    const out = Compile((doc) => doc.key("flagged").not());
+    expect(out.sql).to.not.contain("jsonb_typeof");
+    expect(out.sql).to.not.contain("#>>");
+  });
+
+  it("answers true for an operand that is null, where NOT answers null", () => {
+    const truthy = `(("t"."_extra" -> 'missing') ${FALSEHOOD})`;
+    const out = Compile((doc) => doc.key("missing").not());
+    expect(out.sql).to.equal(`(${truthy} IS NOT TRUE)`);
+    expect(out.sql).to.not.contain("(NOT ");
+  });
+
+  it("negates a declared column through the same three-valued test", () => {
+    expect(Compile((doc) => doc.key("age").not()).sql).to.equal(
+      `(("t"."age" <> 0) IS NOT TRUE)`,
+    );
   });
 
   it("rejects a missing operand naming the stage", () => {
@@ -311,15 +344,12 @@ describe("boolean stages", () => {
   });
 
   it("leaves a null operand null rather than reading it as false", () => {
-    const guard = `(CASE WHEN jsonb_typeof(("t"."_extra" -> 'missing')) = 'boolean' THEN ((("t"."_extra" -> 'missing') #>> '{}')::boolean) END)`;
+    const truthy = `(("t"."_extra" -> 'missing') ${FALSEHOOD})`;
     expect(Compile((doc) => doc.key("missing").and(true)).sql).to.equal(
-      `(${guard} AND ($1::boolean))`,
+      `(${truthy} AND ($1::boolean))`,
     );
     expect(Compile((doc) => doc.key("missing").or(true)).sql).to.equal(
-      `(${guard} OR ($1::boolean))`,
-    );
-    expect(Compile((doc) => doc.key("missing").not()).sql).to.equal(
-      `(NOT ${guard})`,
+      `(${truthy} OR ($1::boolean))`,
     );
   });
 });
@@ -346,17 +376,65 @@ describe("Predicate", () => {
     );
   });
 
-  it("projects a json operand under the boolean guard", () => {
-    const guarded =
-      "(CASE WHEN jsonb_typeof(v) = 'boolean' THEN ((v #>> '{}')::boolean) END)";
-    expect(Predicate({ sql: "v", type: OPAQUE }).sql).to.equal(guarded);
-    expect(Predicate({ sql: "v", type: ArrayOf(TEXT) }).sql).to.equal(guarded);
+  it("counts a json null, false, zero and the empty string as falsy", () => {
+    const truthy = `(v ${FALSEHOOD})`;
+    expect(Predicate({ sql: "v", type: OPAQUE }).sql).to.equal(truthy);
+    expect(
+      Predicate({ sql: "v", type: JsonOf({ level: FLOAT }) }).sql,
+    ).to.equal(truthy);
+    expect(Predicate({ sql: "v", type: ArrayOf(TEXT) }).sql).to.equal(truthy);
+  });
+
+  it("counts nothing else falsy, so an empty container is true", () => {
+    const sql = Predicate({ sql: "v", type: OPAQUE }).sql;
+    expect(sql.match(/'[^']*'/g)).to.deep.equal([
+      "'null'",
+      "'false'",
+      "'0'",
+      `'""'`,
+    ]);
+  });
+
+  it("spells a jsonb operand once", () => {
+    const sql = Predicate({ sql: "v", type: OPAQUE }).sql;
+    expect(sql.split("v")).to.have.lengthOf(2);
+    expect(sql).to.not.contain("CASE");
   });
 
   it("types every reading as boolean", () => {
-    for (const type of [BOOL, FLOAT, TEXT, TIMESTAMP, OPAQUE]) {
+    for (const type of [BOOL, FLOAT, TEXT, TIMESTAMP, OPAQUE, ArrayOf(TEXT)]) {
       expect(Predicate({ sql: "v", type }).type).to.equal(BOOL);
     }
+  });
+});
+
+describe("StoredAs", () => {
+  const KEY_GUARD =
+    "(CASE WHEN jsonb_typeof(v) = 'boolean' THEN ((v #>> '{}')::boolean) END)";
+  const JSON_KEY: Compiled = { sql: "v", type: OPAQUE };
+
+  it("projects a jsonb key into a boolean column rather than reading it as truthiness", () => {
+    expect(StoredAs(JSON_KEY, BOOL).sql).to.equal(KEY_GUARD);
+  });
+
+  it("projects a jsonb key into every other scalar column under the same guard", () => {
+    expect(StoredAs(JSON_KEY, TEXT).sql).to.contain(
+      "jsonb_typeof(v) = 'string'",
+    );
+    expect(StoredAs(JSON_KEY, FLOAT).sql).to.contain(
+      "jsonb_typeof(v) = 'number'",
+    );
+    expect(StoredAs(JSON_KEY, TIMESTAMP).sql).to.contain(
+      "jsonb_typeof(v) = 'string'",
+    );
+  });
+
+  it("reads a scalar key through the reading the expression compiler applies", () => {
+    expect(StoredAs({ sql: "v", type: TEXT }, BOOL).sql).to.equal("(v <> '')");
+    expect(StoredAs({ sql: "v", type: FLOAT }, BOOL).sql).to.equal("(v <> 0)");
+    expect(StoredAs({ sql: "v", type: TEXT }, FLOAT).sql).to.contain(
+      "CASE WHEN",
+    );
   });
 });
 
@@ -425,7 +503,7 @@ describe("comparison stages", () => {
       `"t"."age" =`,
     );
     expect(Compile((doc) => doc.key("age").ne(1)).sql).to.contain(
-      `"t"."age" <>`,
+      `"t"."age" IS DISTINCT FROM`,
     );
     expect(Compile((doc) => doc.key("age").gt(1)).sql).to.contain(
       `"t"."age" >`,
@@ -463,10 +541,25 @@ describe("comparison stages", () => {
     expect(out.sql).to.equal(`("t"."createdAt" < ($1::timestamptz))`);
   });
 
-  it("under-matches ne on a heterogeneous undeclared key", () => {
+  it("keeps a row whose declared column is null out of ne's blind spot", () => {
+    const out = Compile((doc) => doc.key("age").ne(1));
+    expect(out.sql).to.equal(
+      `("t"."age" IS DISTINCT FROM ($1::double precision))`,
+    );
+    expect(out.type).to.equal(BOOL);
+  });
+
+  it("compares ne in jsonb when exactly one side is bottom-typed", () => {
     const out = Compile((doc) => doc.key("k").ne(5));
     expect(out.sql).to.equal(
-      `((CASE WHEN jsonb_typeof(("t"."_extra" -> 'k')) = 'number' THEN ((("t"."_extra" -> 'k') #>> '{}')::double precision) END) <> ($1::double precision))`,
+      `(("t"."_extra" -> 'k') IS DISTINCT FROM to_jsonb(($1::double precision)))`,
+    );
+  });
+
+  it("leaves two bottom-typed operands in jsonb", () => {
+    const out = Compile((doc) => doc.key("k").ne(doc.key("j")));
+    expect(out.sql).to.equal(
+      `(("t"."_extra" -> 'k') IS DISTINCT FROM ("t"."_extra" -> 'j'))`,
     );
   });
 

@@ -1,4 +1,9 @@
-import type { DeepPartial } from "@antelopejs/interface-database/common";
+import type {
+  DeepPartial,
+  StagedObject,
+} from "@antelopejs/interface-database/common";
+import { QueryStage } from "@antelopejs/interface-database/common";
+import { Query } from "@antelopejs/interface-database/query";
 import { expect } from "chai";
 import {
   AssertedIdentity,
@@ -20,6 +25,7 @@ import {
   SELECTED_ROW,
   WrittenSql as Sql,
   TABLE,
+  UnchangedRows,
   Write,
   type WriteDocument,
   type Written,
@@ -36,8 +42,10 @@ const AGE = 40;
 const MINIMUM_AGE = 18;
 const SLICE_OFFSET = 1;
 const SLICE_COUNT = 2;
+const NTH_ROW = 0;
 const RECORDED_ARGUMENT = 1;
 const RAISE = 1;
+const RESPELLED = 2;
 const MEMBER = 1;
 
 /** The derived table a mapper's document is held in, and the identity wrap that follows it. */
@@ -53,9 +61,18 @@ const MERGED_MEMBER =
 
 const RETURNS_NOTHING = () => undefined;
 
-/** The whole statement a `get(k).update(…)` compiles to, given its `SET` list. */
-function Updates(assignments: string): string {
-  return `${UPDATE} ${assignments} WHERE ${IdentityPredicate(SELECTED_ROW)}`;
+/**
+ * The whole statement a `get(k).update(…)` compiles to, given its `SET` list.
+ *
+ * The key a payload asserts is a parameter rather than something a spec appends, because the
+ * conjunct that keeps unchanged rows out of the count comes after it.
+ */
+function Updates(assignments: string, asserted?: string): string {
+  const narrowed = asserted ? ` AND ${asserted}` : "";
+  return (
+    `${UPDATE} ${assignments} WHERE ${IdentityPredicate(SELECTED_ROW)}` +
+    `${narrowed} AND ${UnchangedRows(assignments)}`
+  );
 }
 
 /**
@@ -65,6 +82,20 @@ function Updates(assignments: string): string {
  * that compiled a derived table of its own spent one before the target was built.
  */
 function Changes(assignments: string, alias?: string): string {
+  return (
+    `${UPDATE} ${assignments} WHERE ${IdentityPredicate(EVERY_ROW, alias)}` +
+    ` AND ${UnchangedRows(assignments)}`
+  );
+}
+
+/**
+ * The same, for the one `SET` list that states no column-by-column values.
+ *
+ * A multi-assignment reads its columns out of one derived table, and testing what it would change
+ * means spelling that table a second time in the `WHERE` — so the mapper's expression body answers
+ * rows matched where every other path answers rows modified.
+ */
+function Assigns(assignments: string, alias?: string): string {
   return `${UPDATE} ${assignments} WHERE ${IdentityPredicate(EVERY_ROW, alias)}`;
 }
 
@@ -119,6 +150,20 @@ function Merged(alias: string): string {
   return (
     `(SELECT "${alias}"."merged" FROM (SELECT ${value} AS "merged")` +
     ` AS "${alias}" WHERE jsonb_typeof("${alias}"."merged") = 'object')`
+  );
+}
+
+/**
+ * An `update` over a selection that answers one row without being a `get`.
+ *
+ * `nth` yields a datum the contract gives no `update` to, so the stage is appended rather than
+ * chained: what the write reads is `Relation.single`, and a query the types can spell would only
+ * ever reach it through `get`.
+ */
+function NthUpdate(document: WriteDocument): StagedObject {
+  return new Query<number>(
+    QueryStage("update", undefined, document),
+    Root().nth(NTH_ROW),
   );
 }
 
@@ -215,7 +260,7 @@ describe("the update statement's asserted identity", () => {
   it("narrows the target to the row the payload's key names, assigning nothing", () => {
     const written = Update({ _id: KEY, age: AGE });
     expect(Sql(written)).to.equal(
-      `${Updates('"age" = ($4::double precision)')} AND ${AssertedIdentity("$3")}`,
+      Updates('"age" = ($4::double precision)', AssertedIdentity("$3")),
     );
     expect(Sql(written)).to.not.contain('SET "_id"');
   });
@@ -223,7 +268,7 @@ describe("the update statement's asserted identity", () => {
   it("asserts the key wherever in the payload it was named", () => {
     const written = Update({ age: AGE, _id: KEY });
     expect(Sql(written)).to.equal(
-      `${Updates('"age" = ($3::double precision)')} AND ${AssertedIdentity("$4")}`,
+      Updates('"age" = ($3::double precision)', AssertedIdentity("$4")),
     );
   });
 
@@ -244,27 +289,93 @@ describe("the update statement's asserted identity", () => {
   });
 
   /**
-   * The divergence the assertion is accepted with: over a selection of several rows a payload key
-   * narrows the write to one rather than refusing it. Pinned so that becoming a refusal is a
-   * decision someone makes rather than a change that passes.
+   * A key asserted over rows the write did not address one by one is a mistake, not a narrowing:
+   * the caller wrote one document over a selection of many and would silently reach at most one.
    */
-  it("narrows a write over every row instead of refusing the key", () => {
-    const written = Write(
-      Root().update({ _id: KEY, age: AGE } as WriteDocument),
+  it("refuses a key asserted over a selection of many rows, naming what to do", () => {
+    expect(() =>
+      Write(Root().update({ _id: KEY, age: AGE } as WriteDocument)),
+    ).to.throw(
+      "The 'update' stage was given a payload naming '_id' over a selection of many rows: address the row with get(_id) first, or leave '_id' out of the payload",
     );
-    expect(Sql(written)).to.equal(
-      `${Changes('"age" = ($3::double precision)')} AND ${AssertedIdentity("$2")}`,
-    );
+  });
+
+  it("refuses the key a mapper's document body names over the same selection", () => {
+    expect(() =>
+      Write(Root().update((doc) => ({ _id: KEY, age: doc.key("age") }))),
+    ).to.throw("over a selection of many rows");
+  });
+
+  it("takes the key over any selection that answers one row, not only a get", () => {
+    const written = Write(NthUpdate({ _id: KEY, age: AGE }));
+    expect(Sql(written)).to.contain(AssertedIdentity("$3"));
   });
 
   it("asserts the key a mapper's document body names, exactly as a payload does", () => {
     const written = Write(
-      Root().update((doc) => ({ _id: KEY, age: doc.key("age").add(RAISE) })),
+      Root()
+        .get(KEY)
+        .update((doc) => ({ _id: KEY, age: doc.key("age").add(RAISE) })),
     );
     expect(Sql(written)).to.equal(
-      `${Changes('"age" = ("w0"."age" + ($3::double precision))')}` +
-        ` AND ${AssertedIdentity("$2")}`,
+      Updates(
+        '"age" = ("w0"."age" + ($4::double precision))',
+        AssertedIdentity("$3"),
+      ),
     );
+  });
+});
+
+describe("the count an update answers", () => {
+  /**
+   * The contract types the answer as the number of modified documents, and the driver reports the
+   * number matched — so the statement asks the question itself, in the text and with no new `$n`.
+   */
+  it("leaves a row the assignment would not change out of the rows it writes", () => {
+    expect(Sql(Update({ age: AGE }))).to.contain(
+      ' AND (("w0"."age") IS DISTINCT FROM (($3::double precision)))',
+    );
+  });
+
+  it("tests every column it assigns at once, the overflow document included", () => {
+    expect(Sql(Update({ age: AGE, nickname: NICKNAME }))).to.contain(
+      ` AND (("w0"."age", "w0"."_extra") IS DISTINCT FROM` +
+        ` (($3::double precision), (${EXISTING_EXTRA} ||` +
+        " jsonb_build_object('nickname', to_jsonb(($4::text))))))",
+    );
+  });
+
+  it("spells the values it compares against rather than binding them a second time", () => {
+    const written = Update({ age: AGE });
+    expect(written.context.params.all()).to.deep.equal(["", KEY, AGE]);
+    expect(Occurrences(Sql(written), "$3")).to.equal(RESPELLED);
+  });
+
+  /** Invariant 8: the two differ wherever `PgIdentifier` truncated the name apart. */
+  it("names the column rather than the field it was declared under", () => {
+    const written = Write(
+      NotesRoot().update({ summary: "s" } as unknown as DeepPartial<Note>),
+    );
+    expect(Sql(written)).to.contain(
+      ' AND (("w0"."summ") IS DISTINCT FROM (($2::text)))',
+    );
+    expect(Sql(written)).to.not.contain("summary");
+  });
+
+  it("counts a cleared column as changed only where it held something", () => {
+    expect(Sql(Update({ name: undefined }))).to.contain(
+      ' AND (("w0"."name") IS DISTINCT FROM (NULL))',
+    );
+  });
+
+  /**
+   * The one path left answering rows matched: the body is a derived table in the `SET` list, and
+   * testing it would spell that table a second time — measured at 1.6× to 1.8× the whole statement,
+   * and a second evaluation of the mapper on every candidate row.
+   */
+  it("leaves the mapper's expression body counting the rows it matched", () => {
+    const written = Write(Root().update((doc) => doc.key("meta")));
+    expect(Sql(written)).to.not.contain("IS DISTINCT FROM");
   });
 });
 
@@ -321,9 +432,11 @@ describe("update under CROSS_INSTANCE", () => {
     const written = Write(
       CrossInstanceRoot().update({ age: AGE } as DeepPartial<Person>),
     );
+    const assignment = '"age" = ($1::double precision)';
     expect(Sql(written)).to.equal(
-      `${UPDATE} "age" = ($1::double precision) WHERE ` +
-        IdentityPredicate(`SELECT ${ROW_COLUMNS} ${FROM_TABLE}`),
+      `${UPDATE} ${assignment} WHERE ` +
+        `${IdentityPredicate(`SELECT ${ROW_COLUMNS} ${FROM_TABLE}`)}` +
+        ` AND ${UnchangedRows(assignment)}`,
     );
     expect(Sql(written)).to.not.contain(INSTANCE_PREDICATE);
   });
@@ -372,7 +485,7 @@ describe("the update statement's mapper, whose body is an expression", () => {
   it("assigns every column at once from one evaluation of the body", () => {
     const written = Write(Root().update((doc) => doc.key("meta")));
     expect(Sql(written)).to.equal(
-      Changes(Mapped('"w0"."meta"', MAPPED_HELD), MAPPED_WRAP),
+      Assigns(Mapped('"w0"."meta"', MAPPED_HELD), MAPPED_WRAP),
     );
   });
 
@@ -423,7 +536,11 @@ describe("the update statement's parameter ledger", () => {
       Update({ nickname: undefined }),
       Update({ age: AGE, nickname: NICKNAME, stale: undefined }),
       Update({ _id: KEY, age: AGE }),
-      Write(Root().update((doc) => ({ _id: KEY, age: doc.key("age") }))),
+      Write(
+        Root()
+          .get(KEY)
+          .update((doc) => ({ _id: KEY, age: doc.key("age") })),
+      ),
       Write(CrossInstanceRoot().update({ age: AGE } as DeepPartial<Person>)),
       Write(
         Root()

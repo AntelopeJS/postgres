@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { randomUUID } from "node:crypto";
 import type { DecodingContext } from "./context";
 import { PRIMARY_KEY_LIST } from "./ddl";
-import { DeclaredColumns, type TableShape } from "./fields";
+import { DeclaredColumns, PhysicalOrder, type TableShape } from "./fields";
 import {
   ID_AS_KEY,
   MembersByColumn,
@@ -34,21 +34,13 @@ import {
 
 const EXCLUDED_ROW = "EXCLUDED";
 const INSERTED: PayloadOptions = { id: ID_AS_KEY };
+const SIGNATURE_SEPARATOR = ",";
+const SINGLE_GROUP = 1;
+const GROUP_PREFIX = "g";
+const GROUP_RESULT = "SELECT 1";
 
 function Excluded(column: string): string {
   return `${EXCLUDED_ROW}.${QuoteIdentifier(column)}`;
-}
-
-/**
- * The physical column order an insert names, given whatever the caller has for each part.
- *
- * The column list and every tuple beneath it are built from different material — names in one,
- * compiled values in the other — and have to agree *positionally*, so a second spelling of the
- * order is how a tuple writes each value into the column beside the one it meant: same arity, no
- * error, every row wrong.
- */
-function PhysicalOrder<T>(key: T, instance: T, declared: T[], extra: T): T[] {
-  return [key, instance, ...declared, extra];
 }
 
 /**
@@ -225,12 +217,85 @@ function InsertInto(origin: TableOrigin, columns: string[]): string {
   return `INSERT INTO ${WriteTable(origin)} (${named.join(", ")})`;
 }
 
+/** Everything one batch's statements share, whichever rows each of them writes. */
+interface InsertPlan {
+  origin: TableOrigin;
+  mode?: ConflictMode;
+  instance: string;
+}
+
+/** One complete statement over the rows given, naming exactly the columns those rows write. */
+function GroupStatement(plan: InsertPlan, rows: InsertRow[]): string {
+  const shape = plan.origin.shape;
+  const columns = plan.mode?.everyColumn
+    ? DeclaredColumns(shape)
+    : BatchColumns(shape, rows);
+  const tuples = rows.map((row) => RowTuple(row, columns, plan.instance));
+  return `${InsertInto(plan.origin, columns)} VALUES ${tuples.join(", ")}${ConflictClause(columns, plan.mode)}`;
+}
+
+/**
+ * The rows of a batch, split into the groups that can share one column list without lying.
+ *
+ * A `DO UPDATE` assigns `EXCLUDED.col` for every column the statement names, and a row that omitted
+ * one writes NULL into that column of the tuple — so a heterogeneous batch under a merging conflict
+ * would null a stored value the payload never mentioned. Grouping by the keys a row supplied is
+ * what keeps each `DO UPDATE` to the columns its own rows wrote.
+ *
+ * Only that one mode groups. A batch with no conflict clause writes new rows, where NULL is exactly
+ * what an omitted key means, and `replace` names every declared column by definition — both are one
+ * statement, spelled the way they were before this existed.
+ */
+function RowGroups(plan: InsertPlan, rows: InsertRow[]): InsertRow[][] {
+  if (!plan.mode || plan.mode.everyColumn) {
+    return [rows];
+  }
+  const groups = new Map<string, InsertRow[]>();
+  for (const row of rows) {
+    const signature = BatchColumns(plan.origin.shape, [row]).join(
+      SIGNATURE_SEPARATOR,
+    );
+    const group = groups.get(signature);
+    if (group) {
+      group.push(row);
+      continue;
+    }
+    groups.set(signature, [row]);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * The one statement a batch runs, however many column lists its rows needed.
+ *
+ * Data-modifying CTEs are what make several column lists one round trip rather than one statement
+ * per group. A single group is emitted bare: the common batch is homogeneous, and a wrapper it does
+ * not need would put every insert this adapter has ever emitted inside a `WITH`.
+ *
+ * Two CTEs writing the same key have undefined ordering between them, which is not a case this can
+ * reach — a duplicate key within one batch already raises, `21000` under a conflict mode and
+ * `23505` without one.
+ */
+function OneStatement(statements: string[]): string {
+  if (statements.length === SINGLE_GROUP) {
+    return statements[0];
+  }
+  const named = statements.map(
+    (statement, index) =>
+      `${QuoteIdentifier(`${GROUP_PREFIX}${index}`)} AS (${statement})`,
+  );
+  return `WITH ${named.join(", ")} ${GROUP_RESULT}`;
+}
+
 /**
  * Writes new rows, and answers the keys it generated for them in input order.
  *
  * The one write that never reads the relation, which is why the seam refuses it behind any stage
  * that shaped one and why it is the only write that has to reference the instance fragment the
  * query root already bound rather than binding its own.
+ *
+ * The keys are answered off the rows in the order the caller wrote them, never off the groups: the
+ * groups are an ordering of the *statement*, and the answer belongs to the batch.
  */
 export const InsertWrite: WriteCompiler = (target, stage, context) => {
   const instance = RequireInstance(target, stage);
@@ -238,15 +303,16 @@ export const InsertWrite: WriteCompiler = (target, stage, context) => {
   if (documents.length === 0) {
     return { sql: "", ids: [] };
   }
-  const shape = target.origin.shape;
-  const mode = ConflictModeOf(stage);
+  const plan: InsertPlan = {
+    origin: target.origin,
+    mode: ConflictModeOf(stage),
+    instance: instance.sql,
+  };
   const rows = documents.map((document) =>
-    InsertRowOf(document, shape, context),
+    InsertRowOf(document, target.origin.shape, context),
   );
-  const columns = mode?.everyColumn
-    ? DeclaredColumns(shape)
-    : BatchColumns(shape, rows);
-  const tuples = rows.map((row) => RowTuple(row, columns, instance.sql));
-  const sql = `${InsertInto(target.origin, columns)} VALUES ${tuples.join(", ")}${ConflictClause(columns, mode)}`;
-  return { sql, ids: rows.map((row) => row.id) };
+  const statements = RowGroups(plan, rows).map((group) =>
+    GroupStatement(plan, group),
+  );
+  return { sql: OneStatement(statements), ids: rows.map((row) => row.id) };
 };

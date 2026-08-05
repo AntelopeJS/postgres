@@ -216,6 +216,13 @@ describe("arr_index", () => {
     expect(out.type).to.deep.equal(OPAQUE);
   });
 
+  it("leaves a negative subscript to the arrow, which counts from the end itself", () => {
+    const out = Compile((doc) => doc.key("tags").index(-1));
+    const item = `(${TAGS} -> ${Position(FLOAT_PARAM)})`;
+    expect(out.sql).to.equal(Guarded(TAGS, AsText(item)));
+    expect(out.sql).to.not.contain("jsonb_array_length");
+  });
+
   it("clamps the subscript to the int4 range instead of raising 22003", () => {
     const out = Compile((doc) => doc.key("nope").index(3e9));
     expect(out.sql).to.contain("LEAST(GREATEST(trunc(");
@@ -267,10 +274,24 @@ describe("arr_includes", () => {
   });
 });
 
+/**
+ * The bound as the walk compares it: counted from the end when it is negative.
+ *
+ * Transcribed rather than derived, exactly as every other expectation here. The operand is spelled
+ * inside it because the length it counts back from is read off the same value the walk elements
+ * come from, which is what makes `slice(-3)` mean the last three.
+ */
+function FromEnd(operand: string, bound: string): string {
+  const counted = `GREATEST(jsonb_array_length(${operand}) + trunc(${bound}), 0)`;
+  return `(CASE WHEN trunc(${bound}) < 0 THEN ${counted} ELSE trunc(${bound}) END)`;
+}
+
 describe("arr_slice", () => {
   it("translates zero-based end-exclusive bounds onto one-based ordinality", () => {
     const out = Compile((doc) => doc.key("tags").slice(1, 3));
-    const bounds = ` WHERE ("t0"."ord" > ${FLOAT_PARAM} AND "t0"."ord" <= ${SECOND_FLOAT_PARAM})`;
+    const low = FromEnd(TAGS, FLOAT_PARAM);
+    const high = FromEnd(TAGS, SECOND_FLOAT_PARAM);
+    const bounds = ` WHERE ("t0"."ord" > ${low} AND "t0"."ord" <= ${high})`;
     const body = Walk(TAGS, "t0", Collected("t0", Element("t0")), bounds);
     expect(out.sql).to.equal(Guarded(TAGS, body));
     expect(out.type).to.deep.equal(ArrayOf(TEXT));
@@ -278,10 +299,27 @@ describe("arr_slice", () => {
 
   it("omits the upper bound when no end is given", () => {
     const out = Compile((doc) => doc.key("tags").slice(1));
-    const bounds = ` WHERE ("t0"."ord" > ${FLOAT_PARAM})`;
+    const bounds = ` WHERE ("t0"."ord" > ${FromEnd(TAGS, FLOAT_PARAM)})`;
     expect(out.sql).to.equal(
       Guarded(TAGS, Walk(TAGS, "t0", Collected("t0", Element("t0")), bounds)),
     );
+  });
+
+  it("counts a negative bound back from the array's own length", () => {
+    const out = Compile((doc) => doc.key("tags").slice(-3));
+    expect(out.sql).to.contain(`"t0"."ord" > ${FromEnd(TAGS, FLOAT_PARAM)}`);
+    expect(out.sql).to.contain(`jsonb_array_length(${TAGS})`);
+  });
+
+  it("floors a bound reaching past the start at the first element", () => {
+    expect(Compile((doc) => doc.key("tags").slice(-9)).sql).to.contain(
+      "GREATEST(",
+    );
+  });
+
+  it("reads the length of the very value it walks, undeclared key and all", () => {
+    const out = Compile((doc) => doc.key("nope").slice(-1));
+    expect(out.sql).to.contain(`jsonb_array_length(${EXTRA})`);
   });
 
   it("coalesces an empty result to an empty array rather than null", () => {
@@ -315,13 +353,32 @@ const SLICE_BOUNDARIES: SliceBounds[] = [
   { items: ["a"], start: 0, end: 0 },
   { items: ["a", "b", "c"], start: 0.5, end: 2.5 },
   { items: ["a", "b", "c"], start: 1.5, end: 2.5 },
+  { items: ["a", "b", "c"], start: -3 },
+  { items: ["a", "b", "c"], start: -1 },
+  { items: ["a", "b", "c"], start: -9 },
+  { items: ["a", "b", "c"], start: 0, end: -1 },
+  { items: ["a", "b", "c"], start: 1, end: -1 },
+  { items: ["a", "b", "c"], start: -2, end: -1 },
+  { items: ["a", "b", "c"], start: -1, end: -2 },
+  { items: ["a", "b", "c"], start: 0, end: -9 },
+  { items: ["a", "b", "c"], start: -1.5 },
+  { items: [], start: -1 },
 ];
 
+/** The bound the walk compares against, which is `GREATEST(len + s, 0)` below the origin. */
+function Translated(bound: number, length: number): number {
+  const truncated = Math.trunc(bound);
+  return truncated < 0 ? Math.max(length + truncated, 0) : truncated;
+}
+
 function KeptByOrdinality(bounds: SliceBounds): string[] {
+  const length = bounds.items.length;
+  const start = Translated(bounds.start, length);
   return bounds.items.filter((_, index) => {
     const ordinal = index + 1;
-    const afterStart = ordinal > bounds.start;
-    return afterStart && (bounds.end === undefined || ordinal <= bounds.end);
+    const end = bounds.end;
+    const beforeEnd = end === undefined || ordinal <= Translated(end, length);
+    return ordinal > start && beforeEnd;
   });
 }
 
@@ -332,8 +389,10 @@ function Described(bounds: SliceBounds): string {
 describe("arr_slice boundaries", () => {
   it("emits the very predicate the boundary cases below are checked against", () => {
     const out = Compile((doc) => doc.key("tags").slice(1, 3));
+    const low = FromEnd(TAGS, FLOAT_PARAM);
+    const high = FromEnd(TAGS, SECOND_FLOAT_PARAM);
     expect(out.sql).to.contain(
-      ` WHERE ("t0"."ord" > ${FLOAT_PARAM} AND "t0"."ord" <= ${SECOND_FLOAT_PARAM})`,
+      ` WHERE ("t0"."ord" > ${low} AND "t0"."ord" <= ${high})`,
     );
   });
 
@@ -614,11 +673,17 @@ describe("array operand emission", () => {
       Occurrences(Compile((doc) => doc.key("tags").isempty()).sql, TAGS),
     ).to.equal(2);
     expect(
-      Occurrences(Compile((doc) => doc.key("tags").slice(0)).sql, TAGS),
-    ).to.equal(2);
-    expect(
       Occurrences(Compile((doc) => doc.key("tags").min()).sql, TAGS),
     ).to.equal(2);
+  });
+
+  it("emits it once more per slice bound, which reads the length to count back", () => {
+    expect(
+      Occurrences(Compile((doc) => doc.key("tags").slice(0)).sql, TAGS),
+    ).to.equal(3);
+    expect(
+      Occurrences(Compile((doc) => doc.key("tags").slice(0, 2)).sql, TAGS),
+    ).to.equal(4);
   });
 
   it("emits it once for the unguarded containment test", () => {

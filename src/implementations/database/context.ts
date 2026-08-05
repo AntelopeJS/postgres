@@ -54,18 +54,24 @@ const ALIAS_PREFIX = "t";
 export class DecodingContext {
   public readonly params = new ParamCollector();
 
-  /**
-   * How a root nested inside the stage tree — a union's right side — learns about its table.
-   *
-   * Injected for the same reason the compilers are; see {@link OriginResolver}. Left unset
-   * outside a spec, where `RegisteredOrigin` is what a nested root falls back to.
-   */
-  public resolveOrigin?: OriginResolver;
-
   private readonly bindings: Record<number, ArgumentBinding> = {};
   private aliasCounter = 0;
 
-  public constructor(private readonly compilers: Compilers) {}
+  /**
+   * @param compilers The nested compilations this statement's layers reach back for.
+   * @param resolveOrigin How a root nested inside the stage tree — a union's right side — learns
+   * about its table. This is the *other* kind of seam from {@link Compilers}, and the difference
+   * is why it is a second parameter rather than a fourth member of it: the compilers are required
+   * and exist because importing them outright would close a require cycle, while this one is
+   * optional and exists only so a spec can compile against a stub registry — `selection.ts` can
+   * import `schema.ts`, so production never sets it and falls back to `RegisteredOrigin`. Readonly
+   * and supplied once because a reassignment mid-compilation would resolve a union's two sides
+   * against different registries, with no failing type (invariant 21).
+   */
+  public constructor(
+    private readonly compilers: Compilers,
+    public readonly resolveOrigin?: OriginResolver,
+  ) {}
 
   public nextAlias(): string {
     return `${ALIAS_PREFIX}${this.aliasCounter++}`;

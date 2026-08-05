@@ -65,6 +65,26 @@ export function DocumentKeys(shape: TableShape): string[] {
   return [ID_COLUMN, ...Object.keys(shape.fields)];
 }
 
+/**
+ * The physical column order a row is stored in, given whatever the caller has for each part.
+ *
+ * The one owner of `[_id, _instance, …declared, _extra]` (invariant 17): the column definitions
+ * the table is created with, the qualified references a row-mode select list reads back, and the
+ * column list an insert names above tuples built from *different material* all have to agree on
+ * both the set and the order. A second spelling is how a tuple writes each value into the column
+ * beside the one it meant — same arity, no error, every row wrong — and how a fifth column added
+ * to one site is dropped by the other two without a word. Generic so the same call assembles
+ * names, compiled values and column plans; a fifth part is a compile error at every site.
+ */
+export function PhysicalOrder<T>(
+  key: T,
+  instance: T,
+  declared: T[],
+  extra: T,
+): T[] {
+  return [key, instance, ...declared, extra];
+}
+
 export interface SchemaShape {
   [tableId: string]: TableShape;
 }

@@ -8,6 +8,7 @@ import {
   OTHER_TABLE,
   Other,
   PROFILES_TABLE,
+  ProductDocument,
   ProfilesRoot,
   ReadParamLedger,
   ROOT_ALIAS,
@@ -48,15 +49,6 @@ const ON_TRUE = "ON true";
 const ONE_ROW = "LIMIT ((1)::bigint)";
 const HELD_COLUMN = "looked";
 
-/** The document `ColumnRowSource.toJson` builds over the products table, at the given alias. */
-function ProductDocument(alias: string): string {
-  return (
-    `(jsonb_strip_nulls(jsonb_build_object('_id', "${alias}"."_id",` +
-    ` 'name', "${alias}"."name", 'price', "${alias}"."price"))` +
-    ` || COALESCE("${alias}"."_extra", '{}'::jsonb))`
-  );
-}
-
 /**
  * The document the profiles table materializes, at the given alias.
  *
@@ -93,6 +85,13 @@ const MATCHED_PRODUCTS =
   `(SELECT ${ProductDocument(RIGHT_ALIAS)} AS "value"` +
   ` FROM ${OTHER_TABLE} AS "${RIGHT_ALIAS}"` +
   ` WHERE ${RIGHT_INSTANCE} AND ${MEMBER_NAME})`;
+
+const MEMBER_LOCAL_NAME = `("${RIGHT_ALIAS}"."skills" @> to_jsonb("${ROOT_ALIAS}"."name"))`;
+
+const ONE_PROFILE_BY_MEMBER =
+  `(SELECT ${ProfileDocument(RIGHT_ALIAS)} AS "value"` +
+  ` FROM ${PROFILES_TABLE} AS "${RIGHT_ALIAS}"` +
+  ` WHERE ${RIGHT_INSTANCE} AND ${MEMBER_LOCAL_NAME} ${ONE_ROW})`;
 
 const ALL_PRODUCTS =
   `(SELECT COALESCE(jsonb_agg("${COLLECTED_ALIAS}"."value"), '[]'::jsonb) AS "value"` +
@@ -156,6 +155,11 @@ function OpaqueLookup() {
 
 function ArrayLookup() {
   return ProfilesRoot().lookup(Other(), "skills", "name");
+}
+
+/** The mirror of {@link ArrayLookup}: a scalar local key against a list on the other side. */
+function ArrayOtherLookup() {
+  return Root().lookup(ProfilesRoot() as any, "name", "skills");
 }
 
 function LookupOnGet() {
@@ -273,6 +277,33 @@ describe("a lookup on a local key declared as an array", () => {
       "shape.skills.elem.kind",
       "json",
     );
+  });
+});
+
+describe("a lookup whose other key is declared as an array", () => {
+  it("correlates by membership on the other side, not by equality", () => {
+    expect(Sql(ArrayOtherLookup())).to.equal(
+      `SELECT ${Merged(DOCUMENT, "name", LATERAL_ALIAS)}` +
+        ` AS "value" ${FROM_TABLE}` +
+        ` ${LATERAL} ${ONE_PROFILE_BY_MEMBER} AS "${LATERAL_ALIAS}" ${ON_TRUE}`,
+    );
+  });
+
+  it("wraps the containment in no case, which a gin index cannot see through", () => {
+    const { relation } = Apply(ArrayOtherLookup());
+    const predicate = relation.joins[0].from.split(" WHERE ")[1];
+    expect(predicate).to.contain(MEMBER_LOCAL_NAME);
+    expect(predicate).to.not.contain("CASE");
+  });
+
+  it("keeps the one-row bound, a scalar key still naming one row", () => {
+    const { relation } = Apply(ArrayOtherLookup());
+    expect(relation.joins[0].from).to.contain(ONE_ROW);
+  });
+
+  it("references every parameter it binds, and binds every one it references", () => {
+    const ledger = ReadParamLedger(Apply(ArrayOtherLookup()));
+    expect(ledger.referenced).to.deep.equal(ledger.bound);
   });
 });
 

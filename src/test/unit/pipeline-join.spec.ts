@@ -12,6 +12,8 @@ import {
   OTHER_TABLE,
   Other,
   type Product,
+  ProductColumns,
+  ProductDocument,
   ReadParamLedger,
   ROOT_ALIAS,
   Root,
@@ -37,28 +39,6 @@ const WRAP_ALIAS = "t1";
 const WRAPPED_JOIN_ALIAS = "t3";
 const SECOND_WRAP_ALIAS = "t3";
 const SECOND_JOIN_ALIAS = "t5";
-
-/**
- * The physical select list a row-mode products relation renders, at the given alias.
- *
- * Transcribed rather than derived, exactly as the fixture's people sibling is: a spec that asked
- * the renderer for its own expected value would assert only that the renderer is deterministic.
- */
-function ProductColumns(alias: string): string {
-  return (
-    `"${alias}"."_id", "${alias}"."_instance", "${alias}"."name",` +
-    ` "${alias}"."price", "${alias}"."_extra"`
-  );
-}
-
-/** The document `ColumnRowSource.toJson` builds over the products table, at the given alias. */
-function ProductDocument(alias: string): string {
-  return (
-    `(jsonb_strip_nulls(jsonb_build_object('_id', "${alias}"."_id",` +
-    ` 'name', "${alias}"."name", 'price', "${alias}"."price"))` +
-    ` || COALESCE("${alias}"."_extra", '{}'::jsonb))`
-  );
-}
 
 const RIGHT_ROWS =
   `(SELECT ${ProductColumns(RIGHT_ALIAS)} FROM ${OTHER_TABLE} AS "${RIGHT_ALIAS}"` +

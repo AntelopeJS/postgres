@@ -189,6 +189,30 @@ export function PeopleColumns(alias: string): string {
 
 export const ROW_COLUMNS = PeopleColumns(ROOT_ALIAS);
 
+/**
+ * The document `ColumnRowSource.toJson` builds over the products table, at the given alias.
+ *
+ * Transcribed for {@link PeopleDocument}'s reason. It lives beside its people sibling because the
+ * products table is the second query in every spec that needs two — a join, a lookup, a union and
+ * a subquery — and four transcriptions of one shape are four chances for three of them to stay
+ * right while the fourth silently stops describing what the compiler emits.
+ */
+export function ProductDocument(alias: string): string {
+  return (
+    `(jsonb_strip_nulls(jsonb_build_object('_id', "${alias}"."_id",` +
+    ` 'name', "${alias}"."name", 'price', "${alias}"."price"))` +
+    ` || COALESCE("${alias}"."_extra", '{}'::jsonb))`
+  );
+}
+
+/** The physical row-mode select list `Render` builds over the products table, at the given alias. */
+export function ProductColumns(alias: string): string {
+  return (
+    `"${alias}"."_id", "${alias}"."_instance", "${alias}"."name",` +
+    ` "${alias}"."price", "${alias}"."_extra"`
+  );
+}
+
 const SHAPES: Record<string, TableShape> = {
   [TABLE_ID]: PEOPLE,
   [OTHER_TABLE_ID]: PRODUCTS,
@@ -199,6 +223,7 @@ const SHAPES: Record<string, TableShape> = {
 
 const INDEXES: Record<string, string[]> = {
   byNameAge: ["name", "age"],
+  byNameSkills: ["name", "skills"],
 };
 
 /** The stubbed {@link OriginResolver} a pipeline spec compiles against, registry and all. */
@@ -248,14 +273,16 @@ function PipelineCompilers(): Compilers {
  */
 function CountingContext(subquery: SubqueryCompiler): StubContext {
   let calls = 0;
-  const context = new DecodingContext({
-    ...PipelineCompilers(),
-    subquery: (stages, inner) => {
-      calls++;
-      return subquery(stages, inner);
+  const context = new DecodingContext(
+    {
+      ...PipelineCompilers(),
+      subquery: (stages, inner) => {
+        calls++;
+        return subquery(stages, inner);
+      },
     },
-  });
-  context.resolveOrigin = StubOrigin;
+    StubOrigin,
+  );
   context.nextAlias();
   return { context, subqueries: () => calls };
 }
@@ -392,8 +419,7 @@ export interface Written {
  * for itself.
  */
 export function Write(query: StagedObject): Written {
-  const context = new DecodingContext(PipelineCompilers());
-  context.resolveOrigin = StubOrigin;
+  const context = new DecodingContext(PipelineCompilers(), StubOrigin);
   const statement = WithOptions({}, () => {
     const root = BuildRoot(query.build(), context);
     const split = SplitWrite(root.rest);
@@ -450,6 +476,58 @@ export function IdentityPredicate(
  */
 export function AssertedIdentity(param: string): string {
   return `("${WRITE_ALIAS}"."_id" = (${param}::text))`;
+}
+
+/** One assignment of a `SET` list, split back into the two halves the conjunct reads apart. */
+interface WrittenColumn {
+  column: string;
+  value: string;
+}
+
+const ASSIGNS = " = ";
+const NO_DEPTH = 0;
+const SEPARATOR_WIDTH = 2;
+
+/**
+ * A `SET` list split into its assignments, on the commas that are not inside a call.
+ *
+ * The one thing these fixtures derive rather than transcribe, and it is safe in the direction that
+ * matters: the input is the spec's own expected `SET` list, so a split that goes wrong builds an
+ * expectation the compiler does not match and fails loudly. It can hide no defect, because the
+ * compiler assembles the two halves from a list and never parses anything.
+ */
+function SplitAssignments(assignments: string): WrittenColumn[] {
+  const parts: string[] = [];
+  let depth = NO_DEPTH;
+  let start = NO_DEPTH;
+  for (let index = 0; index < assignments.length; index++) {
+    const character = assignments[index];
+    depth += Number(character === "(") - Number(character === ")");
+    if (character === "," && depth === NO_DEPTH) {
+      parts.push(assignments.slice(start, index));
+      start = index + SEPARATOR_WIDTH;
+    }
+  }
+  parts.push(assignments.slice(start));
+  return parts.map((part) => ({
+    column: part.slice(NO_DEPTH, part.indexOf(ASSIGNS)),
+    value: part.slice(part.indexOf(ASSIGNS) + ASSIGNS.length),
+  }));
+}
+
+/**
+ * The conjunct that keeps a row the write would not change out of the count it answers.
+ *
+ * Derived from the `SET` list beside it because every statement `update` and `replace` compile
+ * carries one, and spelling it out per spec would say the same thing thirty times over in files
+ * whose subject is the `SET` list. Two specs transcribe it by hand instead, which is what pins the
+ * derivation itself.
+ */
+export function UnchangedRows(assignments: string): string {
+  const written = SplitAssignments(assignments);
+  const columns = written.map((one) => `"${WRITE_ALIAS}".${one.column}`);
+  const values = written.map((one) => one.value);
+  return `((${columns.join(", ")}) IS DISTINCT FROM (${values.join(", ")}))`;
 }
 
 /** The one row a `get` selects, as the identity target renders it. */

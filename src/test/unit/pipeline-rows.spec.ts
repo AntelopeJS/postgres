@@ -24,6 +24,7 @@ import {
   Other,
   PeopleDocument,
   type Person,
+  ProductDocument,
   ReadParamLedger,
   Root,
   Sql,
@@ -229,9 +230,7 @@ describe("the nth stage", () => {
 const RIGHT_SOURCE = `FROM ${OTHER_TABLE} AS "t1"`;
 const UNION_SELECTS = 2;
 
-const PRODUCT_DOCUMENT =
-  `(jsonb_strip_nulls(jsonb_build_object('_id', "t1"."_id", 'name', "t1"."name",` +
-  ` 'price', "t1"."price")) || COALESCE("t1"."_extra", '{}'::jsonb))`;
+const PRODUCT_DOCUMENT = ProductDocument("t1");
 
 const PLAIN_UNION =
   `SELECT "t2"."value" AS "value" FROM ((SELECT ${DOCUMENT}` +

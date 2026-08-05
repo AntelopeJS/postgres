@@ -1,8 +1,8 @@
 import assert from "node:assert";
 import type { DecodingContext } from "./context";
 import type { FieldSpec, TableShape } from "./fields";
+import { WrittenAs } from "./readings";
 import type { Compiled } from "./sql";
-import { StoredAs } from "./stage";
 import { TEXT } from "./types";
 import { ID_COLUMN, RESERVED_COLUMNS } from "./utils";
 import { DecodeValue } from "./value";
@@ -139,7 +139,7 @@ export function NoIdSupplied(value: unknown): boolean {
 /**
  * Routes the one reserved column a payload may name, and refuses the two it may not.
  *
- * The key is read *as* `TEXT` through {@link StoredAs} rather than cast to it, which is the same
+ * The key is read *as* `TEXT` through {@link WrittenAs} rather than cast to it, which is the same
  * reading `get` gives the key it selects on (invariant 13): the two have to agree, or a key that
  * addressed a row on the way in fails to address it on the way back.
  *
@@ -158,11 +158,12 @@ function TakeReserved(walk: PayloadWalk, name: string, value: unknown): void {
   if (NoIdSupplied(value)) {
     return;
   }
-  walk.options.id(walk.split, StoredAs(Decoded(walk, value), TEXT));
+  walk.options.id(walk.split, WrittenAs(Decoded(walk, value), TEXT, name));
 }
 
 function TakeDeclared(
   walk: PayloadWalk,
+  name: string,
   spec: FieldSpec,
   value: unknown,
 ): void {
@@ -172,7 +173,7 @@ function TakeDeclared(
   }
   walk.split.members.push({
     column: spec.column,
-    value: StoredAs(Decoded(walk, value), spec.type),
+    value: WrittenAs(Decoded(walk, value), spec.type, name),
   });
 }
 
@@ -190,7 +191,7 @@ function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
     return;
   }
   if (Object.hasOwn(walk.shape.fields, name)) {
-    TakeDeclared(walk, walk.shape.fields[name], value);
+    TakeDeclared(walk, name, walk.shape.fields[name], value);
     return;
   }
   TakeUndeclared(walk, name, value);
@@ -200,7 +201,7 @@ function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
  * Classifies a write payload against the shape the table declares.
  *
  * A declared field is written into its own typed column, read as that column's type rather than
- * cast to it — see {@link StoredAs}. Anything else is a member of the overflow document, and the
+ * cast to it — see {@link WrittenAs}. Anything else is a member of the overflow document, and the
  * reserved columns are answered by `options`.
  *
  * `undefined` and `null` are different instructions and only one of them survives decoding: a

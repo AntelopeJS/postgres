@@ -4,7 +4,12 @@ import type {
   TableDefinition,
 } from "@antelopejs/interface-database/schema";
 import type { MigrationMode } from "../../config";
-import type { FieldSpec, SchemaShape, TableShape } from "./fields";
+import {
+  type FieldSpec,
+  PhysicalOrder,
+  type SchemaShape,
+  type TableShape,
+} from "./fields";
 import { IndexName, QualifiedName, TableName } from "./identifier";
 import { JsonKey, QuoteIdentifier, QuoteLiteral } from "./sql";
 import { IsJsonBacked, OPAQUE, PhysicalType, TEXT } from "./types";
@@ -177,14 +182,14 @@ export function BuildTablePlan(
   definition: TableDefinition,
   shape: TableShape,
 ): TablePlan {
-  const declared = Object.values(shape.fields).map((spec) => ({
+  const declared: ColumnPlan[] = Object.values(shape.fields).map((spec) => ({
     name: spec.column,
     type: PhysicalType(spec.type),
   }));
   return {
     id: tableId,
     table: TableName(tableId),
-    columns: [ID_PLAN, INSTANCE_PLAN, ...declared, EXTRA_PLAN],
+    columns: PhysicalOrder(ID_PLAN, INSTANCE_PLAN, declared, EXTRA_PLAN),
     indexes: Object.entries(definition.indexes ?? {}).map(([indexId, index]) =>
       BuildIndexPlan(tableId, indexId, index, shape),
     ),

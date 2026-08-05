@@ -1,31 +1,35 @@
 import type { QueryStage } from "@antelopejs/interface-database/common";
 import { Cast } from "./coerce";
 import type { DecodingContext } from "./context";
-import type { Compiled } from "./sql";
 import {
   ARRAY_TYPEOF,
+  Collected,
+  GuardJson,
+  ORDINAL_COLUMN,
+  VALUE_COLUMN,
+  Walk,
+  WalkColumn,
+} from "./jsonb";
+import {
   AsFloat,
   AsJson,
-  BuildStages,
   ClampToRange,
-  Collected,
-  FIRST_OPERAND,
-  GuardJson,
   INT4_MAX,
   INT4_MIN,
-  Lift,
-  LiftRaw,
   Numeric,
   ORDERED_KINDS,
-  ORDINAL_COLUMN,
   Predicate,
+} from "./readings";
+import type { Compiled } from "./sql";
+import {
+  BuildStages,
+  FIRST_OPERAND,
+  Lift,
+  LiftRaw,
   RequireOperand,
   SECOND_OPERAND,
   type StageHandler,
   type StageMap,
-  VALUE_COLUMN,
-  Walk,
-  WalkColumn,
 } from "./stage";
 import { ArrayOf, BOOL, FLOAT, OPAQUE, type SqlType } from "./types";
 import { DecodeFunction } from "./value";
@@ -39,6 +43,9 @@ const NO_ELEMENTS = "0";
 const EMPTY_SUM = "0";
 const AFTER_START = ">";
 const BEFORE_END = "<=";
+
+/** Where the array begins: a bound below it counts from the end, and cannot reach past it. */
+const ARRAY_ORIGIN = "0";
 
 function ElementType(type: SqlType): SqlType {
   return type.kind === "array" ? type.elem : OPAQUE;
@@ -111,14 +118,36 @@ const IncludesStage = Lift((value, args, stage) => {
   return { sql: test, type: BOOL };
 });
 
+/**
+ * One slice bound as an ordinal, counted back from the array's own length when it is negative.
+ *
+ * `slice(-3)` is the idiom for the last three elements, and both sibling backends read it that way.
+ * The length comes from the operand rather than from the walk, because the predicate runs per
+ * element and has no other way to know how many there are. It is spelled inline rather than held:
+ * the operand is already emitted twice inside the guard, and a `HeldOnce` here would buy text size
+ * at a measured +25 % of execution (invariant 14).
+ *
+ * `trunc` is what makes a fractional bound agree with `Array.prototype.slice`, which truncates
+ * toward zero before counting from the end — the ordinal comparison alone agrees for a positive
+ * bound and would count `-1.5` back one and a half elements otherwise.
+ */
+function FromEnd(json: string, bound: string): string {
+  const truncated = `trunc(${bound})`;
+  const counted = `GREATEST(${LENGTH_FUNCTION}(${json}) + ${truncated}, ${ARRAY_ORIGIN})`;
+  return `(CASE WHEN ${truncated} < ${ARRAY_ORIGIN} THEN ${counted} ELSE ${truncated} END)`;
+}
+
 function Bounds(
+  json: string,
   alias: string,
   start: Compiled,
   end: Compiled | undefined,
 ): string {
-  const bounds = [`${Ordinal(alias)} ${AFTER_START} ${Numeric(start).sql}`];
+  const low = FromEnd(json, Numeric(start).sql);
+  const bounds = [`${Ordinal(alias)} ${AFTER_START} ${low}`];
   if (end) {
-    bounds.push(`${Ordinal(alias)} ${BEFORE_END} ${Numeric(end).sql}`);
+    const high = FromEnd(json, Numeric(end).sql);
+    bounds.push(`${Ordinal(alias)} ${BEFORE_END} ${high}`);
   }
   return `(${bounds.join(" AND ")})`;
 }
@@ -128,8 +157,8 @@ const SliceStage = Lift((value, args, stage, context) => {
   const json = AsJson(value);
   const start = RequireOperand(args[FIRST_OPERAND], stage, FIRST_OPERAND);
   const alias = context.nextAlias();
-  const collected = Collected(alias, WalkColumn(alias, VALUE_COLUMN));
-  const bounds = Bounds(alias, start, args[SECOND_OPERAND]);
+  const collected = Collected(Ordinal(alias), WalkColumn(alias, VALUE_COLUMN));
+  const bounds = Bounds(json.sql, alias, start, args[SECOND_OPERAND]);
   return {
     sql: GuardJson(
       json,
@@ -163,7 +192,7 @@ function BindElement(
 const MapStage = LiftRaw((value, stage, context) => {
   const lambda = BindElement(value, stage, context);
   const json = AsJson(value);
-  const collected = Collected(lambda.alias, AsJson(lambda.body).sql);
+  const collected = Collected(Ordinal(lambda.alias), AsJson(lambda.body).sql);
   return {
     sql: GuardJson(
       json,
@@ -179,7 +208,7 @@ const FilterStage = LiftRaw((value, stage, context) => {
   const lambda = BindElement(value, stage, context);
   const json = AsJson(value);
   const collected = Collected(
-    lambda.alias,
+    Ordinal(lambda.alias),
     WalkColumn(lambda.alias, VALUE_COLUMN),
   );
   const kept = Predicate(lambda.body).sql;
@@ -267,9 +296,10 @@ function ReducerStage(reducer: Reducer): StageHandler {
  *   number, a string or an object on either side. It is recursive for a container element, so
  *   `[[1,2]].includes([1])` is true where the contract says false.
  * - `arr_slice` translates 0-based end-exclusive bounds onto 1-based ordinality, which is why the
- *   lower bound is a strict `>` and the upper an inclusive `<=`. A negative bound is not
- *   translated: a negative start keeps the whole array and a negative end keeps none of it, where
- *   ReQL counts both from the end.
+ *   lower bound is a strict `>` and the upper an inclusive `<=`. Either bound counts from the end
+ *   when it is negative — see {@link FromEnd} — which is what `slice(-3)` means in ReQL, in
+ *   JavaScript and in both sibling backends. Comparing an untranslated `-3` against a 1-based
+ *   ordinal is true of every element, so the whole array came back.
  * - `arr_map` and `arr_filter` bind the element as a `Compiled` argument rather than a row, at
  *   the declared element type, so `map((tag) => tag.upcase())` over a `string[]` reaches `upper`
  *   without a jsonb round trip. They read their callback raw: it is a recorded lambda, not a

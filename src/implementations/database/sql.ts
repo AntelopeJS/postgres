@@ -5,6 +5,15 @@ export interface Compiled {
   type: SqlType;
 }
 
+/**
+ * The one spelling of a json null, which is a jsonb *value* and not SQL NULL.
+ *
+ * Both facts that need it are downstream of that distinction — `eq(null)` has to test for it beside
+ * `IS NULL`, and `COALESCE` has to be told about it — and they live in modules that cannot import
+ * each other, so the literal itself lives here (invariant 17).
+ */
+export const JSON_NULL = "'null'::jsonb";
+
 export class ParamCollector {
   private readonly values: unknown[] = [];
 

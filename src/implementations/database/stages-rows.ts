@@ -4,6 +4,7 @@ import type { QueryStage } from "@antelopejs/interface-database/common";
 import { Cast, Widen } from "./coerce";
 import type { DecodingContext } from "./context";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
+import { ClampToRange, INT4_MAX, Numeric, Predicate } from "./readings";
 import {
   CurrentValue,
   IndexColumns,
@@ -12,20 +13,14 @@ import {
   type Relation,
   type RelationFlag,
   Render,
+  RowBound,
   SetProjection,
+  SINGLE_ROW,
   ValueRelation,
   WHERE_BLOCKERS,
 } from "./relation";
 import type { Compiled } from "./sql";
-import {
-  ClampToRange,
-  FIRST_OPERAND,
-  INT4_MAX,
-  Numeric,
-  Predicate,
-  RequireOperand,
-  SECOND_OPERAND,
-} from "./stage";
+import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import type { SqlType } from "./types";
 import { DecodeFunction, DecodeValue } from "./value";
 
@@ -61,24 +56,9 @@ const BOUND_BLOCKERS: readonly RelationFlag[] = [
 ];
 
 const DESCENDING = "desc";
-const ONE_ROW = "1";
 
 const LOWEST_BOUND = 0;
 const HIGHEST_BOUND = INT4_MAX;
-
-function RowBound(sql: string): string {
-  return `((${sql})::bigint)`;
-}
-
-/**
- * The bound that makes a relation answer at most one row, spelled once for both its callers.
- *
- * `nth` takes it because the contract asks for one row, and `lookup`'s lateral takes it because a
- * lateral answering more than one row would multiply the left side it was given. A second spelling
- * would be free to drift from this one — a bound that stopped clamping, or that stopped casting to
- * the type `LIMIT` takes — with nothing failing (invariant 17).
- */
-export const SINGLE_ROW = RowBound(ONE_ROW);
 
 /**
  * Bounds a row count above as well as below, and keeps an unreadable one unreadable.

@@ -3,7 +3,9 @@ import { Query } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
 import { UnifyOperands } from "./coerce";
 import type { DecodingContext } from "./context";
+import { EMPTY_ARRAY, HeldOnce, OBJECT_TYPEOF } from "./jsonb";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
+import { AsJson, Predicate } from "./readings";
 import {
   CurrentValue,
   type JoinKind,
@@ -14,6 +16,7 @@ import {
   type RelationFlag,
   Render,
   SetProjection,
+  SINGLE_ROW,
   WHERE_BLOCKERS,
 } from "./relation";
 import { NullableRowSource, type RowSource } from "./row-source";
@@ -23,23 +26,13 @@ import {
   QuoteIdentifier,
   QuoteLiteral,
 } from "./sql";
-import {
-  AsJson,
-  EMPTY_ARRAY,
-  FIRST_OPERAND,
-  HeldOnce,
-  OBJECT_TYPEOF,
-  Predicate,
-  RequireOperand,
-  SECOND_OPERAND,
-} from "./stage";
-import { SINGLE_ROW } from "./stages-rows";
+import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import {
   ArrayOf,
+  IsArray,
   JsonOf,
-  OPAQUE,
+  MergeShapes,
   ShapeOf,
-  type SqlShape,
   type SqlType,
 } from "./types";
 import { DecodeFunction } from "./value";
@@ -326,6 +319,13 @@ function LookedUp(stage: QueryStage, context: DecodingContext): Relation {
  * `=` between a declared `text` column and a jsonb-sourced local key is refused at plan time, so the
  * statement never reads a row (invariant 13). Two columns of one declared kind meet at that kind and
  * take no cast at all, which is what leaves the comparison reachable by a btree index.
+ *
+ * **A scalar key against a column declared as an array is the mirror of the array form and takes
+ * the mirrored operator**, not `=`: unifying an array with a scalar meets at the bottom type, and
+ * `<jsonb array> = <jsonb scalar>` is false on every row of every dataset. Containment is also the
+ * only comparison a `jsonb_ops` GIN index serves, and it is emitted bare for that reason — a guard
+ * around it is one opaque expression no index can be pushed into (invariant 14). The form itself
+ * still comes from the *local* key, which is a scalar and therefore still names one row.
  */
 function Correlate(
   right: Relation,
@@ -333,19 +333,13 @@ function Correlate(
   local: Compiled,
   form: LookupForm,
 ): void {
-  const unified = UnifyOperands(right.source.field(otherKey), local);
-  right.where.push(form.correlate(unified.left, unified.right));
-}
-
-function ReplacedType(
-  shape: SqlShape | undefined,
-  key: string,
-  value: SqlType,
-): SqlType {
-  if (!shape) {
-    return OPAQUE;
+  const other = right.source.field(otherKey);
+  if (IsArray(other.type) && !IsArray(local.type)) {
+    right.where.push(`(${other.sql} ${CONTAINS} ${AsJson(local).sql})`);
+    return;
   }
-  return JsonOf({ ...shape, [key]: value });
+  const unified = UnifyOperands(other, local);
+  right.where.push(form.correlate(unified.left, unified.right));
 }
 
 /**
@@ -406,7 +400,7 @@ function Replaced(
     sql: shape
       ? `(${left} || ${member})`
       : GuardedMerge(left, member, context.nextAlias()),
-    type: ReplacedType(shape, key, value.type),
+    type: MergeShapes(document.type, JsonOf({ [key]: value.type })),
   };
 }
 

@@ -1,18 +1,47 @@
 import type { DecodingContext } from "./context";
+import { Collected } from "./jsonb";
+import { AsJson } from "./readings";
 import {
+  AbsorbOrder,
   CurrentValue,
-  OUTPUT_COLUMN,
+  Prepare,
   type Relation,
+  type RelationFlag,
   Render,
   SetProjection,
 } from "./relation";
-import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
-import { AsJson, EMPTY_ARRAY } from "./stage";
+import type { Compiled } from "./sql";
 import { ArrayOf } from "./types";
 import type { QueryStage } from "./utils";
 
 /**
- * Collects every row of a nested query into one jsonb array, empty rather than NULL.
+ * What has already decided *which* rows there are blocks the aggregate from absorbing.
+ *
+ * Shorter than `stages-aggregate.ts`'s list by `projection`, and that difference is the point: the
+ * projection is exactly what this aggregate collects, so blocking on it would wrap every nested
+ * query that ever named a field. `aggregated` is absent because a relation that has already
+ * aggregated answers one row and takes the single-row branch instead, never this one.
+ */
+const SUBQUERY_BLOCKERS: readonly RelationFlag[] = [
+  "limit",
+  "offset",
+  "distinct",
+];
+
+/**
+ * Collects every row of a nested query into one jsonb array, in the order the query asked for.
+ *
+ * The aggregate is **absorbed into the relation** rather than wrapped around a rendering of it, the
+ * way `stages-aggregate.ts:SetAggregate` absorbs a stream aggregate: only from inside can
+ * `jsonb_agg` name the relation's own order terms, and PostgreSQL does not promise a subquery's
+ * `ORDER BY` survives into an outer aggregate at all — it is observed today and is a plan change
+ * away from not being. Both sibling backends preserve it. It also removes a select level rather
+ * than adding one.
+ *
+ * The terms leave through {@link AbsorbOrder}, which is the same door the stream aggregate takes
+ * and which asserts invariant 19 for both. Here they are re-emitted rather than discarded, so a
+ * term holding a `$n` would not break *this* bind — the assertion belongs to the door, not to the
+ * caller, and one of its two callers genuinely throws the text away.
  *
  * The projected column is read as jsonb first. `jsonb_agg` takes `anyelement` and so would accept
  * a declared scalar column as it is, but then each element would be spelled by that type's own
@@ -22,23 +51,15 @@ import type { QueryStage } from "./utils";
  * The element type is read off the projection **before** {@link AsJson}, not after it: a cast to
  * the bottom type answers a bottom-typed value, so `ArrayOf` over the cast would widen a stream of
  * timestamps to raw json and lose the revival the decoder does from the type descriptor alone.
- *
- * `jsonb_agg` preserves the nested query's own `ORDER BY` in practice and does not promise to;
- * there is no way to spell `jsonb_agg(… ORDER BY …)` over a rendered relation, so that is a
- * documented divergence rather than something to guard.
  */
-function Aggregated(
-  relation: Relation,
-  value: Compiled,
-  context: DecodingContext,
-): Compiled {
-  const alias = context.nextAlias();
-  const rows = Render(SetProjection(relation, AsJson(value)));
+function Aggregated(relation: Relation, context: DecodingContext): Compiled {
+  const prepared = Prepare(relation, SUBQUERY_BLOCKERS, context);
+  const value = CurrentValue(prepared);
+  const type = ArrayOf(value.type);
+  const collected = Collected(AbsorbOrder(prepared), AsJson(value).sql);
   return {
-    sql:
-      `(SELECT COALESCE(jsonb_agg(${QualifiedColumn(alias, OUTPUT_COLUMN)}), ${EMPTY_ARRAY})` +
-      ` FROM (${rows}) AS ${QuoteIdentifier(alias)})`,
-    type: ArrayOf(value.type),
+    sql: `(${Render(SetProjection(prepared, { sql: collected, type }))})`,
+    type,
   };
 }
 
@@ -65,10 +86,10 @@ export function CompileSubquery(
   context: DecodingContext,
 ): Compiled {
   const relation = context.relation(stages);
-  const value = CurrentValue(relation);
   if (!relation.single) {
-    return Aggregated(relation, value, context);
+    return Aggregated(relation, context);
   }
+  const value = CurrentValue(relation);
   return {
     sql: `(${Render(SetProjection(relation, value))})`,
     type: value.type,

@@ -229,6 +229,27 @@ describe("WithDefault", () => {
     expect(out.type).to.equal(FLOAT);
   });
 
+  it("fires on a stored json null when the unified type is jsonb-backed", () => {
+    const out = WithDefault(
+      { sql: "v", type: OPAQUE },
+      { sql: "jsonb_build_object()", type: OPAQUE },
+    );
+    expect(out.sql).to.equal(
+      "COALESCE(NULLIF(v, 'null'::jsonb), jsonb_build_object())",
+    );
+    expect(out.type).to.equal(OPAQUE);
+  });
+
+  it("fires on a stored json null under an array-typed default too", () => {
+    const out = WithDefault(
+      { sql: "v", type: OPAQUE },
+      { sql: "jsonb_build_array()", type: ArrayOf(TEXT) },
+    );
+    expect(out.sql).to.equal(
+      "COALESCE(NULLIF(v, 'null'::jsonb), jsonb_build_array())",
+    );
+  });
+
   it("returns the value untouched when no default is given", () => {
     expect(WithDefault({ sql: "v", type: OPAQUE }).sql).to.equal("v");
   });

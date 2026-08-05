@@ -2,7 +2,7 @@ import { Query, ValueProxy } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
 import { Cast, UnifyAll } from "./coerce";
 import type { ArgumentBinding, DecodingContext } from "./context";
-import { type Compiled, Param, QuoteLiteral } from "./sql";
+import { type Compiled, JSON_NULL, Param, QuoteLiteral } from "./sql";
 import {
   ArrayOf,
   BOOL,
@@ -27,7 +27,7 @@ const PRIMITIVE_TYPES: Record<string, SqlType> = {
  * literal — `eq` and `ne`, which must become an `IS NULL` test rather than a comparison against
  * the bottom type — can detect it by identity.
  */
-export const NULL_JSON: Compiled = { sql: "'null'::jsonb", type: OPAQUE };
+export const NULL_JSON: Compiled = { sql: JSON_NULL, type: OPAQUE };
 
 /**
  * Turn a value handed to the query builder into a SQL fragment.
