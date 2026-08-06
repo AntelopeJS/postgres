@@ -1,5 +1,6 @@
 import { Cast, WithDefault } from "./coerce";
 import { DocumentKeys, type TableShape } from "./fields";
+import { Defaulted } from "./readings";
 import { type Compiled, JsonKey, QualifiedColumn, QuoteLiteral } from "./sql";
 import {
   IsJsonBacked,
@@ -75,6 +76,11 @@ export function BuildDocument(
   return { sql: `(${parts.join(" || ")})`, type: JsonOf(MemberShape(members)) };
 }
 
+/** Names a key in the message {@link Defaulted} raises for a default the column cannot hold. */
+function KeySubject(name: string): string {
+  return `The default for key '${name}'`;
+}
+
 export class ColumnRowSource implements RowSource {
   public constructor(
     private readonly alias: string,
@@ -83,13 +89,18 @@ export class ColumnRowSource implements RowSource {
 
   public field(name: string, def?: Compiled): Compiled {
     if (name === ID_COLUMN) {
-      return WithDefault({ sql: this.column(ID_COLUMN), type: TEXT }, def);
+      return Defaulted(
+        { sql: this.column(ID_COLUMN), type: TEXT },
+        def,
+        KeySubject(name),
+      );
     }
     if (Object.hasOwn(this.table.fields, name)) {
       const spec = this.table.fields[name];
-      return WithDefault(
+      return Defaulted(
         { sql: this.column(spec.column), type: spec.type },
         def,
+        KeySubject(name),
       );
     }
     return WithDefault(

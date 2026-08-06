@@ -139,6 +139,7 @@ export function BuildRoot(
     resolve(schemaId, tableId),
   );
   const scope = RootInstanceScope(instance.options?.id, context);
+  relation.crossInstance = scope === CROSS_INSTANCE;
   if (scope !== CROSS_INSTANCE) {
     relation.where.push(InstancePredicate(alias, scope));
   }

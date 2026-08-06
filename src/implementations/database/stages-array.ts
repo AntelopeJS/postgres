@@ -124,8 +124,8 @@ const IncludesStage = Lift((value, args, stage) => {
  * `slice(-3)` is the idiom for the last three elements, and both sibling backends read it that way.
  * The length comes from the operand rather than from the walk, because the predicate runs per
  * element and has no other way to know how many there are. It is spelled inline rather than held:
- * the operand is already emitted twice inside the guard, and a `HeldOnce` here would buy text size
- * at a measured +25 % of execution (invariant 14).
+ * the operand is already emitted twice inside the guard, so `HeldOnce` would buy text size at the
+ * execution cost its own doc measures, for no reduction in copies (invariant 14).
  *
  * `trunc` is what makes a fractional bound agree with `Array.prototype.slice`, which truncates
  * toward zero before counting from the end — the ordinal comparison alone agrees for a positive

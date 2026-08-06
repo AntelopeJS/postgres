@@ -1,4 +1,4 @@
-import { Cast, ParsesAs } from "./coerce";
+import { Cast, ParsesAs, WithDefault } from "./coerce";
 import { type Compiled, QuoteLiteral } from "./sql";
 import {
   type ArrayType,
@@ -287,31 +287,37 @@ export function StoredAs(value: Compiled, target: SqlType): Compiled {
   return STORED_READINGS[target.kind](value);
 }
 
-type Written = (value: Compiled, field: string) => Compiled;
+type Written = (value: Compiled, subject: string) => Compiled;
 
 /**
- * Reads a value being written into a `boolean` column, which only a boolean is.
+ * Reads a caller-supplied value against a `boolean` column, which only a boolean is.
  *
- * The one reading whose write direction is narrower than {@link StoredAs}'s, and it is narrower for
- * the same reason the other three did not need narrowing: `Numeric("abc")` and `Moment("abc")` are
- * NULL, so a caller who wrote nonsense into a `number` or a `date` column gets an answer they can
- * notice, while {@link Predicate} is total — every text is true but the empty one, every number
- * true but zero — and totality is what makes it silent. `insert({ flag: "false" })` would store
- * `true`, and no later read could tell.
+ * The one reading narrower than {@link StoredAs}'s, and it is narrower for the same reason the other
+ * three did not need narrowing: `Numeric("abc")` and `Moment("abc")` are NULL, so a caller who
+ * supplied nonsense for a `number` or a `date` column gets an answer they can notice, while
+ * {@link Predicate} is total — every text is true but the empty one, every number true but zero —
+ * and totality is what makes it silent. `insert({ flag: "false" })` would store `true` and
+ * `key("flag", "false")` would default to it, and no later read could tell either.
  *
  * Read/write symmetry (invariant 17) is not an argument against this. It holds for a *comparison
  * operand*, where both sides are questions about data that already exists and each has to be read
- * the way the other was. On the write path there is no second side: the symmetry partner for
+ * the way the other was. A value the caller supplied has no second side: the symmetry partner for
  * `insert({ flag: X })` is `read() === X`, which is round-trip identity, and truthiness is exactly
  * what breaks it.
  *
  * A json operand keeps the guarded projection rather than being refused, since it is already
  * partial: it is NULL for anything that is not a json boolean, which is how a written `null`
  * clears the column.
+ *
+ * `subject` is the whole noun phrase the message opens with rather than a bare field name, because
+ * the three callers name themselves differently and a message that guessed would be wrong for two
+ * of them.
  */
-const BOOLEAN_ONLY = `column and takes a ${PhysicalType(BOOL)} or a json ${PhysicalType(BOOL)}`;
+const BOOLEAN_ONLY =
+  `takes a ${PhysicalType(BOOL)} or a json ${PhysicalType(BOOL)}` +
+  ` for a ${PhysicalType(BOOL)} column`;
 
-const StoredBoolean: Written = (value, field) => {
+const StoredBoolean: Written = (value, subject) => {
   if (value.type.kind === "bool") {
     return value;
   }
@@ -319,7 +325,7 @@ const StoredBoolean: Written = (value, field) => {
     return Cast(value, BOOL);
   }
   throw new Error(
-    `Payload key '${field}' writes a ${PhysicalType(BOOL)} ${BOOLEAN_ONLY}, received ${PhysicalType(value.type)}`,
+    `${subject} ${BOOLEAN_ONLY}, received ${PhysicalType(value.type)}`,
   );
 };
 
@@ -335,17 +341,54 @@ const WRITTEN_READINGS: Partial<Record<SqlType["kind"], Written>> = {
  * `Moment("2023-01-15")` is a timestamp — and a second table would be free to answer the same data
  * differently in each direction with nothing failing (invariant 17). Only `bool` differs, and
  * {@link StoredBoolean} says why.
+ *
+ * **Both callers hand this a value the caller supplied against a declared column**, which is what
+ * makes one reading right for both: a payload member and a `key(name, def)` default are the same
+ * question — read this as the column's type — and the same failure if truthiness answers it, since
+ * `key("isElectric", "false")` would default to `true` as surely as `insert` would store it.
  */
 export function WrittenAs(
   value: Compiled,
   target: SqlType,
-  field: string,
+  subject: string,
 ): Compiled {
   const narrowed = WRITTEN_READINGS[target.kind];
   if (!narrowed) {
     return StoredAs(value, target);
   }
-  return narrowed(value, field);
+  return narrowed(value, subject);
+}
+
+/**
+ * A **field's** default, read as the type of the column it stands in for.
+ *
+ * {@link WithDefault} on its own *unifies* the two, and two different concrete kinds meet at the
+ * bottom type: `key("price", "0")` cast the **column** to jsonb, so a comparison over it stopped
+ * reaching the btree index and a `timestamp` column stopped being revived as a `Date`. A default
+ * nothing ever returned still changed how every row was read. Reading the default *into* the
+ * column's type instead leaves that type — and everything downstream of it — untouched, and where
+ * the two already agree {@link Cast} is the identity, so nothing that worked emits a byte
+ * differently.
+ *
+ * **The `default` *stage* deliberately does not come through here, and the two are not the same
+ * promise.** `key(name, def)` names a declared column, which has an index and a revival to lose;
+ * `.default(def)` composes over any expression, and the contract's own conformance suite writes
+ * `row.key("status").eq("completed").default("pending")` — a *string* standing in for a boolean.
+ * There the default is an alternative value rather than a value of the column's type, and unifying
+ * to the bottom type is what makes it work. Extending this reading to that stage compiles, passes
+ * every unit spec, and fails `Merge with Conditional Logic`.
+ *
+ * A column already at the bottom type keeps the unification, since that is where both sides are.
+ */
+export function Defaulted(
+  value: Compiled,
+  def: Compiled | undefined,
+  subject: string,
+): Compiled {
+  if (!def) {
+    return value;
+  }
+  return WithDefault(value, WrittenAs(def, value.type, subject));
 }
 
 /** Reads a value as jsonb, which is the operand every container stage works from. */

@@ -74,6 +74,11 @@ export interface JoinClause {
  * union — so the three cases share one spelling, with `alias` always emitted. `projection`
  * discriminates the two output modes: absent selects the physical columns and decodes rows,
  * present selects one {@link OUTPUT_COLUMN} and decodes values.
+ *
+ * `crossInstance` is the root's instance scope reduced to the one fact a stage can act on: whether
+ * `_id` alone still names one row. It rides here rather than on the context because a nested query
+ * has its own root and its own scope, and it is false on a nested relation for the same reason
+ * `origin` is absent from one — both are facts about the physical table a relation still reads.
  */
 export interface Relation {
   from: string;
@@ -87,6 +92,7 @@ export interface Relation {
   single: boolean;
   absent: AbsentValue;
   aggregated: boolean;
+  crossInstance: boolean;
   source: RowSource;
   projection?: Compiled;
   origin?: TableOrigin;
@@ -107,6 +113,7 @@ function NewRelation(seed: RelationSeed): Relation {
     single: false,
     absent: null,
     aggregated: false,
+    crossInstance: false,
   };
 }
 

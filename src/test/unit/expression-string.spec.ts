@@ -198,6 +198,61 @@ describe("str_match", () => {
   });
 });
 
+/**
+ * `\b` is a backspace in ARE and `\y` is the word boundary, so the pattern every JavaScript author
+ * writes matched nothing on every input — accepted, and silently always false.
+ */
+describe("str_match's pattern, which is a different regex language", () => {
+  function Bound(pattern: string): unknown[] {
+    const context = NewContext();
+    CompileIn(context, (doc) => doc.key("name").match(pattern));
+    return context.params.all();
+  }
+
+  it("rewrites both word boundaries", () => {
+    expect(Bound("\\bfoo\\b")).to.deep.equal(["\\yfoo\\y"]);
+    expect(Bound("\\Bfoo\\B")).to.deep.equal(["\\Yfoo\\Y"]);
+  });
+
+  it("leaves an escaped backslash alone, which a text replacement would not", () => {
+    expect(Bound("\\\\bfoo")).to.deep.equal(["\\\\bfoo"]);
+    expect(Bound("\\\\\\bfoo")).to.deep.equal(["\\\\\\yfoo"]);
+  });
+
+  it("leaves a character class alone, where both flavours already agree", () => {
+    expect(Bound("[\\b]")).to.deep.equal(["[\\b]"]);
+    expect(Bound("[a\\]\\b]\\bx")).to.deep.equal(["[a\\]\\b]\\yx"]);
+  });
+
+  /**
+   * ARE's `.` matches a newline and JavaScript's does not without the `s` flag, so `^a.*z$` answered
+   * rows a caller expects it to skip. All four codepoints JavaScript's dot declines are excluded,
+   * since they cost the same in a bound parameter.
+   */
+  it("rewrites an unescaped dot to the class JavaScript's dot means", () => {
+    expect(Bound("a.z")).to.deep.equal(["a[^\n\r\u2028\u2029]z"]);
+  });
+
+  it("leaves an escaped dot alone, which a text replacement would not", () => {
+    expect(Bound("a\\.z")).to.deep.equal(["a\\.z"]);
+  });
+
+  it("leaves a dot inside a character class alone, where it is already ordinary", () => {
+    expect(Bound("[.]")).to.deep.equal(["[.]"]);
+    expect(Bound("[a.]z.")).to.deep.equal(["[a.]z[^\n\r\u2028\u2029]"]);
+  });
+
+  it("touches nothing else, including the constructs the two flavours share", () => {
+    const shared = "^(?=a)\\d+[a-z]*?\\s(x|y)$";
+    expect(Bound(shared)).to.deep.equal([shared]);
+  });
+
+  it("binds a computed pattern untranslated, having no text to scan", () => {
+    const out = Compile((doc) => doc.key("name").match(doc.key("other")));
+    expect(out.sql).to.contain("~");
+  });
+});
+
 describe("str_split", () => {
   it("takes its separator from the options, never from an argument", () => {
     const built = ValueProxy.arg<any>(ROW_ID)

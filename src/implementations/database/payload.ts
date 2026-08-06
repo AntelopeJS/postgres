@@ -3,9 +3,10 @@ import type { DecodingContext } from "./context";
 import type { FieldSpec, TableShape } from "./fields";
 import { WrittenAs } from "./readings";
 import type { Compiled } from "./sql";
-import { TEXT } from "./types";
+import { IsJsonBacked, TEXT } from "./types";
 import { ID_COLUMN, RESERVED_COLUMNS } from "./utils";
 import { DecodeValue } from "./value";
+import { NULL_VALUE } from "./writes-shared";
 
 /**
  * One column a payload writes, named by its column rather than by its field.
@@ -136,6 +137,11 @@ export function NoIdSupplied(value: unknown): boolean {
   return value === undefined || value === null;
 }
 
+/** Names a key in the message {@link WrittenAs} raises for a value the column cannot hold. */
+function KeySubject(name: string): string {
+  return `Payload key '${name}'`;
+}
+
 /**
  * Routes the one reserved column a payload may name, and refuses the two it may not.
  *
@@ -158,9 +164,32 @@ function TakeReserved(walk: PayloadWalk, name: string, value: unknown): void {
   if (NoIdSupplied(value)) {
     return;
   }
-  walk.options.id(walk.split, WrittenAs(Decoded(walk, value), TEXT, name));
+  walk.options.id(
+    walk.split,
+    WrittenAs(Decoded(walk, value), TEXT, KeySubject(name)),
+  );
 }
 
+/**
+ * Writes one declared field into its own typed column, read as that column's type.
+ *
+ * **A null is SQL NULL in the column and never a stored json null**, which the three scalar columns
+ * already were — the projection out of `'null'::jsonb` is SQL NULL — and only a jsonb-backed column
+ * was not, since both sides being jsonb makes the reading an identity that stores the literal. That
+ * one column then answered the same stored value three ways inside one document: `DecodeRow` drops
+ * it, because node-postgres decodes `'null'::jsonb` into the same JS `null` an absent column decodes
+ * to and nothing downstream can tell them apart; `pluck` returns the key holding null; and
+ * `hasfields` reads the materialized document, where `?&` counts a null member as a key and answers
+ * **true** for a key the returned document does not have. In a typed column SQL NULL is how absence
+ * is spelled, so this is what makes the three agree. An *undeclared* key keeps its stored null,
+ * which is the one place the two halves of a document still differ and the only one where the
+ * difference is representable at all.
+ *
+ * It stays a *member* rather than joining `cleared`, which would also reach SQL NULL: a cleared
+ * column is absent from the batch's column union, so under `conflict: "update"` it would preserve
+ * the stored value the caller asked to null. The null is read off the raw payload for the reason
+ * `undefined` is — it burns no `$n` (invariant 16).
+ */
 function TakeDeclared(
   walk: PayloadWalk,
   name: string,
@@ -171,9 +200,16 @@ function TakeDeclared(
     walk.split.cleared.push(spec.column);
     return;
   }
+  if (value === null && IsJsonBacked(spec.type)) {
+    walk.split.members.push({
+      column: spec.column,
+      value: { sql: NULL_VALUE, type: spec.type },
+    });
+    return;
+  }
   walk.split.members.push({
     column: spec.column,
-    value: WrittenAs(Decoded(walk, value), spec.type, name),
+    value: WrittenAs(Decoded(walk, value), spec.type, KeySubject(name)),
   });
 }
 

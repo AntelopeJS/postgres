@@ -47,6 +47,17 @@ const ConstantStage: StageHandler = (_state, stage, context) => ({
   ),
 });
 
+/**
+ * The fallback a value takes when it is null, at whatever type the two of them meet.
+ *
+ * **Deliberately *not* {@link Defaulted}**, which reads a default as the type it stands in for. The
+ * two are not the same promise, and the contract's own suite is what says so:
+ * `row.key("status").eq("completed").default("pending")` substitutes a *string* for a boolean, so
+ * this default is an alternative value rather than a value of the column's type, and unifying to the
+ * bottom type is the reading that makes it work. A `key(name, def)` default names a declared column
+ * and has an index and a `Date` revival to lose, which is what makes reading it worth the narrowing
+ * there and wrong here.
+ */
 const DefaultStage = Lift((value, args) =>
   WithDefault(value, args[FIRST_OPERAND]),
 );

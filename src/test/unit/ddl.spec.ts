@@ -17,6 +17,7 @@ import {
 } from "../../implementations/database/ddl";
 import { ParseTable } from "../../implementations/database/fields";
 import { PgIdentifier } from "../../implementations/database/identifier";
+import { FLOAT } from "../../implementations/database/types";
 
 const vehicles: TableDefinition = {
   fields: { car: "string", price: "number", tags: "string[]" },
@@ -80,7 +81,15 @@ describe("BuildTablePlan", () => {
     expect(VEHICLES_PLAN.columns[3]).to.deep.equal({
       name: "price",
       type: "double precision",
+      declared: { field: "price", type: FLOAT },
     });
+  });
+
+  it("leaves the reserved columns undeclared, since no field is stored in them", () => {
+    const reserved = [0, 1, VEHICLES_PLAN.columns.length - 1];
+    for (const at of reserved) {
+      expect(VEHICLES_PLAN.columns[at].declared).to.equal(undefined);
+    }
   });
 
   it("gives the reserved columns their constraints", () => {
@@ -392,6 +401,61 @@ describe("PlanTable", () => {
       `ALTER TABLE ${VEHICLES_TARGET} ADD COLUMN IF NOT EXISTS "price" double precision`,
       `ALTER TABLE ${VEHICLES_TARGET} ADD COLUMN IF NOT EXISTS "tags" jsonb`,
     ]);
+  });
+
+  /**
+   * Without this the existing rows stayed self-inconsistent forever: `DecodeRow` merges the overflow
+   * document last, so the row went on displaying the pre-column copy while `filter` and `getAll`
+   * read the new empty column and matched nothing.
+   */
+  it("moves each added column's field out of the overflow document, in the same transaction", () => {
+    const actual = Existing([
+      { name: "_id", type: "text" },
+      { name: "_instance", type: "text" },
+      { name: "car", type: "text" },
+      { name: "_extra", type: "jsonb" },
+    ]);
+    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
+    const filled = out.statements.filter((sql) => sql.startsWith("UPDATE"));
+    expect(filled).to.have.lengthOf(2);
+    expect(filled[0]).to.contain(`UPDATE ${VEHICLES_TARGET} SET "price" =`);
+    expect(filled[0]).to.contain(`"_extra" = "_extra" - 'price'`);
+    expect(filled[0]).to.contain(`WHERE "price" IS NULL`);
+    const added = out.statements.indexOf(
+      out.statements.filter((sql) => sql.includes(`"price"`))[0],
+    );
+    expect(out.statements[added + 1]).to.equal(filled[0]);
+  });
+
+  it("reads the stored value as the column's type, so a mistyped one stays put", () => {
+    const actual = Existing([
+      { name: "_id", type: "text" },
+      { name: "_instance", type: "text" },
+      { name: "car", type: "text" },
+      { name: "tags", type: "jsonb" },
+      { name: "_extra", type: "jsonb" },
+    ]);
+    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
+    const filled = out.statements.filter((sql) => sql.startsWith("UPDATE"));
+    expect(filled).to.have.lengthOf(1);
+    expect(filled[0]).to.contain("jsonb_typeof");
+    expect(filled[0]).to.contain("IS NOT NULL");
+    expect(filled[0]).to.contain("'null'::jsonb");
+  });
+
+  it("plans no backfill where nothing was added", () => {
+    const actual = Existing([
+      { name: "_id", type: "text" },
+      { name: "_instance", type: "text" },
+      { name: "car", type: "text" },
+      { name: "price", type: "double precision" },
+      { name: "tags", type: "jsonb" },
+      { name: "_extra", type: "jsonb" },
+    ]);
+    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
+    expect(
+      out.statements.filter((sql) => sql.startsWith("UPDATE")),
+    ).to.deep.equal([]);
   });
 
   it("accepts the catalog spelling of a timestamp column", () => {

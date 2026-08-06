@@ -167,6 +167,20 @@ describe("SplitPayload over declared fields", () => {
     expect(applied.context.params.all()).to.deep.equal([3]);
   });
 
+  /**
+   * The three scalar columns clear themselves through the projection guard, which is SQL NULL for a
+   * json null. A jsonb column is the one the cast leaves alone, and storing the literal there is
+   * what made one value answer three ways — dropped by `DecodeRow`, returned by `pluck`, and
+   * reported present by `hasfields`.
+   */
+  it("clears a declared jsonb column rather than storing a json null in it", () => {
+    const applied = Split({ metadata: null });
+    expect(Columns(applied)).to.deep.equal(["metadata"]);
+    expect(Fragments(applied)).to.deep.equal(["NULL"]);
+    expect(applied.split.cleared).to.deep.equal([]);
+    expect(applied.context.params.all()).to.deep.equal([]);
+  });
+
   it("names the column rather than the field", () => {
     expect(Columns(Split({ aVeryLongFieldName: "x" }))).to.deep.equal([
       "truncated",

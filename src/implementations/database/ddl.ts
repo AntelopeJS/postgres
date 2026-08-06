@@ -4,6 +4,7 @@ import type {
   TableDefinition,
 } from "@antelopejs/interface-database/schema";
 import type { MigrationMode } from "../../config";
+import { Cast } from "./coerce";
 import {
   type FieldSpec,
   PhysicalOrder,
@@ -11,8 +12,14 @@ import {
   type TableShape,
 } from "./fields";
 import { IndexName, QualifiedName, TableName } from "./identifier";
-import { JsonKey, QuoteIdentifier, QuoteLiteral } from "./sql";
-import { IsJsonBacked, OPAQUE, PhysicalType, TEXT } from "./types";
+import { JSON_NULL, JsonKey, QuoteIdentifier, QuoteLiteral } from "./sql";
+import {
+  IsJsonBacked,
+  OPAQUE,
+  PhysicalType,
+  type SqlType,
+  TEXT,
+} from "./types";
 import {
   EXTRA_COLUMN,
   ID_COLUMN,
@@ -22,11 +29,24 @@ import {
 
 export type IndexMethod = "btree" | "gin";
 
+/**
+ * The field a column stores, present on the declared columns and absent on the reserved three.
+ *
+ * Both halves are needed together or not at all: the *field* is the key the overflow document filed
+ * the value under before the column existed, and the *type* is what reads it back out. Carrying them
+ * as one member is what stops a caller supplying one without the other.
+ */
+export interface DeclaredField {
+  readonly field: string;
+  readonly type: SqlType;
+}
+
 export interface ColumnPlan {
   readonly name: string;
   readonly type: string;
   readonly notNull?: boolean;
   readonly defaultExpression?: string;
+  readonly declared?: DeclaredField;
 }
 
 export interface IndexPlan {
@@ -182,10 +202,13 @@ export function BuildTablePlan(
   definition: TableDefinition,
   shape: TableShape,
 ): TablePlan {
-  const declared: ColumnPlan[] = Object.values(shape.fields).map((spec) => ({
-    name: spec.column,
-    type: PhysicalType(spec.type),
-  }));
+  const declared: ColumnPlan[] = Object.entries(shape.fields).map(
+    ([field, spec]) => ({
+      name: spec.column,
+      type: PhysicalType(spec.type),
+      declared: { field, type: spec.type },
+    }),
+  );
   return {
     id: tableId,
     table: TableName(tableId),
@@ -305,6 +328,56 @@ function DropIndexSql(schemaName: string, name: string): string {
   return `DROP INDEX IF EXISTS ${QualifiedName(schemaName, name)}`;
 }
 
+/**
+ * Moves a newly declared field out of the overflow document and into its own column.
+ *
+ * Adding a field to a schema is ordinary evolution, and without this it left every existing row
+ * permanently self-inconsistent: `DecodeRow` merges the overflow document *last*, so the row went on
+ * displaying `x: v` from the copy that was written before the column existed, while
+ * `filter(d => d.key("x").eq(v))` and `getAll` read the new column and matched nothing. One row,
+ * two answers, and no error on either side.
+ *
+ * **Lossless, which is the whole reason it can run unattended.** The value moves only where the
+ * column can hold it — the projection is the reading every other path gives that key, so a stored
+ * value of the wrong json type reads as NULL, fails the guard, and stays in the overflow document
+ * where it can still be read. A stored json null reads as absent for {@link WrittenAs}'s reason and
+ * stays put too. `col IS NULL` means a row that somehow has both keeps the column, which is the half
+ * every query path already agrees about.
+ *
+ * The projection is spelled twice, in the assignment and in the guard. Binding it once would mean a
+ * lateral, and this runs once per column per schema evolution against a table nobody is querying
+ * yet.
+ */
+function BackfillSql(
+  target: string,
+  column: ColumnPlan,
+  declared: DeclaredField,
+): string {
+  const overflow = QuoteIdentifier(EXTRA_COLUMN);
+  const key = QuoteLiteral(declared.field);
+  const stored = `NULLIF(${JsonKey(overflow, declared.field)}, ${JSON_NULL})`;
+  const read = Cast({ sql: stored, type: OPAQUE }, declared.type).sql;
+  const name = QuoteIdentifier(column.name);
+  return (
+    `UPDATE ${target} SET ${name} = ${read}, ${overflow} = ${overflow} - ${key}` +
+    ` WHERE ${name} IS NULL AND ${read} IS NOT NULL`
+  );
+}
+
+/**
+ * Adds a column, and moves into it whatever the overflow document was holding for it.
+ *
+ * The backfill is **DML inside the region {@link RetryOnDuplicateObject} replays**, which that
+ * function's own rule otherwise forbids, and it belongs there anyway: in the same transaction as the
+ * `ADD COLUMN` no query can observe the row between the two states, and there is no window in which
+ * a crash leaves a column added and never filled — a separate transaction has one, and nothing would
+ * plan the backfill again afterwards, since the column by then exists.
+ *
+ * The rule it bends is satisfied rather than broken. A replay of this statement is a replay of a
+ * rolled-back transaction, so the column is absent again and the same backfill runs against the same
+ * rows; a genuine constraint violation therefore fails every attempt and is raised by the last one
+ * rather than swallowed by an earlier success.
+ */
 function PlanAddedColumn(
   target: string,
   column: ColumnPlan,
@@ -318,6 +391,9 @@ function PlanAddedColumn(
   out.statements.push(
     AlterTable(target, `ADD COLUMN IF NOT EXISTS ${ColumnDdl(column)}`),
   );
+  if (column.declared) {
+    out.statements.push(BackfillSql(target, column, column.declared));
+  }
 }
 
 function PlanAlteredColumn(

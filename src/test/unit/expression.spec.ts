@@ -267,6 +267,30 @@ describe("default", () => {
     );
     expect(out.type).to.equal(OPAQUE);
   });
+
+  /**
+   * The stage's default is an *alternative value* and not a value of the column's type, which the
+   * contract's own suite relies on: `key("status").eq("completed").default("pending")` substitutes
+   * a string for a boolean. Unifying to the bottom type is what makes that work.
+   */
+  it("unifies a mismatched default with the value, rather than reading it as its type", () => {
+    const out = Compile((doc) => (doc.key("age") as any).default("30"));
+    expect(out.sql).to.contain("to_jsonb");
+    expect(out.type).to.equal(OPAQUE);
+  });
+
+  /**
+   * A *field's* default is the other promise, and the difference is the column: a mismatched one
+   * unified the column itself to jsonb, so a comparison over it stopped reaching the btree index and
+   * a `timestamp` column stopped being revived as a `Date` — a default nothing ever returned still
+   * changing how every row was read.
+   */
+  it("reads a two-argument key's default as the column's type, leaving the column alone", () => {
+    const out = Compile((doc) => (doc as any).key("age", "30"));
+    expect(out.sql).to.contain(`COALESCE("t"."age",`);
+    expect(out.sql).to.not.contain("to_jsonb");
+    expect(out.type).to.equal(FLOAT);
+  });
 });
 
 describe("boolean stages", () => {

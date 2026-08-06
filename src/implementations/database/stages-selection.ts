@@ -7,12 +7,13 @@ import {
   Prepare,
   type Relation,
   RequireOrigin,
+  SINGLE_ROW,
   WHERE_BLOCKERS,
 } from "./relation";
-import type { Compiled } from "./sql";
+import { type Compiled, QualifiedColumn } from "./sql";
 import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import { IsArray } from "./types";
-import { ID_COLUMN, type QueryStage } from "./utils";
+import { ID_COLUMN, INSTANCE_COLUMN, type QueryStage } from "./utils";
 import { DecodeValue } from "./value";
 
 const NO_KEYS = "FALSE";
@@ -194,6 +195,36 @@ function KeySet(selection: KeySelection, keys: unknown[]): string {
 }
 
 /**
+ * Makes a key that names many rows name one of them, which only `CROSS_INSTANCE` can produce.
+ *
+ * `_id` is unique *per instance*, so reading every instance at once turns the primary key into a key
+ * matching one row per instance that stores it. The relation still called itself `single`, so a read
+ * answered an arbitrary one of them — and, far worse, `get(k).delete()` targeted by identity and
+ * removed **every** one, destroying other instances' rows from what the contract calls a
+ * `SingleSelection`. The bound is what the write path already honours, the same way it honours a
+ * `slice` before a delete.
+ *
+ * The order term is what makes it a *choice* rather than a coin flip: without one the row a read
+ * answers and the row a delete removes need not be the same row, and two identical `get`s need not
+ * agree. `_instance` is the only column that differs across the matched rows, so it is the only
+ * ordering available; which instance wins is arbitrary, but it is the same one every time.
+ *
+ * Emitted only under `CROSS_INSTANCE`, which is why the relation carries the scope at all. Under a
+ * single instance the key already names at most one row and this would buy nothing while making
+ * every stage after `get` nest, since a bound blocks a `WHERE` from being absorbed.
+ */
+function BoundToOneInstance(relation: Relation): void {
+  if (!relation.crossInstance) {
+    return;
+  }
+  relation.orderBy.push({
+    sql: QualifiedColumn(relation.alias, INSTANCE_COLUMN),
+    descending: false,
+  });
+  relation.limit = SINGLE_ROW;
+}
+
+/**
  * The one relation that answers `undefined` rather than `null` for a row that is not there.
  *
  * No index name is read off the stage: `get` addresses the primary key by definition, and
@@ -212,6 +243,7 @@ const GetStage: PipelineStage = (relation, stage, context) => {
   prepared.where.push(`(${column.sql} = ${key})`);
   prepared.single = true;
   prepared.absent = undefined;
+  BoundToOneInstance(prepared);
   return prepared;
 };
 

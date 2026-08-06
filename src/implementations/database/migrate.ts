@@ -50,9 +50,14 @@ function IsDuplicateObject(err: unknown): boolean {
  *
  * `23505` is in the set because two concurrent `CREATE … IF NOT EXISTS` surface
  * as a unique-key violation on a *catalog* index rather than as `42P06`/`42P07`.
- * That is a data-level code, so the retried region must contain **no DML**: a
- * genuine duplicate-row violation from an `INSERT` must reach the caller rather
- * than be replayed here.
+ * That is a data-level code, so the retried region admits DML only where a
+ * replay cannot swallow a genuine violation: a duplicate-row failure from an
+ * `INSERT` must reach the caller rather than be retried into silence. The one
+ * statement admitted under that rule is `ddl.ts`'s backfill, which runs in the
+ * same transaction as the `ADD COLUMN` it fills and therefore replays against
+ * the same rows every time — so a real violation fails every attempt and is
+ * raised by the last, while an unconditional `INSERT` might succeed on a later
+ * one and hide the first failure.
  */
 async function RetryOnDuplicateObject<T>(work: () => Promise<T>): Promise<T> {
   for (let remaining = CONVERGENCE_RETRIES; remaining > 0; remaining--) {

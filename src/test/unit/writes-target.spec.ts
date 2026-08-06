@@ -173,6 +173,20 @@ describe("delete under CROSS_INSTANCE", () => {
     expect(Sql(written)).to.not.contain(INSTANCE_PREDICATE);
     expect(written.context.params.all()).to.deep.equal([]);
   });
+
+  /**
+   * `_id` is unique per instance, so reading every instance at once makes the primary key name one
+   * row per instance holding it. Without the bound a `SingleSelection` removed all of them.
+   */
+  it("removes one row through a get, which is what a SingleSelection selects", () => {
+    const sql = Sql(Write(CrossInstanceRoot().get(KEY).delete()));
+    expect(sql).to.contain(`ORDER BY "${ROOT_ALIAS}"."_instance" ASC`);
+    expect(sql).to.contain("LIMIT");
+  });
+
+  it("bounds no get that already names one instance, which needs no order at all", () => {
+    expect(Sql(Write(Root().get(KEY).delete()))).to.not.contain("ORDER BY");
+  });
 });
 
 describe("the delete statement's parameter ledger", () => {

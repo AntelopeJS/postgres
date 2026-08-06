@@ -34,12 +34,6 @@ const CHAINED_LATERAL_ALIAS = "t5";
 
 const FILTER_WRAP_ALIAS = "t3";
 
-/** The aliases a lookup over a left with no shape spends, the guard claiming the last of them. */
-const OPAQUE_WRAP_ALIAS = "t1";
-const OPAQUE_RIGHT_ALIAS = "t2";
-const OPAQUE_LATERAL_ALIAS = "t3";
-const OPAQUE_HELD_ALIAS = "t4";
-
 const SLICE_OFFSET = 0;
 const SLICE_COUNT = 2;
 const MINIMUM_AGE = 25;
@@ -47,7 +41,6 @@ const MINIMUM_AGE = 25;
 const LATERAL = "LEFT JOIN LATERAL";
 const ON_TRUE = "ON true";
 const ONE_ROW = "LIMIT ((1)::bigint)";
-const HELD_COLUMN = "looked";
 
 /**
  * The document the profiles table materializes, at the given alias.
@@ -106,51 +99,29 @@ function Merged(document: string, key: string, lateral: string): string {
   return `(${document} || ${Member(key, lateral)})`;
 }
 
-/** The same merge under the container guard, which only a left with no shape is emitted with. */
-function GuardedMerge(
-  document: string,
-  key: string,
-  lateral: string,
-  alias: string,
-): string {
-  const held = `"${alias}"."${HELD_COLUMN}"`;
-  return (
-    `(SELECT ${held} || ${Member(key, lateral)}` +
-    ` FROM (SELECT ${document} AS "${HELD_COLUMN}") AS "${alias}"` +
-    ` WHERE jsonb_typeof(${held}) = 'object')`
-  );
-}
-
-const OPAQUE_LEFT = `"${OPAQUE_WRAP_ALIAS}"."value"`;
-
-const OPAQUE_SOURCE = `(SELECT "${ROOT_ALIAS}"."meta" AS "value" ${FROM_TABLE})`;
-
-const OPAQUE_KEY = `(${OPAQUE_LEFT} -> 'name')`;
-
-const OPAQUE_NAME =
-  `(CASE WHEN jsonb_typeof(${OPAQUE_KEY}) = 'string'` +
-  ` THEN (${OPAQUE_KEY} #>> '{}') END)`;
-
-const ONE_PRODUCT_BY_OPAQUE_NAME =
-  `(SELECT ${ProductDocument(OPAQUE_RIGHT_ALIAS)} AS "value"` +
-  ` FROM ${OTHER_TABLE} AS "${OPAQUE_RIGHT_ALIAS}"` +
-  ` WHERE ${RightInstance(OPAQUE_RIGHT_ALIAS)}` +
-  ` AND ("${OPAQUE_RIGHT_ALIAS}"."name" = ${OPAQUE_NAME}) ${ONE_ROW})`;
-
 function ScalarLookup() {
   return Root().lookup(Other(), "name", "name");
 }
 
 /**
- * A lookup whose left is a declared jsonb column, which is where the type carries no shape.
+ * A lookup whose local key has no declared type, which is the only case the form cannot be read off.
  *
- * `meta` is declared as the bottom json type, so the projection a `map` onto it leaves is opaque
- * and nothing this compiler built says the value is an object.
+ * `meta` is declared as the bottom json type, so a `map` onto it leaves an opaque projection and
+ * every key of it is opaque too — which is also why a left document with no shape can no longer
+ * reach the merge.
  */
 function OpaqueLookup() {
   return Root()
     .map((doc) => doc.key("meta"))
     .lookup(Other(), "name", "name");
+}
+
+/**
+ * The case the refusal exists for: `nickname` is a key of the caller's interface and not of the
+ * schema, which is an independent declaration, so it reaches this compiler bottom-typed.
+ */
+function UndeclaredLookup() {
+  return (Root() as any).lookup(Other(), "nickname", "name");
 }
 
 function ArrayLookup() {
@@ -220,10 +191,9 @@ describe("the lookup stage", () => {
     expect(Apply(ScalarLookup()).subqueries).to.equal(0);
   });
 
-  it("merges into a shaped left unguarded, spelling the document exactly once", () => {
+  it("merges unguarded, spelling the document exactly once", () => {
     const sql = Sql(ScalarLookup());
     expect(sql).to.not.contain("jsonb_typeof");
-    expect(sql).to.not.contain(HELD_COLUMN);
     expect(Occurrences(sql, DOCUMENT)).to.equal(1);
   });
 
@@ -236,19 +206,18 @@ describe("the lookup stage", () => {
   });
 });
 
-describe("a lookup whose left document carries no shape", () => {
-  it("guards the merge, holding the left value on a derived table", () => {
-    expect(Sql(OpaqueLookup())).to.equal(
-      `SELECT ${GuardedMerge(OPAQUE_LEFT, "name", OPAQUE_LATERAL_ALIAS, OPAQUE_HELD_ALIAS)}` +
-        ` AS "value" FROM ${OPAQUE_SOURCE} AS "${OPAQUE_WRAP_ALIAS}"` +
-        ` ${LATERAL} ${ONE_PRODUCT_BY_OPAQUE_NAME}` +
-        ` AS "${OPAQUE_LATERAL_ALIAS}" ${ON_TRUE}`,
-    );
+/**
+ * The form is a static choice, so a key the schema does not describe has no answer rather than a
+ * default one. Taking the scalar form correlated against nothing and merged `{"key": null}` over the
+ * document, which lost a stored array with no error anywhere.
+ */
+describe("a lookup whose local key has no declared type", () => {
+  it("refuses, naming the key and both forms", () => {
+    expect(() => Sql(OpaqueLookup())).to.throw(/'name'.*array.*one row/);
   });
 
-  it("types the result as opaque, having no keys to carry through the merge", () => {
-    const { relation } = Apply(OpaqueLookup());
-    expect(relation.projection?.type).to.deep.equal({ kind: "json" });
+  it("refuses a key the table does not declare, which is where the array was lost", () => {
+    expect(() => Sql(UndeclaredLookup())).to.throw(/'nickname'/);
   });
 });
 

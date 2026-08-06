@@ -3,7 +3,7 @@ import { Query } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
 import { UnifyOperands } from "./coerce";
 import type { DecodingContext } from "./context";
-import { EMPTY_ARRAY, HeldOnce, OBJECT_TYPEOF } from "./jsonb";
+import { EMPTY_ARRAY } from "./jsonb";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { AsJson, Predicate } from "./readings";
 import {
@@ -30,9 +30,9 @@ import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import {
   ArrayOf,
   IsArray,
+  IsOpaque,
   JsonOf,
   MergeShapes,
-  ShapeOf,
   type SqlType,
 } from "./types";
 import { DecodeFunction } from "./value";
@@ -207,7 +207,6 @@ const UNCONDITIONAL = "true";
 
 const CONTAINS = "@>";
 const ARRAY_KIND: SqlType["kind"] = "array";
-const HELD_COLUMN = "looked";
 
 interface LookupKeys {
   localKey: string;
@@ -235,9 +234,20 @@ type Replacement = (value: SqlType) => SqlType;
  * one, and that is a fact about the schema rather than about a value — reading it off a value would
  * make the same query compile to different SQL row by row, which it cannot do.
  *
+ * **A key with no declared type is refused rather than assumed scalar**, which is the one place this
+ * static choice can destroy data. An undeclared key is bottom-typed and so is never `"array"`, so a
+ * stored array took the scalar form, correlated against nothing, and {@link Replaced} merged
+ * `{"key": null}` over the document — the caller's array gone from the answer with no error
+ * anywhere. Both siblings dispatch on the value at run time and have no schema to read; we do, and
+ * the honest reading of a schema that does not describe the key is that the question has no answer.
+ * The alternative priced against this was leaving the key untouched on that branch, which stops the
+ * destruction but makes a lookup the caller asked for silently not happen. **What it costs:** an
+ * undeclared *scalar* key looks up correctly today and is now refused; declaring the field is the
+ * remedy and buys the index besides.
+ *
  * Chosen by a ternary over two named constants for the reason {@link JoinFlavour} is: the rule that
  * bans `switch` dispatches an open set of *names*, and this is a `boolean` with no room for a third
- * state.
+ * state once the undeclared case is gone.
  *
  * `lateral` renders the relation it is handed and may **bound** it first — {@link OneRowLateral}
  * sets its `LIMIT` where {@link CollectedLateral} must not — so each form owns the arity of the
@@ -292,7 +302,12 @@ const COLLECTED_FORM: LookupForm = {
   replaced: ArrayOf,
 };
 
-function FormOf(local: Compiled): LookupForm {
+function FormOf(local: Compiled, key: string): LookupForm {
+  assert(
+    !IsOpaque(local.type),
+    `The 'lookup' stage takes its form from the local key's declared type, and '${key}' has none;` +
+      ` declare it on the table, as an array to look up a list and as anything else for one row`,
+  );
   return local.type.kind === ARRAY_KIND ? COLLECTED_FORM : SINGLE_FORM;
 }
 
@@ -343,63 +358,31 @@ function Correlate(
 }
 
 /**
- * The merge under a container guard, for a left document nothing says is an object.
- *
- * The guard reads the value it protects and that value is a materialized document, so it goes
- * through {@link HeldOnce} rather than `GuardJson` — which is also the shape that would still work
- * if the operator could fail, as `without`'s must. The lateral's alias is a column of the enclosing
- * query, which the derived table's own select list may reference.
- *
- * **`HeldOnce` holds once in the *text*, not once at run time.** The planner pulls the one-row
- * subquery up and substitutes the held expression into both the output and the one-time filter, so
- * the document is built twice per row; measured at +25 % execution against the bare merge. That
- * price is why the guard is emitted on this branch only.
- */
-function GuardedMerge(document: string, member: string, alias: string): string {
-  return HeldOnce({
-    value: document,
-    column: HELD_COLUMN,
-    alias,
-    select: (column) => `${column} || ${member}`,
-    guard: (column) =>
-      `jsonb_typeof(${column}) = ${QuoteLiteral(OBJECT_TYPEOF)}`,
-  });
-}
-
-/**
  * The left document with one key overwritten, which is what a lookup answers.
  *
  * `||` overwrites rather than appends, and the document is spelled as a whole rather than rebuilt
  * member by member because a rebuild would need the left's full key list, which a value-mode left
  * does not have. `||` is **total** — `'{"a":1}' || '"x"'` is `[{"a":1},"x"]`, and no combination of
- * scalar, object, array and null raises — so the guard defends type soundness rather than the
- * statement, which is ordinarily what invariant 14 says not to do. It is therefore emitted only
- * where the difference is observable. A left whose type carries no shape keeps it: "replace this
- * key" has no meaning over a value with no keys, and `obj_merge` already answers NULL for exactly
- * this operator on exactly this reading, so dropping it there would make one operator disagree with
- * itself. A shaped left takes the bare merge instead, which is the path every real lookup takes and
- * which {@link GuardedMerge} costs a measured 25 % of execution to leave.
+ * scalar, object, array and null raises — so it is emitted bare, with nothing defending it.
  *
- * **The shape is a test of provenance, not a proof about the value, and one case makes that
- * matter.** A jsonb column declared with members carries a shape while the caller controls what is
- * stored in it, so `map(d => d.key("metadata")).lookup(…)` is shaped over a value that may be a
- * scalar at run time, and answers the two-element array `[scalar, {looked}]` rather than NULL. That
- * is the *surprising answer* invariant 14 declines to defend against, and it cannot fail — the
- * shape does not claim otherwise.
+ * **The left is always shaped here, and {@link FormOf} is what makes that true.** A document with no
+ * shape can only be a value source over an opaque value, every field of which is opaque too, so its
+ * local key is refused before this runs. The container guard this used to carry on the shapeless
+ * branch — a `HeldOnce` over a `jsonb_typeof` test, at the execution cost that function's own doc
+ * measures — went with that refusal, along with the reasoning about what "replace this key" means
+ * over a value with no keys. It has no reachable input.
+ *
+ * **A shape is a test of provenance and not a proof about the value.** A jsonb column declared with
+ * members carries a shape while the caller controls what is stored in it, so
+ * `map(d => d.key("metadata")).lookup(…)` is shaped over a value that may be a scalar at run time,
+ * and answers the two-element array `[scalar, {looked}]` rather than NULL. That is the *surprising
+ * answer* invariant 14 declines to defend against, and it cannot fail — the shape does not claim
+ * otherwise.
  */
-function Replaced(
-  document: Compiled,
-  key: string,
-  value: Compiled,
-  context: DecodingContext,
-): Compiled {
+function Replaced(document: Compiled, key: string, value: Compiled): Compiled {
   const member = `jsonb_build_object(${QuoteLiteral(key)}, ${value.sql})`;
-  const left = AsJson(document).sql;
-  const shape = ShapeOf(document.type);
   return {
-    sql: shape
-      ? `(${left} || ${member})`
-      : GuardedMerge(left, member, context.nextAlias()),
+    sql: `(${AsJson(document).sql} || ${member})`,
     type: MergeShapes(document.type, JsonOf({ [key]: value.type })),
   };
 }
@@ -422,7 +405,7 @@ const LookupStage: PipelineStage = (relation, stage, context) => {
   const keys = KeysOf(stage);
   const prepared = Prepare(relation, LOOKUP_BLOCKERS, context);
   const local = prepared.source.field(keys.localKey);
-  const form = FormOf(local);
+  const form = FormOf(local, keys.localKey);
   const right = LookedUp(stage, context);
   Correlate(right, keys.otherKey, local, form);
   const answer = CurrentValue(right);
@@ -440,7 +423,7 @@ const LookupStage: PipelineStage = (relation, stage, context) => {
   };
   return SetProjection(
     prepared,
-    Replaced(CurrentValue(prepared), keys.localKey, looked, context),
+    Replaced(CurrentValue(prepared), keys.localKey, looked),
   );
 };
 
