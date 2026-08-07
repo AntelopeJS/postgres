@@ -57,6 +57,30 @@ export function WithOptions<T>(options: Options, read: () => T): T {
   }
 }
 
+/**
+ * Runs an asynchronous body with *a* configuration in place, leaving an existing one alone.
+ *
+ * {@link WithOptions} cannot serve a body that awaits: it restores synchronously, so a continuation
+ * resuming in a later turn reads whatever replaced its set. Holding a set across an await is
+ * invariant 7's hazard exactly when there is something to disturb, and here there is nothing —
+ * under `pnpm test` the live adapter configured this process before the specs ran and this changes
+ * nothing at all, and under a standalone unit run there is no registration to observe the set.
+ *
+ * What it buys is the compile path that reads options *after* the readiness gate: every generated
+ * name goes through `SchemaName`, and the gate is one await earlier.
+ */
+export async function WhileConfigured<T>(body: () => Promise<T>): Promise<T> {
+  if (CurrentOptions()) {
+    return body();
+  }
+  SetOptions({});
+  try {
+    return await body();
+  } finally {
+    ClearOptions();
+  }
+}
+
 /** How many times a fragment appears in a rendered statement — the shape of the duplication specs. */
 export function Occurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1;

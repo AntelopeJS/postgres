@@ -6,16 +6,33 @@ import {
   type QueryResultRow,
 } from "pg";
 import { ClearOptions, GetOptions, type Options, SetOptions } from "./config";
+import { Logger } from "./logger";
 
 const NOT_CONNECTED =
   "PostgreSQL adapter is not connected: construct() has not run yet";
 
 const SESSION_SETTINGS = "SET TIME ZONE 'UTC'; SET DateStyle = 'ISO, MDY'";
 
+const CLIENT_ERROR = "error";
+
+const HELD_CLIENT_FAILED =
+  "the connection under a borrowed PostgreSQL client failed while it was checked out";
+
 let pool: Pool | undefined;
+
+export type BeforeDisconnect = () => unknown;
+
+export type PoolTeardown = () => Promise<void>;
+
+const beforeDisconnect = new Set<BeforeDisconnect>();
 
 function PinSession(client: ClientBase) {
   return client.query(SESSION_SETTINGS);
+}
+
+/** Turns a callback's synchronous throw into a rejection, which is all `allSettled` can absorb. */
+async function Invoke(callback: BeforeDisconnect) {
+  return callback();
 }
 
 /**
@@ -57,13 +74,56 @@ export async function Connect(options?: Options) {
   pool = created;
 }
 
-export async function Disconnect() {
+/**
+ * Registers a callback to be settled before the pool is ended, and answers a function that
+ * withdraws it again.
+ *
+ * `pool.end()` was measured not to resolve while a client is checked out — it hung past a
+ * 1500 ms deadline — so anything holding a pooled client past the end of a single query, which
+ * is what a cursor's transaction does, has to give it back before the pool closes or both
+ * `destroy()` and the `Disconnect()` inside `Connect()` never return. The holders sit below this
+ * module and import from it, so the dependency is inverted through this registry rather than
+ * spelled as an import back.
+ *
+ * A registration outlives a `Connect`/`Disconnect` cycle: a module that registers at load time is
+ * still registered after a reconnect.
+ */
+export function RegisterBeforeDisconnect(callback: BeforeDisconnect) {
+  beforeDisconnect.add(callback);
+  return () => {
+    beforeDisconnect.delete(callback);
+  };
+}
+
+/**
+ * Settles every registered callback, then runs `endPool`.
+ *
+ * A callback that throws or rejects must not keep the pool open — a cursor whose close failed is
+ * a worse leak if it also blocks `pool.end()` — so the outcomes are settled and discarded rather
+ * than raced.
+ *
+ * `Disconnect` is its only production caller. It is a seam because a spec cannot drive
+ * `Disconnect` itself: that replaces the `pool` singleton a live adapter in the same process is
+ * still querying through (invariant 7), while this takes the teardown as an argument and touches
+ * no module state.
+ */
+export async function SettleBeforeDisconnect(endPool: PoolTeardown) {
+  await Promise.allSettled([...beforeDisconnect].map(Invoke));
+  await endPool();
+}
+
+async function EndPool() {
   const current = pool;
   pool = undefined;
   ClearOptions();
   if (current) {
     await current.end();
   }
+}
+
+/** Settles every `RegisterBeforeDisconnect` callback, then ends the pool and forgets the options. */
+export async function Disconnect() {
+  await SettleBeforeDisconnect(EndPool);
 }
 
 export function IsConnected() {
@@ -84,14 +144,60 @@ export function Query<T extends QueryResultRow = QueryResultRow>(
   return GetPool().query<T>(sql, params as never);
 }
 
+function ReportHeldClientError(err: unknown) {
+  Logger.Warn(HELD_CLIENT_FAILED, err);
+}
+
+/**
+ * Gives a checked-out client the `error` listener the pool takes away, and takes it back off when
+ * the client is handed in.
+ *
+ * `pg-pool` removes its own idle listener the moment a client is checked out and re-attaches it on
+ * release, and `pool.query` covers that gap by attaching one for the duration of the query. A
+ * client borrowed through `AcquireClient` is inside the same gap for as long as its borrower holds
+ * it and gets neither, so its `listenerCount("error")` is zero — and an `error` event on an
+ * `EventEmitter` with no listener is an unhandled exception, which ends the process. A cursor is a
+ * session idle *in a transaction* for up to `cursorIdleTimeoutMs`, which is precisely what
+ * `idle_in_transaction_session_timeout`, a failover and an administrative `pg_terminate_backend`
+ * each end: measured against a server set to 800 ms, `25P03` and `Connection terminated
+ * unexpectedly` both arrived uncaught and the process exited 1.
+ *
+ * **Swallowing the event is the whole handling, and deliberately.** The borrower discovers the
+ * failure on its next statement — *client is not queryable* — which is where it can act on it, and
+ * every path downstream of that was measured already correct: buffered rows are still served, the
+ * cursor's teardown runs, its client comes back, and the next unrelated query succeeds. The event
+ * is logged rather than dropped because a connection dying under a held client is worth a line.
+ *
+ * **The listener has to come off before the client does, and the wrapper has to be applied per
+ * acquisition.** A pooled client is reused, so a listener left attached accumulates one per
+ * checkout — three on one client, measured. `pg-pool` *reassigns* `client.release` on every
+ * checkout, so a wrapper installed once per client would be thrown away by the next one; this
+ * wraps whatever `release` the current checkout installed, forwards every argument to it, and puts
+ * it back.
+ */
+export function GuardHeldClient(client: PoolClient): PoolClient {
+  const checkin = client.release;
+  client.on(CLIENT_ERROR, ReportHeldClientError);
+  client.release = (...args: Parameters<PoolClient["release"]>) => {
+    client.off(CLIENT_ERROR, ReportHeldClientError);
+    client.release = checkin;
+    return checkin.apply(client, args);
+  };
+  return client;
+}
+
 /**
  * Takes a client out of the pool for the caller to own.
  *
  * Used by cursors, which need a stable session for the lifetime of the
- * transaction holding them. The caller is responsible for releasing it.
+ * transaction holding them, and by the migration planner. The caller is
+ * responsible for releasing it.
+ *
+ * Every borrowed client is handed back guarded — see `GuardHeldClient`, which owns why a client
+ * held outside a query has to carry an `error` listener of its own.
  */
 export function AcquireClient(): Promise<PoolClient> {
-  return GetPool().connect();
+  return GetPool().connect().then(GuardHeldClient);
 }
 
 export function GetSchemaPrefix() {
