@@ -23,8 +23,26 @@ const VEHICLES: TableShape = {
 const TABLE = '"shop"."vehicles"';
 const ROOT_ALIAS = "t0";
 const INHERITED_STAGE = "constructor";
-const DEFERRED_STAGE = "group";
 const REJECTED_STAGE = "changes";
+
+/**
+ * A deferral installed by the spec rather than read off the map, which no longer carries one.
+ *
+ * Every stage the contract records is now dispatched or permanently declined, so the deferred
+ * branch is reachable only from a map this spec writes to — the same door the precedence case
+ * beside it already uses.
+ */
+const DEFERRED_STAGE = "someStageThisBackendHasNotBuilt";
+const DEFERRAL = "The PostgreSQL backend does not implement something yet";
+
+function WithDeferral<T>(name: string, read: () => T): T {
+  DEFERRED_STAGES[name] = DEFERRAL;
+  try {
+    return read();
+  } finally {
+    delete DEFERRED_STAGES[name];
+  }
+}
 
 function NewContext(): DecodingContext {
   return new DecodingContext(RefusingCompilers());
@@ -60,9 +78,15 @@ describe("ApplyStages", () => {
   });
 
   it("names the stage a deferred message belongs to", () => {
-    expect(() => Apply(DEFERRED_STAGE)).to.throw(
-      "The PostgreSQL backend does not implement grouping yet (stage 'group')",
-    );
+    WithDeferral(DEFERRED_STAGE, () => {
+      expect(() => Apply(DEFERRED_STAGE)).to.throw(
+        `${DEFERRAL} (stage '${DEFERRED_STAGE}')`,
+      );
+    });
+  });
+
+  it("defers nothing, now that every stage is dispatched or declined", () => {
+    expect(Object.keys(DEFERRED_STAGES)).to.deep.equal([]);
   });
 
   it("declines a change feed permanently rather than deferring it", () => {
@@ -72,14 +96,11 @@ describe("ApplyStages", () => {
   });
 
   it("prefers the permanent rejection to a deferral of the same name", () => {
-    DEFERRED_STAGES[REJECTED_STAGE] = "a deferral that must not win";
-    try {
+    WithDeferral(REJECTED_STAGE, () => {
       expect(() => Apply(REJECTED_STAGE)).to.throw(
         REJECTED_STAGES[REJECTED_STAGE],
       );
-    } finally {
-      delete DEFERRED_STAGES[REJECTED_STAGE];
-    }
+    });
   });
 
   it("fails on the first stage it cannot apply", () => {

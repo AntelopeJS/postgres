@@ -1,3 +1,4 @@
+import assert from "node:assert";
 import {
   type Compiled,
   QualifiedColumn,
@@ -89,10 +90,29 @@ export function WalkColumn(alias: string, name: string): string {
  * …)` serves both (invariant 17): a second one would be free to drop the `ORDER BY`, or the
  * `COALESCE`, with nothing failing. It is absent only where there is nothing to order by — a
  * nested query the caller never ordered — and never where a walk decided one.
+ *
+ * `distinct` dedups the elements, which is what a group's sub-stream asks for after a `distinct`
+ * stage. It lives here rather than in that caller for the reason above and for one more that no
+ * test can reach: a group is never empty, so a local `jsonb_agg(DISTINCT …)` would be free to drop
+ * the `COALESCE` and nothing would ever observe the difference.
+ *
+ * The two channels are mutually exclusive, and the assertion is what says so at the one place that
+ * can: `jsonb_agg(DISTINCT x ORDER BY y)` requires `y` to appear in the argument list, so a caller
+ * ordering by anything else is `42P10` rather than a wrong answer. Nothing asks for both — a
+ * sub-stream refuses `orderBy` outright, and a nested query never dedups here.
  */
-export function Collected(order: string | undefined, target: string): string {
+export function Collected(
+  order: string | undefined,
+  target: string,
+  distinct = false,
+): string {
+  assert(
+    !distinct || order === undefined,
+    "A collected aggregate orders its elements or dedups them, never both",
+  );
+  const deduped = distinct ? "DISTINCT " : "";
   const ordered = order === undefined ? "" : ` ORDER BY ${order}`;
-  return `COALESCE(jsonb_agg(${target}${ordered}), ${EMPTY_ARRAY})`;
+  return `COALESCE(jsonb_agg(${deduped}${target}${ordered}), ${EMPTY_ARRAY})`;
 }
 
 export interface ElementWalk {

@@ -51,8 +51,18 @@ const DISTINCT = "distinct";
 
 const ALL_ROWS = "*";
 const EMPTY_SUM = "0";
+const DEDUPED = "DISTINCT ";
 
-type Aggregation = (operand: Compiled) => Compiled;
+/**
+ * An aggregate over an operand, optionally over its *distinct* values.
+ *
+ * The dedup channel is what a group's sub-stream spends a pending `distinct` through, and it is a
+ * channel rather than a string the caller assembles so that {@link Applied} stays the one owner of
+ * an aggregate call's `DISTINCT ` prefix (invariant 17). `min` and `max` take it harmlessly — a
+ * dedup cannot move an extremum — which is what lets the fold pass it uniformly rather than per
+ * aggregate.
+ */
+export type Aggregation = (operand: Compiled, distinct?: boolean) => Compiled;
 
 /**
  * The field an aggregate reads, or nothing for the whole-value reading each of them also offers.
@@ -61,8 +71,11 @@ type Aggregation = (operand: Compiled) => Compiled;
  * the rest fall back to {@link CurrentValue} — so it is not an error. A name that is *present*
  * and not a string is a malformed stage, and reading it as absent would silently answer a
  * different question than the caller asked: `count(<not a name>)` would become `count(*)`.
+ *
+ * A `group`'s sub-stream fold reads the same option off the same stages and must refuse the same
+ * shapes with the same words, so it reads them through here (invariant 17).
  */
-function NamedField(stage: QueryStage): string | undefined {
+export function NamedField(stage: QueryStage): string | undefined {
   const field = stage.options?.field;
   if (field === undefined) {
     return undefined;
@@ -79,26 +92,47 @@ function NamedField(stage: QueryStage): string | undefined {
  * `sum("price")` is `sum("t0"."price")` rather than a member of a document built to be thrown
  * away, and a declared column stays reachable by its own index.
  */
-function Operand(relation: Relation, stage: QueryStage): Compiled {
+function NamedOperand(
+  relation: Relation,
+  stage: QueryStage,
+): Compiled | undefined {
   const field = NamedField(stage);
-  return field === undefined
-    ? CurrentValue(relation)
-    : relation.source.field(field);
+  return field === undefined ? undefined : relation.source.field(field);
 }
 
-function Applied(func: string, argument: string): string {
-  return `${func}(${argument})`;
+function Operand(relation: Relation, stage: QueryStage): Compiled {
+  return NamedOperand(relation, stage) ?? CurrentValue(relation);
+}
+
+/** The one spelling of an aggregate call, and the one owner of its `DISTINCT ` prefix. */
+function Applied(func: string, argument: string, distinct = false): string {
+  return `${func}(${distinct ? DEDUPED : ""}${argument})`;
 }
 
 /** ReQL's sum of an empty stream is 0, where a bare `sum` over zero rows is NULL. */
-const Total: Aggregation = (operand) =>
-  AsFloat(`COALESCE(${Applied(SUM, Numeric(operand).sql)}, ${EMPTY_SUM})`);
+export const Total: Aggregation = (operand, distinct) =>
+  AsFloat(
+    `COALESCE(${Applied(SUM, Numeric(operand).sql, distinct)}, ${EMPTY_SUM})`,
+  );
 
-const Mean: Aggregation = (operand) =>
-  AsFloat(Applied(AVERAGE, Numeric(operand).sql));
+export const Mean: Aggregation = (operand, distinct) =>
+  AsFloat(Applied(AVERAGE, Numeric(operand).sql, distinct));
+
+/** Both orderings share one rule and one cast — see {@link Minimum}. */
+function Extremum(func: string): Aggregation {
+  return (operand, distinct) => {
+    const ordered = ORDERED_KINDS[operand.type.kind]
+      ? operand
+      : Numeric(operand);
+    const applied = Applied(func, ordered.sql, distinct);
+    return ordered.type.kind === "float"
+      ? AsFloat(applied)
+      : { sql: `(${applied})`, type: ordered.type };
+  };
+}
 
 /**
- * `min`/`max` over the kinds PostgreSQL orders, and over a numeric reading of the rest.
+ * `min` over the kinds PostgreSQL orders, and over a numeric reading of the rest.
  *
  * There is no `min(boolean)` and no `min(jsonb)` — an array is a jsonb value physically — so an
  * operand of either kind would raise `42883` and lose the whole statement. Reading it as a number
@@ -112,16 +146,24 @@ const Mean: Aggregation = (operand) =>
  * exactly where the result is a number is what keeps a numeric one from reaching the driver as an
  * unparsed string (invariant 1) without breaking the other two readings.
  */
-function Extremum(func: string): Aggregation {
-  return (operand) => {
-    const ordered = ORDERED_KINDS[operand.type.kind]
-      ? operand
-      : Numeric(operand);
-    const applied = Applied(func, ordered.sql);
-    return ordered.type.kind === "float"
-      ? AsFloat(applied)
-      : { sql: `(${applied})`, type: ordered.type };
-  };
+export const Minimum: Aggregation = Extremum(MINIMUM);
+
+/** `max` under {@link Minimum}'s rule, which both orderings share. */
+export const Maximum: Aggregation = Extremum(MAXIMUM);
+
+/**
+ * Counts rows, or the *distinct* values of an operand.
+ *
+ * An absent operand is a documented spelling rather than a missing argument: `count(*)` needs no
+ * operand at all and counts the rows themselves, which is the reading a caller that named no field
+ * asked for. A *present* operand counts its distinct values, which is what the contract asserts —
+ * `count("car")` against `new Set(cars).size`. Which of the two applies is the caller's to decide.
+ * The `bigint` both spellings return reaches the driver as a *string*, which is what the cast is
+ * for.
+ */
+export function Tally(operand?: Compiled): Compiled {
+  const named = operand !== undefined;
+  return AsFloat(Applied(COUNT, named ? operand.sql : ALL_ROWS, named));
 }
 
 /**
@@ -156,23 +198,10 @@ function AggregateStage(aggregate: Aggregation): PipelineStage {
   };
 }
 
-/**
- * Counts rows, or the *distinct* values of a named field.
- *
- * The distinct reading is what the contract asserts — `count("car")` against
- * `new Set(cars).size` — and it is why this one stage reads the presence of the field rather
- * than the field: `count(*)` needs no operand at all, so a field-less count materializes no
- * document to count. The `bigint` both spellings return reaches the driver as a *string*, which
- * is what the cast is for.
- */
+/** The one aggregate that reads the *presence* of its field rather than the field. */
 const CountStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, AGGREGATE_BLOCKERS, context);
-  const field = NamedField(stage);
-  const counted =
-    field === undefined
-      ? ALL_ROWS
-      : `DISTINCT ${prepared.source.field(field).sql}`;
-  return SetAggregate(prepared, AsFloat(Applied(COUNT, counted)));
+  return SetAggregate(prepared, Tally(NamedOperand(prepared, stage)));
 };
 
 /**
@@ -193,12 +222,23 @@ const DistinctStage: PipelineStage = (relation, stage, context) => {
   return SetProjection(prepared, prepared.source.field(field));
 };
 
-/** The stages that reduce a stream to one value, and the one that dedups it. */
+/**
+ * The stages that reduce a stream to one value, and the one that dedups it.
+ *
+ * The spellings themselves — {@link Total}, {@link Mean}, {@link Minimum}, {@link Maximum} and
+ * {@link Tally} — are exported, because a `group`'s sub-stream fold reduces a group's rows with
+ * the same five aggregates and has to reduce them the same way (invariant 17). A second table of
+ * them there would be free to answer `sum` one way outside a group and another way inside it with
+ * nothing failing, and it would land on {@link Minimum}'s "cast only where the result is numeric"
+ * rule first, because that is the one a reimplementation would simplify away. They are exported
+ * already applied, so the fold names no PostgreSQL function of its own and cannot reach a third
+ * ordering the rule was never written for.
+ */
 export const AGGREGATE_STAGES: PipelineStageMap = {
   [SUM]: AggregateStage(Total),
   [AVERAGE]: AggregateStage(Mean),
-  [MINIMUM]: AggregateStage(Extremum(MINIMUM)),
-  [MAXIMUM]: AggregateStage(Extremum(MAXIMUM)),
+  [MINIMUM]: AggregateStage(Minimum),
+  [MAXIMUM]: AggregateStage(Maximum),
   [COUNT]: CountStage,
   [DISTINCT]: DistinctStage,
 };

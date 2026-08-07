@@ -1,7 +1,12 @@
 import assert from "node:assert";
 import type { DecodingContext } from "./context";
 import { DeclaredColumns, PhysicalOrder, type TableShape } from "./fields";
-import { ColumnRowSource, JsonRowSource, type RowSource } from "./row-source";
+import {
+  ColumnRowSource,
+  type DocumentMember,
+  JsonRowSource,
+  type RowSource,
+} from "./row-source";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import type { SqlType } from "./types";
 import { EXTRA_COLUMN, ID_COLUMN, INSTANCE_COLUMN } from "./utils";
@@ -79,12 +84,18 @@ export interface JoinClause {
  * `_id` alone still names one row. It rides here rather than on the context because a nested query
  * has its own root and its own scope, and it is false on a nested relation for the same reason
  * `origin` is absent from one — both are facts about the physical table a relation still reads.
+ *
+ * `groupBy` holds compiled terms rather than text because the same {@link Compiled} is also the
+ * group value in the select list, and a second resolution of the same field is free to differ — a
+ * default, a cast — which PostgreSQL then rejects with `42803` naming a column that is visibly in
+ * the `GROUP BY`.
  */
 export interface Relation {
   from: string;
   alias: string;
   joins: JoinClause[];
   where: string[];
+  groupBy: Compiled[];
   orderBy: OrderTerm[];
   limit?: string;
   offset?: string;
@@ -108,6 +119,7 @@ function NewRelation(seed: RelationSeed): Relation {
     ...seed,
     joins: [],
     where: [],
+    groupBy: [],
     orderBy: [],
     distinct: false,
     single: false,
@@ -127,14 +139,24 @@ export function RequireOrigin(relation: Relation): TableOrigin {
 /**
  * The columns an index name addresses, in the order the index declares them.
  *
- * `orderBy`, `getAll` and `between` all name an index the same way and must expand it the same
- * way: a second expansion would sort by one field list and match against another, and the btree
- * scan would quietly stop being served with nothing failing. A relation that no longer knows its
- * table can only read the name as a field, which is what keeps `map(…).orderBy("age")` working.
+ * `orderBy`, `getAll`, `between` and `group` all name an index the same way and must expand it the
+ * same way: a second expansion would sort by one field list and match against another, and the
+ * btree scan would quietly stop being served with nothing failing. A relation that no longer knows
+ * its table can only read the name as a field, which is what keeps `map(…).orderBy("age")` working.
+ *
+ * Each column keeps the field it was expanded from, because a compound index is also a *document*
+ * to a `group`'s mapper and its member names are the index's own. Reading them beside the columns
+ * rather than beside the caller is what keeps that one expansion rather than two.
  */
-export function IndexColumns(relation: Relation, name: string): Compiled[] {
+export function IndexColumns(
+  relation: Relation,
+  name: string,
+): DocumentMember[] {
   const fields = relation.origin ? relation.origin.index(name) : [name];
-  return fields.map((field) => relation.source.field(field));
+  return fields.map((field) => ({
+    name: field,
+    ...relation.source.field(field),
+  }));
 }
 
 function RowColumns(relation: Relation): string[] {
@@ -188,6 +210,13 @@ function WhereClause(relation: Relation): string | undefined {
     return undefined;
   }
   return `WHERE ${relation.where.join(" AND ")}`;
+}
+
+function GroupByClause(relation: Relation): string | undefined {
+  if (relation.groupBy.length === 0) {
+    return undefined;
+  }
+  return `GROUP BY ${relation.groupBy.map((term) => term.sql).join(", ")}`;
 }
 
 function OrderTerms(relation: Relation): string | undefined {
@@ -273,6 +302,7 @@ const CLAUSES: ClauseBuilder[] = [
   FromClause,
   JoinClauses,
   WhereClause,
+  GroupByClause,
   OrderByClause,
   LimitClause,
   OffsetClause,

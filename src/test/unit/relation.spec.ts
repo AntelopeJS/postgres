@@ -161,6 +161,24 @@ describe("Render", () => {
     );
   });
 
+  it("emits no group clause while the term list is empty", () => {
+    const relation = ClauseCompleteTable();
+    expect(relation.groupBy).to.deep.equal([]);
+    expect(Render(relation)).to.not.contain("GROUP BY");
+  });
+
+  it("emits the group terms in order, between the WHERE and the ORDER BY", () => {
+    const relation = ClauseCompleteTable();
+    relation.groupBy.push(
+      { sql: '"t0"."car"', type: TEXT },
+      { sql: '"t0"."price"', type: FLOAT },
+    );
+    expect(Render(relation)).to.contain(
+      'WHERE ("t0"."price" > $1) GROUP BY "t0"."car", "t0"."price"' +
+        ' ORDER BY "t0"."car" ASC',
+    );
+  });
+
   it("selects a single named column in value mode", () => {
     const relation = NewTable();
     SetProjection(relation, { sql: '("t0"."price" * 2)', type: FLOAT });
@@ -326,6 +344,14 @@ describe("Nested", () => {
     expect(nested.source.field("price").sql).to.equal('"t1"."price"');
     expect(nested.origin?.tableId).to.equal("vehicles");
     expect(nested.joins).to.deep.equal([]);
+  });
+
+  it("drops the group terms the rendered text already carries", () => {
+    const relation = NewTable();
+    relation.groupBy.push({ sql: '"t0"."car"', type: TEXT });
+    const nested = Nested(relation, NewContext());
+    expect(nested.from).to.contain('GROUP BY "t0"."car"');
+    expect(nested.groupBy).to.deep.equal([]);
   });
 
   it("carries single and absent and drops aggregated", () => {

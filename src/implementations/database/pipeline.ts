@@ -2,6 +2,7 @@ import type { DecodingContext } from "./context";
 import type { Relation } from "./relation";
 import { BuildRoot } from "./selection";
 import { AGGREGATE_STAGES } from "./stages-aggregate";
+import { GROUP_STAGES } from "./stages-group";
 import { JOIN_STAGES } from "./stages-join";
 import { PROJECTION_STAGES } from "./stages-projection";
 import { ROW_STAGES } from "./stages-rows";
@@ -40,21 +41,19 @@ export const PIPELINE_STAGES: PipelineStageMap = {
   ...PROJECTION_STAGES,
   ...AGGREGATE_STAGES,
   ...JOIN_STAGES,
+  ...GROUP_STAGES,
 };
-
-function Deferred(feature: string): string {
-  return `The PostgreSQL backend does not implement ${feature} yet`;
-}
 
 /**
  * Stages this backend will support, named so a caller gets that answer rather than "unknown".
  *
  * A terminal write is never dispatched through the pipeline, so a write this backend does
  * implement leaves this map for `WRITE_STAGES` rather than joining {@link PIPELINE_STAGES}.
+ *
+ * Empty, and kept rather than deleted: it is the one door a stage this backend has not built yet
+ * leaves through, and the census that reads all four maps is what makes an empty one visible.
  */
-export const DEFERRED_STAGES: Record<string, string> = {
-  group: Deferred("grouping"),
-};
+export const DEFERRED_STAGES: Record<string, string> = {};
 
 /** Stages this backend declines permanently, with the message it will always give. */
 export const REJECTED_STAGES: Record<string, string> = {

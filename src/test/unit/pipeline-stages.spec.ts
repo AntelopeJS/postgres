@@ -23,6 +23,7 @@ const VOCABULARY: readonly string[] = [
   "filter",
   "get",
   "getAll",
+  "group",
   "join",
   "key",
   "lookup",
@@ -38,7 +39,7 @@ const VOCABULARY: readonly string[] = [
   "without",
 ];
 
-const STAGE_COUNT = 21;
+const STAGE_COUNT = 22;
 
 const WRITE_VOCABULARY: readonly string[] = [
   "delete",
@@ -263,6 +264,7 @@ const MERGED_VOCABULARIES: readonly MergedVocabulary[] = [
       "stages-projection",
       "stages-aggregate",
       "stages-join",
+      "stages-group",
       "selection",
       "writes",
     ],
