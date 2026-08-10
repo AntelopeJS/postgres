@@ -43,6 +43,7 @@ const SHIFT_RIGHT = ">>";
 
 const ONE_SECOND = "interval '1 second'";
 const HALF = "0.5";
+const ZERO = "0";
 const INT32_MODULUS = "4294967296";
 const UINT32_MASK = "4294967295";
 const SHIFT_MASK = "31";
@@ -78,8 +79,18 @@ const ConcatArray: Arithmetic = (left, right) => ({
 
 const NO_READING = null;
 
+/** A divisor that is zero read as absent, so the row yields NULL — see {@link NUMERIC_STAGES}. */
+function NonZero(sql: string): string {
+  return `NULLIF(${sql}, ${ZERO})`;
+}
+
 const Modulo: Arithmetic = (left, right) => ({
-  sql: `(mod((${Numeric(left).sql})::numeric, (${Numeric(right).sql})::numeric)${FLOAT_CAST})`,
+  sql: `(mod((${Numeric(left).sql})::numeric, ${NonZero(`(${Numeric(right).sql})::numeric`)})${FLOAT_CAST})`,
+  type: FLOAT,
+});
+
+const Divide: Arithmetic = (left, right) => ({
+  sql: `(${Numeric(left).sql} ${OVER} ${NonZero(Numeric(right).sql)})`,
   type: FLOAT,
 });
 
@@ -214,6 +225,15 @@ const BitRshiftStage = BinaryStage((left, right, stage) => {
  *   NULL, not `0`, because the conversion chain would otherwise raise `22003` and lose the
  *   whole statement.
  *
+ * **`div` and `mod` read a zero divisor as absent**, through `NULLIF`, so the row answers NULL. A
+ * bare `/` and a bare `mod()` both raise `22012 division by zero`, which loses the whole statement
+ * and every other row with it — the same failure the int32 chain guards `22003` against one
+ * paragraph above, and the reason invariant 14's rule is *guard against failure*. It is not an
+ * attempt to reproduce JavaScript, where `1/0` is `Infinity` and `1%0` is `NaN`: neither is
+ * representable in `double precision` here, and NULL is what every other unreadable operand in
+ * this compiler already answers. The guard is on the divisor alone, so it cannot cost an index —
+ * a divisor is never the indexable side of a comparison.
+ *
  * `add` and `sub` dispatch on the operand kinds *before* unifying, because two distinct
  * concrete kinds unify to the bottom type — which would compare a date against a number as
  * jsonb rather than reading the number as seconds. A bottom-typed operand is resolved toward
@@ -225,7 +245,7 @@ export const NUMERIC_STAGES: StageMap = {
   add: PolymorphicStage(ADD_OPERANDS, Infix(PLUS)),
   sub: PolymorphicStage(SUB_OPERANDS, Infix(MINUS)),
   mul: BinaryStage(Infix(TIMES)),
-  div: BinaryStage(Infix(OVER)),
+  div: BinaryStage(Divide),
   mod: BinaryStage(Modulo),
   round: RoundingStage(NEAREST_INTEGER),
   ceil: RoundingStage(UPPER_INTEGER),

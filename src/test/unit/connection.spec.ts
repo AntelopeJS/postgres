@@ -1,9 +1,10 @@
 import { EventEmitter } from "node:events";
 import { expect } from "chai";
-import type { PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
 import {
   type BeforeDisconnect,
   GuardHeldClient,
+  GuardPool,
   type PoolTeardown,
   RegisterBeforeDisconnect,
   SettleBeforeDisconnect,
@@ -187,5 +188,33 @@ describe("a client borrowed from the pool", () => {
     CheckOut(log, new EventEmitter()).release(dropped);
     CheckOut(log, new EventEmitter()).release();
     expect(log.arguments).to.deep.equal([[dropped], NO_ARGUMENTS]);
+  });
+});
+
+/** The pool as the guard sees it: an emitter, which is all `pg.Pool` is for this purpose. */
+function Guarded(pool: EventEmitter): EventEmitter {
+  return GuardPool(pool as unknown as Pool) as unknown as EventEmitter;
+}
+
+describe("the pool a client is idle in", () => {
+  it("swallows an error event that would otherwise end the process", () => {
+    const pool = new EventEmitter();
+    expect(() => pool.emit(CLIENT_ERROR, new Error(DROPPED))).to.throw(DROPPED);
+    Guarded(pool);
+    expect(pool.listenerCount(CLIENT_ERROR)).to.equal(1);
+    expect(() => pool.emit(CLIENT_ERROR, new Error(DROPPED))).to.not.throw();
+  });
+
+  it("keeps the listener attached, since the pool outlives every client it lends", () => {
+    const pool = new EventEmitter();
+    Guarded(pool);
+    pool.emit(CLIENT_ERROR, new Error(DROPPED));
+    expect(pool.listenerCount(CLIENT_ERROR)).to.equal(1);
+    expect(() => pool.emit(CLIENT_ERROR, new Error(DROPPED))).to.not.throw();
+  });
+
+  it("answers the pool it guarded, so it composes around the constructor", () => {
+    const pool = new EventEmitter();
+    expect(Guarded(pool)).to.equal(pool);
   });
 });

@@ -301,27 +301,46 @@ describe("sub", () => {
 });
 
 describe("mul, div and mod", () => {
-  it("multiplies and divides with the plain infix operators", () => {
+  it("multiplies with the plain infix operator", () => {
     expect(Compile((doc) => doc.key("age").mul(2)).sql).to.equal(
       `(${AGE} * ${FLOAT_PARAM})`,
     );
+  });
+
+  it("reads a zero divisor as absent, since a bare / raises 22012 and loses the statement", () => {
     expect(Compile((doc) => doc.key("age").div(2)).sql).to.equal(
-      `(${AGE} / ${FLOAT_PARAM})`,
+      `(${AGE} / NULLIF(${FLOAT_PARAM}, 0))`,
     );
   });
 
   it("routes the modulo through numeric, since double precision has no % operator", () => {
     const out = Compile((doc) => doc.key("age").mod(10));
     expect(out.sql).to.equal(
-      `(mod((${AGE})::numeric, (${FLOAT_PARAM})::numeric)::double precision)`,
+      `(mod((${AGE})::numeric, NULLIF((${FLOAT_PARAM})::numeric, 0))::double precision)`,
     );
     expect(out.type).to.equal(FLOAT);
+  });
+
+  it("guards the modulo's divisor too, since mod() raises 22012 exactly as / does", () => {
+    const out = Compile((doc) => doc.key("age").mod(0));
+    expect(out.sql).to.contain("NULLIF(");
+    expect(out.sql).to.equal(
+      `(mod((${AGE})::numeric, NULLIF((${FLOAT_PARAM})::numeric, 0))::double precision)`,
+    );
+  });
+
+  it("guards the divisor alone, leaving the dividend a bare indexable column", () => {
+    const out = Compile((doc) => doc.key("age").div(2));
+    expect(out.sql).to.equal(`(${AGE} / NULLIF(${FLOAT_PARAM}, 0))`);
+    expect(out.sql.indexOf("NULLIF")).to.be.greaterThan(
+      out.sql.indexOf(`${AGE} /`),
+    );
   });
 
   it("wraps each modulo operand, since :: binds tighter than an infix operator", () => {
     const out = Compile((doc) => doc.key("name").mod(10));
     expect(out.sql).to.equal(
-      `(mod((${AsNumericText(NAME)})::numeric, (${FLOAT_PARAM})::numeric)::double precision)`,
+      `(mod((${AsNumericText(NAME)})::numeric, NULLIF((${FLOAT_PARAM})::numeric, 0))::double precision)`,
     );
   });
 });

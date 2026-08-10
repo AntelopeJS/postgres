@@ -28,13 +28,24 @@ async function initialize(schemaId: string, schema: SchemaDefinition) {
  *
  * The definition is parsed before the database is touched, so a declaration the
  * parser rejects fails with its message without opening a connection.
+ *
+ * **A failed registration only rolls back state it still owns.** Registration is fire-and-forget
+ * and re-registering an id is legal, so a slow failure can settle *after* a later registration of
+ * the same id has already succeeded and installed its own definition, shape and gate. Deleting
+ * unconditionally there wipes the live schema and leaves the worst of both: `ready[schemaId]` is
+ * the second registration's *resolved* promise, so every subsequent query passes
+ * {@link WaitForSchemaReady} and then dies in {@link GetTableShape} with `Unknown schema` — for a
+ * schema that is registered, converged, and whose tables exist. Comparing the gate against this
+ * call's own promise is the same ownership test `migrate.ts:EnsureRegistry` already makes.
  */
 export const Schemas = {
   register(schemaId: string, schema: SchemaDefinition) {
     definitions[schemaId] = schema;
-    const pending = initialize(schemaId, schema).catch((err) => {
-      delete definitions[schemaId];
-      delete shapes[schemaId];
+    const pending: Promise<void> = initialize(schemaId, schema).catch((err) => {
+      if (ready[schemaId] === pending) {
+        delete definitions[schemaId];
+        delete shapes[schemaId];
+      }
       throw err;
     });
     ready[schemaId] = pending;

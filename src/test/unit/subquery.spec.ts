@@ -217,6 +217,54 @@ describe("a subquery correlated to the query containing it", () => {
   });
 });
 
+/**
+ * A grouped query is `aggregated` and **not** `single`, which is the pair that reaches this branch.
+ *
+ * `stages-aggregate.ts:SetAggregate` sets both, so a stream aggregate takes the single-row branch
+ * and never gets here — which was the whole argument for leaving `aggregated` out of
+ * `SUBQUERY_BLOCKERS`, and `group` is what ended it. Unwrapped, the `jsonb_agg` absorbs into a
+ * relation that already carries a `GROUP BY` and an aggregate in its select list: `42803 aggregate
+ * function calls cannot be nested`, at execution, losing the whole statement.
+ */
+describe("a grouped query used as a value", () => {
+  function CountedByName(): string {
+    return SubquerySql(
+      Root().map(() => Other().group("name", (stream) => stream.count())),
+    );
+  }
+
+  it("wraps the group instead of aggregating into it", () => {
+    const sql = CountedByName();
+    expect(Occurrences(sql, "GROUP BY")).to.equal(1);
+    expect(sql).to.contain("FROM (SELECT");
+    expect(sql).to.contain(`AS "${NEXT_ALIAS}"`);
+  });
+
+  it("puts no aggregate inside another, which is the 42803 the blocker prevents", () => {
+    const sql = CountedByName();
+    const outer = sql.slice(0, sql.indexOf("FROM (SELECT"));
+    expect(outer).to.contain("jsonb_agg(");
+    expect(outer).to.not.contain("count(");
+  });
+
+  it("wraps a mapper that does not aggregate either, which would be 21000", () => {
+    const sql = SubquerySql(
+      Root().map(() => Other().group("name", (_stream, group) => group)),
+    );
+    expect(sql).to.contain("FROM (SELECT");
+    expect(sql.indexOf("jsonb_agg(")).to.be.lessThan(sql.indexOf("GROUP BY"));
+  });
+
+  it("binds every parameter it references, the wrap notwithstanding", () => {
+    const ledger = ReadParamLedger(
+      ApplySubqueries(
+        Root().map(() => Other().group("name", (stream) => stream.count())),
+      ),
+    );
+    expect(ledger.referenced).to.deep.equal(ledger.bound);
+  });
+});
+
 describe("a write nested inside another query", () => {
   it("is refused by a message naming the stage rather than the value", () => {
     expect(() =>

@@ -18,6 +18,9 @@ const CLIENT_ERROR = "error";
 const HELD_CLIENT_FAILED =
   "the connection under a borrowed PostgreSQL client failed while it was checked out";
 
+const IDLE_CLIENT_FAILED =
+  "the connection under an idle pooled PostgreSQL client failed";
+
 let pool: Pool | undefined;
 
 export type BeforeDisconnect = () => unknown;
@@ -33,6 +36,36 @@ function PinSession(client: ClientBase) {
 /** Turns a callback's synchronous throw into a rejection, which is all `allSettled` can absorb. */
 async function Invoke(callback: BeforeDisconnect) {
   return callback();
+}
+
+/** Swallows an idle client's failure — see {@link GuardPool}, which owns why the pool needs one. */
+function ReportIdleClientError(err: unknown) {
+  Logger.Warn(IDLE_CLIENT_FAILED, err);
+}
+
+/**
+ * Gives the pool the `error` listener it does not carry by default.
+ *
+ * This is {@link GuardHeldClient}'s rule at the other end of a client's life, and it is a second
+ * listener rather than the same one because the two cover disjoint windows. `pg-pool` removes its
+ * idle listener on checkout and re-attaches it on release, and *that* listener re-emits on the pool
+ * itself — so a connection that dies while its client sits idle **in** the pool arrives as
+ * `pool.emit("error", …)`, with no query in flight and nothing of this module's on the stack. A
+ * failover, an `idle_session_timeout`, an administrative `pg_terminate_backend` and a dropped
+ * socket all reach it. An `error` event on an `EventEmitter` with no listener is an unhandled
+ * exception, so an adapter that guards only its borrowed clients still ends the host process for an
+ * event it could have logged.
+ *
+ * Swallowing is the whole handling, for {@link GuardHeldClient}'s reason: the pool discards a
+ * broken client on its own, and the next caller is handed a working one. Nothing is un-listened,
+ * because the pool outlives every client it lends and is discarded whole by {@link Disconnect}.
+ *
+ * Exported so a spec can drive it with a bare `EventEmitter`, exactly as the held-client guard is
+ * driven — `Connect` builds a real pool and cannot be reached without a server (invariant 21).
+ */
+export function GuardPool(created: Pool): Pool {
+  created.on(CLIENT_ERROR, ReportIdleClientError);
+  return created;
 }
 
 /**
@@ -53,16 +86,21 @@ async function Invoke(callback: BeforeDisconnect) {
  * event is what keeps a failure from leaving a half-initialized client in the
  * pool: the pool ends that client and rejects the acquisition, which the
  * verification below turns into a failed `construct()`.
+ *
+ * The pool is guarded before it is verified — see {@link GuardPool} — because the verification
+ * acquisition below can itself be the first thing that fails.
  */
 export async function Connect(options?: Options) {
   await Disconnect();
   const resolved = SetOptions(options);
-  const created = new Pool({
-    connectionString: resolved.url,
-    statement_timeout: resolved.statementTimeoutMs,
-    ...resolved.pool,
-    onConnect: PinSession,
-  });
+  const created = GuardPool(
+    new Pool({
+      connectionString: resolved.url,
+      statement_timeout: resolved.statementTimeoutMs,
+      ...resolved.pool,
+      onConnect: PinSession,
+    }),
+  );
   try {
     const client = await created.connect();
     client.release();

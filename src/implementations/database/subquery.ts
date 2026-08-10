@@ -20,13 +20,24 @@ import type { QueryStage } from "./utils";
  *
  * Shorter than `stages-aggregate.ts`'s list by `projection`, and that difference is the point: the
  * projection is exactly what this aggregate collects, so blocking on it would wrap every nested
- * query that ever named a field. `aggregated` is absent because a relation that has already
- * aggregated answers one row and takes the single-row branch instead, never this one.
+ * query that ever named a field.
+ *
+ * **`aggregated` is here because `group` broke the argument for leaving it out.** That argument was
+ * that a relation which has aggregated answers one row and so takes the single-row branch instead
+ * of this one, which held while `stages-aggregate.ts:SetAggregate` was the only writer of the flag
+ * — it sets `single` alongside it. `stages-group.ts` sets `aggregated` and deliberately leaves
+ * `single` false, because a group answers one row *per group*. So a grouped query used as a value
+ * reaches this branch, and without the flag here the `jsonb_agg` absorbs into a relation that
+ * already carries a `GROUP BY` and an aggregate in its projection: `42803 aggregate function calls
+ * cannot be nested`, at execution, losing the whole statement. Wrapping first is the same answer
+ * the other seven blocker lists give, and it makes the group's rows the FROM item this aggregate
+ * collects.
  */
 const SUBQUERY_BLOCKERS: readonly RelationFlag[] = [
   "limit",
   "offset",
   "distinct",
+  "aggregated",
 ];
 
 /**
