@@ -78,6 +78,7 @@ function Reader(answers: Answer[]): { read: FeedEnvironment; asked: Asked[] } {
           epoch: answer.epoch ?? EPOCH,
           high_water: answer.high_water ?? null,
           scanned_to: answer.scanned_to ?? null,
+          scanned_count: (answer.events ?? []).length,
           events: (answer.events ?? []) as never,
         },
       ],

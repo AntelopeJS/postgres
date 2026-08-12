@@ -60,13 +60,6 @@ export interface Options {
    * and this is what bounds the failure of a listener connection that dies without erroring.
    */
   changePollIntervalMs?: number;
-  /**
-   * How many undelivered events a feed buffers before it stops polling. Defaults to 4096.
-   *
-   * A feed past this bound lets the log itself be the buffer; if it then falls out of
-   * {@link Options.changeRetentionMs}, the lag check ends it.
-   */
-  changeBufferLimit?: number;
 }
 
 export interface ResolvedOptions {
@@ -80,7 +73,6 @@ export interface ResolvedOptions {
   changeRetentionMs: number;
   changeBatchSize: number;
   changePollIntervalMs: number;
-  changeBufferLimit: number;
 }
 
 const DEFAULT_URL = "postgres://postgres@localhost:5432/antelopejs";
@@ -91,7 +83,6 @@ const DEFAULT_CURSOR_IDLE_TIMEOUT_MS = 60_000;
 const DEFAULT_CHANGE_RETENTION_MS = 300_000;
 const DEFAULT_CHANGE_BATCH_SIZE = 256;
 const DEFAULT_CHANGE_POLL_INTERVAL_MS = 5_000;
-const DEFAULT_CHANGE_BUFFER_LIMIT = 4_096;
 
 const SMALLEST_POSITIVE_INTEGER = 1;
 
@@ -152,11 +143,6 @@ export function SetOptions(options?: Options): ResolvedOptions {
       "changePollIntervalMs",
       options?.changePollIntervalMs,
       DEFAULT_CHANGE_POLL_INTERVAL_MS,
-    ),
-    changeBufferLimit: PositiveSafeInteger(
-      "changeBufferLimit",
-      options?.changeBufferLimit,
-      DEFAULT_CHANGE_BUFFER_LIMIT,
     ),
   };
   return resolved;

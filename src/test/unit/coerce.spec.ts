@@ -207,25 +207,30 @@ describe("Cast", () => {
 });
 
 describe("WithDefault", () => {
-  it("coalesces both sides at the unified type", () => {
+  it("lifts the default to jsonb rather than narrowing a jsonb-backed value", () => {
     const out = WithDefault(
       { sql: "v", type: OPAQUE },
       { sql: "$1", type: TEXT },
     );
     expect(out.sql).to.equal(
-      "COALESCE((CASE WHEN jsonb_typeof(v) = 'string' THEN (v #>> '{}') END), $1)",
+      "COALESCE(NULLIF(v, 'null'::jsonb), to_jsonb($1))",
     );
-    expect(out.type).to.equal(TEXT);
+    expect(out.type).to.equal(OPAQUE);
   });
 
-  it("falls back to the default when the guard rejects the stored type", () => {
+  it("puts no type guard on the value, since a default answers absence and not a type", () => {
+    for (const type of [TEXT, FLOAT]) {
+      const out = WithDefault({ sql: "v", type: OPAQUE }, { sql: "$1", type });
+      expect(out.sql).to.not.contain("jsonb_typeof");
+    }
+  });
+
+  it("keeps a declared scalar's own reading, which carries no such guard", () => {
     const out = WithDefault(
-      { sql: "v", type: OPAQUE },
+      { sql: "v", type: FLOAT },
       { sql: "$1", type: FLOAT },
     );
-    expect(out.sql).to.equal(
-      "COALESCE((CASE WHEN jsonb_typeof(v) = 'number' THEN ((v #>> '{}')::double precision) END), $1)",
-    );
+    expect(out.sql).to.equal("COALESCE(v, $1)");
     expect(out.type).to.equal(FLOAT);
   });
 

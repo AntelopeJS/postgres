@@ -260,23 +260,31 @@ export function ReadCursor(
   reqId: number,
   stages: QueryStage[],
 ): Promise<IteratorResult<any, void>> {
-  if (IsFeed(stages) || IsRegisteredFeed(reqId)) {
-    return ReadFeedEvent(reqId, stages);
+  try {
+    if (IsFeed(stages) || IsRegisteredFeed(reqId)) {
+      return ReadFeedEvent(reqId, stages);
+    }
+    return ReadCursorRow(reqId, () => CompileCursor(stages, QueryContext()));
+  } catch (err) {
+    return Promise.reject(err);
   }
-  return ReadCursorRow(reqId, () => CompileCursor(stages, QueryContext()));
 }
 
 /**
  * Closes whichever kind `reqId` named, and is total for a `reqId` that never opened.
  *
  * The consumer calls this unconditionally — `IterableCursor.return()` does, for a cursor that was
- * built and never iterated — so it cannot ask the caller which kind it is closing. A feed is
- * recognised by the registry that opened it; everything else goes to the cursor path, which is
- * already total for an id it has never seen and must stay the answer for one that never read.
+ * built and never iterated — so it cannot ask the caller which kind it is closing. A feed the
+ * registry already knows goes straight to it.
+ *
+ * **An id neither registry has seen is closed in both**, because at that point nothing can say
+ * which kind it was going to be: the stages arrive with the first *read*, and a close can precede
+ * one. Ending only the cursor left the next read free to open a live feed the close was meant to
+ * prevent — measured. Both closes are total for an unknown id and both bound what they remember.
  */
 export function CloseCursor(reqId: number): Promise<void> {
   if (IsRegisteredFeed(reqId)) {
     return CloseOneFeed(reqId);
   }
-  return CloseOneCursor(reqId);
+  return CloseOneCursor(reqId).then(() => CloseOneFeed(reqId));
 }

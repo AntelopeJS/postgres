@@ -218,11 +218,39 @@ function Absent(pair: CompiledPair): string {
   return `NULLIF(${pair.left.sql}, ${JSON_NULL})`;
 }
 
+/**
+ * Common type for a value and the default standing in for its absence.
+ *
+ * **A default is an alternative value, not a comparison operand, and that is the whole of why this
+ * is not {@link Unify}.** Unify pulls the bottom type *toward* the concrete side, which is right
+ * for a comparison — it is what lets a jsonb path be compared against a known type rather than as
+ * text. Pulling a jsonb-backed value toward the default's kind applies the projection's type guard
+ * to it, and that guard answers NULL for every stored value of *another* kind: the `COALESCE` then
+ * hands back the default for a value that was present all along. Measured, before this existed:
+ * an undeclared key holding `5` read through `.default("D")` answered `"D"`.
+ *
+ * So where the value is jsonb-backed and the default is of another kind, both go to jsonb — the
+ * default lifted by `to_jsonb` rather than the value narrowed. Everything else is {@link Unify}:
+ * two operands of one kind keep it, and a *declared scalar* against a mistyped default already
+ * lands on the bottom type, which is why only the jsonb-backed side needed saying.
+ */
+function DefaultType(value: SqlType, def: SqlType): SqlType {
+  if (IsJsonBacked(value) && value.kind !== def.kind) {
+    return OPAQUE;
+  }
+  return Unify(value, def);
+}
+
 export function WithDefault(value: Compiled, def?: Compiled): Compiled {
   if (!def) {
     return value;
   }
-  const pair = UnifyOperands(value, def);
+  const type = DefaultType(value.type, def.type);
+  const pair: CompiledPair = {
+    left: Cast(value, type),
+    right: Cast(def, type),
+    type,
+  };
   return {
     sql: `COALESCE(${Absent(pair)}, ${pair.right.sql})`,
     type: pair.type,

@@ -75,6 +75,20 @@ const TRIGGER_PREFIX = "antelopejs_changes_";
 const OLD_ROW = "o";
 const NEW_ROW = "n";
 
+/**
+ * The whole transition-table row as jsonb, written `alias.*` rather than as a bare alias.
+ *
+ * A bare `to_jsonb(n)` resolves `n` as a **column** before it resolves it as a row alias, so a table
+ * declaring a field named `n` logged that column's scalar instead of the row — measured: an insert
+ * logged `7`, and the feed delivered `{}` as the document. With *both* `n` and `o` declared, the
+ * update body's join made every `UPDATE` on that table fail outright with `42702 column reference
+ * "o" is ambiguous` — a table that accepted writes yesterday refusing them today, from the moment
+ * something first opened a feed on it. `alias.*` is unambiguous whatever the caller declared.
+ */
+function WholeRow(alias: string): string {
+  return `to_jsonb(${alias}.*)`;
+}
+
 const SCHEMA_VARIABLE = "TG_TABLE_SCHEMA";
 const TABLE_VARIABLE = "TG_TABLE_NAME";
 
@@ -105,7 +119,7 @@ SELECT ${SCHEMA_VARIABLE}, ${TABLE_VARIABLE}, ${select};`;
 
 const ADDED_BODY = LogInsert(
   [NEW_ROW_COLUMN],
-  `${NEW_ROW}.${INSTANCE}, ${QuoteLiteral(ADDED)}, to_jsonb(${NEW_ROW}) FROM ${NEW_TABLE_ALIAS} ${NEW_ROW}`,
+  `${NEW_ROW}.${INSTANCE}, ${QuoteLiteral(ADDED)}, ${WholeRow(NEW_ROW)} FROM ${NEW_TABLE_ALIAS} ${NEW_ROW}`,
 );
 
 /**
@@ -120,14 +134,14 @@ const ADDED_BODY = LogInsert(
  */
 const MODIFIED_BODY = LogInsert(
   [OLD_ROW_COLUMN, NEW_ROW_COLUMN],
-  `${NEW_ROW}.${INSTANCE}, ${QuoteLiteral(MODIFIED)}, to_jsonb(${OLD_ROW}), to_jsonb(${NEW_ROW})
+  `${NEW_ROW}.${INSTANCE}, ${QuoteLiteral(MODIFIED)}, ${WholeRow(OLD_ROW)}, ${WholeRow(NEW_ROW)}
 FROM ${NEW_TABLE_ALIAS} ${NEW_ROW}
 JOIN ${OLD_TABLE_ALIAS} ${OLD_ROW} ON ${OLD_ROW}.${INSTANCE} = ${NEW_ROW}.${INSTANCE} AND ${OLD_ROW}.${ID} = ${NEW_ROW}.${ID}`,
 );
 
 const REMOVED_BODY = LogInsert(
   [OLD_ROW_COLUMN],
-  `${OLD_ROW}.${INSTANCE}, ${QuoteLiteral(REMOVED)}, to_jsonb(${OLD_ROW}) FROM ${OLD_TABLE_ALIAS} ${OLD_ROW}`,
+  `${OLD_ROW}.${INSTANCE}, ${QuoteLiteral(REMOVED)}, ${WholeRow(OLD_ROW)} FROM ${OLD_TABLE_ALIAS} ${OLD_ROW}`,
 );
 
 /**

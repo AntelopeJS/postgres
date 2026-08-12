@@ -80,8 +80,14 @@ describe("the change log's DDL", () => {
   });
 
   it("logs the physical row rather than an assembled document", () => {
-    expect(CHANGE_LOG_STATEMENTS[ADDED_FUNCTION]).to.contain("to_jsonb(n)");
-    expect(CHANGE_LOG_STATEMENTS[REMOVED_FUNCTION]).to.contain("to_jsonb(o)");
+    expect(CHANGE_LOG_STATEMENTS[ADDED_FUNCTION]).to.contain("to_jsonb(n.*)");
+    expect(CHANGE_LOG_STATEMENTS[REMOVED_FUNCTION]).to.contain("to_jsonb(o.*)");
+  });
+
+  it("names the whole row, since a bare alias loses to a column of the same name", () => {
+    for (const statement of FUNCTIONS) {
+      expect(CHANGE_LOG_STATEMENTS[statement]).to.not.match(/to_jsonb\([no]\)/);
+    }
   });
 
   it("pairs the update's two transition tables on the key design §5 makes immutable", () => {

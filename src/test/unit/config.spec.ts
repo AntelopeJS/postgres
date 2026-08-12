@@ -7,7 +7,6 @@ const DEFAULT_CURSOR_IDLE_TIMEOUT_MS = 60_000;
 const DEFAULT_CHANGE_RETENTION_MS = 300_000;
 const DEFAULT_CHANGE_BATCH_SIZE = 256;
 const DEFAULT_CHANGE_POLL_INTERVAL_MS = 5_000;
-const DEFAULT_CHANGE_BUFFER_LIMIT = 4_096;
 
 const VALIDATED = [
   "cursorBatchSize",
@@ -15,7 +14,6 @@ const VALIDATED = [
   "changeRetentionMs",
   "changeBatchSize",
   "changePollIntervalMs",
-  "changeBufferLimit",
 ] as const;
 
 type ValidatedOption = (typeof VALIDATED)[number];
@@ -26,7 +24,6 @@ const DEFAULTS: Record<ValidatedOption, number> = {
   changeRetentionMs: DEFAULT_CHANGE_RETENTION_MS,
   changeBatchSize: DEFAULT_CHANGE_BATCH_SIZE,
   changePollIntervalMs: DEFAULT_CHANGE_POLL_INTERVAL_MS,
-  changeBufferLimit: DEFAULT_CHANGE_BUFFER_LIMIT,
 };
 
 const REFUSED: readonly unknown[] = [

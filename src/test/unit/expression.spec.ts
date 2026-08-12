@@ -239,9 +239,9 @@ describe("obj_index", () => {
       doc.key("metadata").key(ValueProxy.constant("level") as never, 0),
     );
     expect(out.sql).to.equal(
-      `COALESCE((CASE WHEN jsonb_typeof(("t"."metadata" -> ($2::text))) = 'number' THEN ((("t"."metadata" -> ($2::text)) #>> '{}')::double precision) END), ($1::double precision))`,
+      `COALESCE(NULLIF(("t"."metadata" -> ($2::text)), 'null'::jsonb), to_jsonb(($1::double precision)))`,
     );
-    expect(out.type).to.equal(FLOAT);
+    expect(out.type).to.equal(OPAQUE);
   });
 
   it("clears a pending timezone", () => {

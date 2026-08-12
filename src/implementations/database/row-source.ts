@@ -1,7 +1,13 @@
 import { Cast, WithDefault } from "./coerce";
 import { DocumentKeys, type TableShape } from "./fields";
 import { Defaulted, StoredAs } from "./readings";
-import { type Compiled, JsonKey, QualifiedColumn, QuoteLiteral } from "./sql";
+import {
+  type Compiled,
+  JSON_NULL,
+  JsonKey,
+  QualifiedColumn,
+  QuoteLiteral,
+} from "./sql";
 import {
   IsJsonBacked,
   JsonOf,
@@ -98,6 +104,24 @@ export function AliasedColumns(alias: string): ColumnAddress {
 }
 
 /**
+ * A logged jsonb member read as the column it came from: a json `null` is the column being absent.
+ *
+ * `to_jsonb` of a row renders **every** column, so a jsonb-backed column that is SQL NULL arrives
+ * as jsonb `null` rather than as SQL NULL — and {@link BuildDocument}'s container guard tests for
+ * SQL NULL, so without this the member is merged in as `{"tags": null}` where a read of the same row
+ * omits it. That is not only a shape difference: `hasfields("tags")` then **admits** a row a read
+ * does not, so a filtered feed matches rows its own query would not.
+ *
+ * Lossless, because a declared jsonb-backed column cannot hold a stored json null in the first
+ * place — design §5 writes a caller's `null` to such a column as SQL NULL, measured — so there is no
+ * value here for the two spellings to conflate. The *undeclared* keys, where a stored json null is a
+ * real and distinguishable value, are read out of the overflow document and never come through here.
+ */
+function Present(member: Compiled): Compiled {
+  return { sql: `NULLIF(${member.sql}, ${JSON_NULL})`, type: member.type };
+}
+
+/**
  * A column of a **logged** row — a physical row stored whole in jsonb by the change log.
  *
  * Every member is read through `readings.ts:StoredAs`, which is the same table the write path
@@ -110,8 +134,10 @@ export function AliasedColumns(alias: string): ColumnAddress {
  * never an assembled document.
  */
 export function LoggedColumns(row: string): ColumnAddress {
-  return (column, type) =>
-    StoredAs({ sql: JsonKey(row, column), type: OPAQUE }, type);
+  return (column, type) => {
+    const member: Compiled = { sql: JsonKey(row, column), type: OPAQUE };
+    return StoredAs(IsJsonBacked(type) ? Present(member) : member, type);
+  };
 }
 
 export class ColumnRowSource implements RowSource {

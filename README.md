@@ -162,7 +162,6 @@ stored as the index comment rather than by parsing the index definition back.
     changeRetentionMs: 300000,          // How long a change event stays readable — a contract
     changeBatchSize: 256,               // Change events read per round trip
     changePollIntervalMs: 5000,         // Fallback poll; NOTIFY is the primary wakeup
-    changeBufferLimit: 4096,            // Undelivered events a feed buffers
     pool: {                             // Optional pg.Pool options, merged over the URL
         max: 10,
         connectionTimeoutMillis: 30000,
@@ -189,7 +188,7 @@ The module uses the `pg` driver and delegates pooling to `pg.Pool`:
   where every other numeric option is taken as given. `FETCH` will not accept a bound parameter for
   its count, so `cursorBatchSize` is the one configured value that reaches SQL as text rather than
   as a parameter, and it is validated at `construct()` for that reason
-- The four `change*` options are validated the same way. `changeRetentionMs` is a **contract rather
+- The three `change*` options are validated the same way. `changeRetentionMs` is a **contract rather
   than a tuning knob**: it is the answer to how long a consumer may stall before its feed is ended —
   see [Change feeds](#change-feeds)
 

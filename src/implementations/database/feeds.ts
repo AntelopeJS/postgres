@@ -51,6 +51,7 @@ interface PollRow {
   epoch: Date;
   high_water: string | null;
   scanned_to: string | null;
+  scanned_count: number;
   events: LoggedEvent[];
 }
 
@@ -86,6 +87,10 @@ const EMPTY = 0;
 const NO_EVENTS = "0";
 
 const OUTPUT = QuoteIdentifier(OUTPUT_COLUMN);
+
+/** The settled slice of a batch, which the laterals and the presence guard both address. */
+const EVENT_CTE = QuoteIdentifier("settled");
+export const EVENT = QuoteIdentifier("ev");
 
 const INSTANCE_PARAM = 3;
 
@@ -146,10 +151,30 @@ interface FeedState {
   reason?: EndReason;
   gap?: FeedGap;
   wake?: () => void;
+  woken: boolean;
+  full: boolean;
+  ending: Promise<void>;
+  endNow: () => void;
   env: FeedEnvironment;
 }
 
+/**
+ * How many ended feeds keep their entry before the oldest is dropped.
+ *
+ * A `reqId` never repeats, so a registry that only grows leaks one record per feed the process ever
+ * opened — measured: after 100 open/close cycles all 100 states were still resident, invisible to
+ * `CountOpenFeeds` because that counts only live ones. Each retained state holds a compiled
+ * `FeedPlan`, so the leak is statement text rather than a pointer.
+ *
+ * Only *ended* states are dropped, and unlike `cursors.ts` there is no forgotten-range guard beside
+ * this: a cursor whose ending is forgotten re-opens and leaks a **pool client**, where a feed that
+ * re-opens costs a JS object and re-reads from a fresh watermark. The consumer cannot reach it in
+ * any case — `IterableCursor` is finished once it has been told `done`.
+ */
+const REMEMBERED_ENDINGS = 1024;
+
 const feeds = new Map<number, FeedState>();
+const retired: number[] = [];
 
 let isSweeping = false;
 
@@ -163,7 +188,7 @@ function Ignore() {}
  * source once a `filter` after a projection has rendered it into a subselect.
  */
 function Present(column: string, value: string): string {
-  return `(CASE WHEN ${LOG}.${column} IS NOT NULL THEN ${value} END)`;
+  return `(CASE WHEN ${EVENT}.${column} IS NOT NULL THEN ${value} END)`;
 }
 
 /**
@@ -203,25 +228,41 @@ function PollSql(plan: FeedPlan, instanced: boolean, limit: number): string {
     ? ` AND ${LOG}.${LOG_INSTANCE_COLUMN} = $${first + INSTANCE_PARAM}`
     : "";
   const watermark = `$${first + (instanced ? 4 : 3)}`;
-  return `WITH "scanned" AS (
+  return `WITH "candidate" AS (
   SELECT ${LOG}.${SEQ_COLUMN} AS ${SEQ_COLUMN},
+         ${LOG}.${TXID_COLUMN} AS ${TXID_COLUMN},
          ${LOG}.${OP_COLUMN} AS ${OP_COLUMN},
-         ${Present(OLD_ROW_COLUMN, `"o".${OUTPUT}`)} AS "old",
-         ${Present(NEW_ROW_COLUMN, `"n".${OUTPUT}`)} AS "new"
+         ${LOG}.${OLD_ROW_COLUMN} AS ${OLD_ROW_COLUMN},
+         ${LOG}.${NEW_ROW_COLUMN} AS ${NEW_ROW_COLUMN}
     FROM ${LOG}
-    LEFT JOIN LATERAL (${plan.oldSide}) AS "o" ON true
-    LEFT JOIN LATERAL (${plan.newSide}) AS "n" ON true
    WHERE ${LOG}.${SCHEMA_COLUMN} = $${first + 1} AND ${LOG}.${TABLE_COLUMN} = $${first + 2}${scope}
      AND ${LOG}.${SEQ_COLUMN} > ${watermark}::bigint
-     AND ${LOG}.${TXID_COLUMN} < pg_snapshot_xmin(pg_current_snapshot())
    ORDER BY ${LOG}.${SEQ_COLUMN}
    LIMIT ${limit}
+),
+"boundary" AS (
+  SELECT min(${SEQ_COLUMN}) AS "stop" FROM "candidate"
+   WHERE ${TXID_COLUMN} >= pg_snapshot_xmin(pg_current_snapshot())
+),
+${EVENT_CTE} AS (
+  SELECT "candidate".* FROM "candidate", "boundary"
+   WHERE "boundary"."stop" IS NULL OR "candidate".${SEQ_COLUMN} < "boundary"."stop"
+),
+"scanned" AS (
+  SELECT ${EVENT}.${SEQ_COLUMN} AS ${SEQ_COLUMN},
+         ${EVENT}.${OP_COLUMN} AS ${OP_COLUMN},
+         ${Present(OLD_ROW_COLUMN, `"o".${OUTPUT}`)} AS "old",
+         ${Present(NEW_ROW_COLUMN, `"n".${OUTPUT}`)} AS "new"
+    FROM ${EVENT_CTE} AS ${EVENT}
+    LEFT JOIN LATERAL (${plan.oldSide}) AS "o" ON true
+    LEFT JOIN LATERAL (${plan.newSide}) AS "n" ON true
 )
 SELECT
   pg_postmaster_start_time() AS "epoch",
   (SELECT ${HIGH_WATER_COLUMN} FROM ${REAPED}
     WHERE ${EPOCH_COLUMN} = pg_postmaster_start_time()) AS "high_water",
   (SELECT max(${SEQ_COLUMN})::text FROM "scanned") AS "scanned_to",
+  (SELECT count(*)::int FROM "scanned") AS "scanned_count",
   COALESCE((SELECT jsonb_agg(jsonb_build_object(
       'op', "x".${OP_COLUMN}, 'old', "x"."old", 'new', "x"."new")
       ORDER BY "x".${SEQ_COLUMN})
@@ -230,7 +271,15 @@ SELECT
 }
 
 /**
- * The `seq` a feed opens above, so it delivers what happens next and not what already did.
+ * The `seq` a feed opens above: what happens next, and — with one measured exception — not what
+ * already did.
+ *
+ * The exception is the same cluster-wide horizon the poll rests on. `pg_snapshot_xmin` is computed
+ * across every backend on the *server*, so while any write transaction is open anywhere, rows that
+ * have already committed here are excluded from the maximum below and the feed opens beneath them —
+ * and then delivers them. Measured: two rows committed before the feed was built arrived as `added`
+ * events. It is the safe direction of the two, and the alternative is opening above rows whose own
+ * transactions have not settled, which is how events are lost rather than repeated.
  *
  * **Both terms are needed, and the second is the one a reasonable implementation omits.** The
  * highest settled `seq` is where the log is now — but on a log the reaper has already emptied there
@@ -277,10 +326,18 @@ function Registered(reqId: number, env?: FeedEnvironment): FeedState {
   if (known) {
     return known;
   }
+  let endNow = Ignore;
+  const ending = new Promise<void>((resolve) => {
+    endNow = resolve;
+  });
   const state: FeedState = {
     chain: Promise.resolve(),
     watermark: 0n,
     buffer: [],
+    woken: false,
+    full: false,
+    ending,
+    endNow,
     env: env ?? LIVE,
   };
   feeds.set(reqId, state);
@@ -291,15 +348,34 @@ export function IsRegisteredFeed(reqId: number): boolean {
   return feeds.has(reqId);
 }
 
+/** Records an ending and drops the oldest once the registry is over its bound. */
+function Forget(reqId: number) {
+  retired.push(reqId);
+  while (retired.length > REMEMBERED_ENDINGS) {
+    feeds.delete(retired.shift() as number);
+  }
+}
+
 /** Ends the feed once, and releases whatever read is waiting on it. */
-function Retire(state: FeedState, reason: EndReason) {
+function Retire(reqId: number, state: FeedState, reason: EndReason) {
   if (!state.reason) {
     state.reason = reason;
+    Forget(reqId);
   }
+  state.endNow();
   Wake(state);
 }
 
+/**
+ * Releases a feed that is waiting, and remembers the wakeup for one that is not.
+ *
+ * The flag is the whole of it: a notification that lands while the feed is *inside* its poll would
+ * otherwise be dropped, because `state.wake` only exists for the duration of a wait — and the next
+ * wait would then sit out a full `changePollIntervalMs` for an event already in the log. Measured
+ * before the flag: 4203 ms to deliver an event committed 25 ms earlier, against a 4 s interval.
+ */
 function Wake(state: FeedState) {
+  state.woken = true;
   const waiting = state.wake;
   state.wake = undefined;
   waiting?.();
@@ -307,6 +383,10 @@ function Wake(state: FeedState) {
 
 /** Resolves on a notification for this feed, on the fallback interval, or on the feed ending. */
 function Waited(state: FeedState, options: ResolvedOptions): Promise<void> {
+  if (state.woken) {
+    state.woken = false;
+    return Promise.resolve();
+  }
   return new Promise<void>((resolve) => {
     const timer = setTimeout(() => {
       state.wake = undefined;
@@ -383,7 +463,11 @@ function Lapsed(state: FeedState, high: string | null): boolean {
  * where getting it wrong shows, as a busy table with a narrow filter starving its own feed, and by
  * then this code is already written.
  */
-async function Poll(state: FeedState, options: ResolvedOptions): Promise<void> {
+async function Poll(
+  reqId: number,
+  state: FeedState,
+  options: ResolvedOptions,
+): Promise<void> {
   const target = state.target as FeedTarget;
   const plan = state.plan as FeedPlan;
   const result = await state.env.read(
@@ -392,7 +476,7 @@ async function Poll(state: FeedState, options: ResolvedOptions): Promise<void> {
   );
   const row = result.rows[0];
   if (row.epoch.getTime() !== state.epoch) {
-    Retire(state, RESTARTED);
+    Retire(reqId, state, RESTARTED);
     return;
   }
   if (Lapsed(state, row.high_water)) {
@@ -400,9 +484,10 @@ async function Poll(state: FeedState, options: ResolvedOptions): Promise<void> {
       from: state.watermark + 1n,
       to: BigInt(row.high_water as string),
     };
-    Retire(state, LAPSED);
+    Retire(reqId, state, LAPSED);
     return;
   }
+  state.full = row.scanned_count >= options.changeBatchSize;
   for (const event of row.events) {
     state.buffer.push(Delivered(event, plan.type));
   }
@@ -459,8 +544,8 @@ async function Open(state: FeedState, stages: QueryStage[]): Promise<void> {
   const plan = CompileFeed(
     Between(stages),
     state.env.origin(target.schemaId, target.tableId),
-    `${LOG}.${OLD_ROW_COLUMN}`,
-    `${LOG}.${NEW_ROW_COLUMN}`,
+    `${EVENT}.${OLD_ROW_COLUMN}`,
+    `${EVENT}.${NEW_ROW_COLUMN}`,
   );
   await state.env.install(target.schemaId, target.tableId);
   const opened = await state.env.read(OPEN_SQL, []);
@@ -491,14 +576,23 @@ function Ended(state: FeedState): IteratorResult<unknown, void> {
  * A transient failure is retried rather than being terminal, which inverts the cursor's rule for
  * the same reason. Re-reading from the watermark is idempotent, so a connection blip costs a feed
  * latency where it costs a cursor its transaction and therefore its life.
+ *
+ * **The poll is raced against the feed's own ending, and that is not tidiness.** `pool.end()`
+ * abandons acquisitions still queued behind a busy pool — measured against a bare `pg.Pool` with no
+ * adapter involved, 3 of 4 `query()` promises never settled — so a feed retired while its poll is
+ * waiting for a client would sit on a promise that can never resolve, and its consumer's `next()`
+ * would never settle either. That is a *fourth* way to end, and the one the contract does not
+ * allow. Racing the ending means a closed or swept feed answers from `state.reason` whatever the
+ * poll it started is still doing.
  */
 async function Advance(
+  reqId: number,
   state: FeedState,
   stages: QueryStage[],
   options: ResolvedOptions,
 ): Promise<IteratorResult<unknown, void>> {
   if (isSweeping) {
-    Retire(state, CLOSED);
+    Retire(reqId, state, CLOSED);
   }
   for (;;) {
     if (state.reason) {
@@ -511,10 +605,14 @@ async function Advance(
       await Open(state, stages);
       continue;
     }
-    await Poll(state, options).catch((err: unknown) => {
-      Logger.Warn(POLL_FAILED, err);
-    });
-    if (state.buffer.length === EMPTY && !state.reason) {
+    state.woken = false;
+    await Promise.race([
+      Poll(reqId, state, options).catch((err: unknown) => {
+        Logger.Warn(POLL_FAILED, err);
+      }),
+      state.ending,
+    ]);
+    if (state.buffer.length === EMPTY && !state.reason && !state.full) {
       await Waited(state, options);
     }
   }
@@ -537,7 +635,7 @@ export function ReadFeedEvent(
 ): Promise<IteratorResult<unknown, void>> {
   const options = GetOptions();
   const state = Registered(reqId, env);
-  const next = state.chain.then(() => Advance(state, stages, options));
+  const next = state.chain.then(() => Advance(reqId, state, stages, options));
   state.chain = next.then(Ignore, Ignore);
   return next;
 }
@@ -550,10 +648,7 @@ export function ReadFeedEvent(
  * it would never run. Ending the state and waking the waiter is what lets that read resolve.
  */
 export function CloseOneFeed(reqId: number): Promise<void> {
-  const state = feeds.get(reqId);
-  if (state) {
-    Retire(state, CLOSED);
-  }
+  Retire(reqId, Registered(reqId), CLOSED);
   return Promise.resolve();
 }
 
@@ -568,8 +663,8 @@ export function CloseOneFeed(reqId: number): Promise<void> {
 export async function CloseAllFeeds(): Promise<void> {
   isSweeping = true;
   try {
-    for (const state of feeds.values()) {
-      Retire(state, CLOSED);
+    for (const [reqId, state] of feeds.entries()) {
+      Retire(reqId, state, CLOSED);
     }
     await Promise.resolve();
   } finally {
