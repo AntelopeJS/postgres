@@ -5,7 +5,10 @@ import {
   type ArgumentBinding,
   DecodingContext,
 } from "../../implementations/database/context";
-import { ColumnRowSource } from "../../implementations/database/row-source";
+import {
+  AliasedColumns,
+  ColumnRowSource,
+} from "../../implementations/database/row-source";
 import type { Compiled } from "../../implementations/database/sql";
 import {
   ArrayOf,
@@ -172,7 +175,7 @@ describe("DecodeFunction", () => {
   it("binds each lambda parameter for the duration of the decode", () => {
     const recorded = NewRecorded();
     const context = NewContext(recorded);
-    const source = new ColumnRowSource("t", emptyTable);
+    const source = new ColumnRowSource(AliasedColumns("t"), emptyTable);
     const func = QueryStage("func", undefined, [7], ValueProxy.arg(7));
 
     const out = DecodeFunction(func, context, [source]);
@@ -186,8 +189,8 @@ describe("DecodeFunction", () => {
   it("binds every declared parameter", () => {
     const recorded = NewRecorded();
     const context = NewContext(recorded);
-    const left = new ColumnRowSource("l", emptyTable);
-    const right = new ColumnRowSource("r", emptyTable);
+    const left = new ColumnRowSource(AliasedColumns("l"), emptyTable);
+    const right = new ColumnRowSource(AliasedColumns("r"), emptyTable);
     const func = QueryStage(
       "func",
       undefined,
@@ -210,7 +213,7 @@ describe("DecodeFunction", () => {
 
   it("binds nothing when a later parameter has no binding", () => {
     const context = NewContext(NewRecorded());
-    const left = new ColumnRowSource("l", emptyTable);
+    const left = new ColumnRowSource(AliasedColumns("l"), emptyTable);
     const func = QueryStage(
       "func",
       undefined,
@@ -227,7 +230,7 @@ describe("DecodeFunction", () => {
 
   it("unbinds even when the body fails to decode", () => {
     const context = NewContext(NewRecorded());
-    const source = new ColumnRowSource("t", emptyTable);
+    const source = new ColumnRowSource(AliasedColumns("t"), emptyTable);
     const func = QueryStage("func", undefined, [7], () => 1);
 
     expect(() => DecodeFunction(func, context, [source])).to.throw(/function/);
@@ -241,7 +244,7 @@ describe("WithBoundArguments", () => {
 
   it("unbinds even when a compilation that is not a decode throws", () => {
     const context = NewContext(NewRecorded());
-    const source = new ColumnRowSource("t", emptyTable);
+    const source = new ColumnRowSource(AliasedColumns("t"), emptyTable);
     const func = QueryStage("func", undefined, [7], ValueProxy.arg(7));
 
     expect(() =>

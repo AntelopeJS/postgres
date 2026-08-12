@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import type { TableShape } from "../../implementations/database/fields";
 import {
+  AliasedColumns,
   BuildDocument,
   ColumnRowSource,
   type DocumentMember,
@@ -33,26 +34,28 @@ const catalog: TableShape = {
 
 describe("ColumnRowSource", () => {
   it("resolves a declared field to its native column", () => {
-    const source = new ColumnRowSource("t", vehicles);
+    const source = new ColumnRowSource(AliasedColumns("t"), vehicles);
     const out = source.field("price");
     expect(out.sql).to.equal('"t"."price"');
     expect(out.type).to.equal(FLOAT);
   });
 
   it("resolves the primary key to its own column", () => {
-    const out = new ColumnRowSource("t", vehicles).field("_id");
+    const out = new ColumnRowSource(AliasedColumns("t"), vehicles).field("_id");
     expect(out.sql).to.equal(`"t"."_id"`);
     expect(out.type).to.equal(TEXT);
   });
 
   it("routes an undeclared field through _extra", () => {
-    const out = new ColumnRowSource("t", vehicles).field("productIds");
+    const out = new ColumnRowSource(AliasedColumns("t"), vehicles).field(
+      "productIds",
+    );
     expect(out.sql).to.equal(`("t"."_extra" -> 'productIds')`);
     expect(out.type).to.equal(OPAQUE);
   });
 
   it("does not resolve keys inherited from Object.prototype", () => {
-    const source = new ColumnRowSource("t", vehicles);
+    const source = new ColumnRowSource(AliasedColumns("t"), vehicles);
     expect(source.field("constructor").sql).to.equal(
       `("t"."_extra" -> 'constructor')`,
     );
@@ -64,7 +67,7 @@ describe("ColumnRowSource", () => {
   });
 
   it("builds the document from the known columns", () => {
-    const out = new ColumnRowSource("t", vehicles).toJson();
+    const out = new ColumnRowSource(AliasedColumns("t"), vehicles).toJson();
     expect(out.sql).to.contain("jsonb_strip_nulls(jsonb_build_object(");
     expect(out.sql).to.contain(`'_id', "t"."_id"`);
     expect(out.sql).to.contain(`|| COALESCE("t"."_extra", '{}'::jsonb)`);
@@ -72,13 +75,13 @@ describe("ColumnRowSource", () => {
   });
 
   it("tolerates a NULL _extra rather than nulling the whole document", () => {
-    const out = new ColumnRowSource("t", vehicles).toJson();
+    const out = new ColumnRowSource(AliasedColumns("t"), vehicles).toJson();
     expect(out.sql).to.contain(`COALESCE("t"."_extra", '{}'::jsonb)`);
     expect(out.sql).to.not.contain(`|| "t"."_extra")`);
   });
 
   it("keeps declared jsonb columns out of jsonb_strip_nulls", () => {
-    const out = new ColumnRowSource("t", catalog).toJson();
+    const out = new ColumnRowSource(AliasedColumns("t"), catalog).toJson();
     expect(out.sql).to.contain(
       `jsonb_strip_nulls(jsonb_build_object('_id', "t"."_id", 'car', "t"."car"))`,
     );
@@ -91,7 +94,9 @@ describe("ColumnRowSource", () => {
   });
 
   it("exposes a shape including the primary key", () => {
-    expect(new ColumnRowSource("t", vehicles).shape()).to.deep.equal({
+    expect(
+      new ColumnRowSource(AliasedColumns("t"), vehicles).shape(),
+    ).to.deep.equal({
       _id: TEXT,
       car: TEXT,
       price: FLOAT,

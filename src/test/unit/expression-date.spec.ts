@@ -8,7 +8,10 @@ import {
 } from "../../implementations/database/expression";
 import type { TableShape } from "../../implementations/database/fields";
 import { Moment } from "../../implementations/database/readings";
-import { ColumnRowSource } from "../../implementations/database/row-source";
+import {
+  AliasedColumns,
+  ColumnRowSource,
+} from "../../implementations/database/row-source";
 import type { Compiled } from "../../implementations/database/sql";
 import {
   ArrayOf,
@@ -41,7 +44,7 @@ function NewContext(): DecodingContext {
     ...RefusingCompilers(),
     expression: CompileExpression,
   });
-  context.bind(ROW_ID, new ColumnRowSource("t", users));
+  context.bind(ROW_ID, new ColumnRowSource(AliasedColumns("t"), users));
   return context;
 }
 
@@ -219,7 +222,7 @@ describe("date_with_timezone", () => {
 
   it("leaves a row accumulator addressable, so a column keeps its index", () => {
     const stage = LastStage((doc) => doc.withTimezone(NEW_YORK_NAME));
-    const source = new ColumnRowSource("t", users);
+    const source = new ColumnRowSource(AliasedColumns("t"), users);
     const out = STAGES[stage.stage]({ current: source }, stage, NewContext());
     expect(out.current).to.equal(source);
   });

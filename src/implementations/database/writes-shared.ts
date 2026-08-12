@@ -3,7 +3,7 @@ import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 import type { DecodingContext } from "./context";
 import { TableReference } from "./identifier";
 import { type Relation, RequireOrigin, type TableOrigin } from "./relation";
-import { ColumnRowSource, type RowSource } from "./row-source";
+import { AliasedColumns, ColumnRowSource, type RowSource } from "./row-source";
 import type { InstanceScope, RootSelection } from "./selection";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import { EXTRA_COLUMN, type QueryStage } from "./utils";
@@ -101,7 +101,7 @@ export function WriteTable(origin: TableOrigin): string {
  * semantics a mapper wants.
  */
 export function WriteRowSource(origin: TableOrigin): RowSource {
-  return new ColumnRowSource(WRITE_ALIAS, origin.shape);
+  return new ColumnRowSource(AliasedColumns(WRITE_ALIAS), origin.shape);
 }
 
 /**

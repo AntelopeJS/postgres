@@ -2,9 +2,11 @@ import assert from "node:assert";
 import type { DecodingContext } from "./context";
 import { DeclaredColumns, PhysicalOrder, type TableShape } from "./fields";
 import {
+  AliasedColumns,
   ColumnRowSource,
   type DocumentMember,
   JsonRowSource,
+  LoggedColumns,
   type RowSource,
 } from "./row-source";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
@@ -321,7 +323,33 @@ export function TableRelation(
   return NewRelation({
     from,
     alias,
-    source: new ColumnRowSource(alias, origin.shape),
+    source: new ColumnRowSource(AliasedColumns(alias), origin.shape),
+    origin,
+  });
+}
+
+/**
+ * A relation over one **logged** row — a physical row the change log stored whole in jsonb.
+ *
+ * The same `ColumnRowSource` a table relation reads through, differing only in how it addresses a
+ * column, which is the whole of what makes a feed's document equal a read's **by construction**
+ * rather than by test. Two independent assemblers would agree on a five-field vehicle and drift on
+ * `_extra`, on a null in a declared column, on a truncated identifier, or on a field added after
+ * the row was logged — none of which any conformance case touches.
+ *
+ * It carries the table's real origin, so `getAll` and `between` expand an index name through the
+ * one expansion the DDL and the read path already share (invariant 17).
+ */
+export function LoggedRelation(
+  from: string,
+  alias: string,
+  row: string,
+  origin: TableOrigin,
+): Relation {
+  return NewRelation({
+    from,
+    alias,
+    source: new ColumnRowSource(LoggedColumns(row), origin.shape),
     origin,
   });
 }

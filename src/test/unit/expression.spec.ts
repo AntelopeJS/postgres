@@ -14,6 +14,7 @@ import {
   StoredAs,
 } from "../../implementations/database/readings";
 import {
+  AliasedColumns,
   ColumnRowSource,
   JsonRowSource,
 } from "../../implementations/database/row-source";
@@ -62,7 +63,7 @@ function NewContext(): DecodingContext {
     ...RefusingCompilers(),
     expression: CompileExpression,
   });
-  context.bind(ROW_ID, new ColumnRowSource("t", users));
+  context.bind(ROW_ID, new ColumnRowSource(AliasedColumns("t"), users));
   context.bind(VALUE_ID, ELEMENT);
   context.bind(SUBQUERY_ID, () => SUBQUERY);
   return context;
@@ -102,7 +103,7 @@ describe("CompileExpression dispatch", () => {
     const out = CompileExpression(
       ValueProxy.constant(1).build(),
       context,
-      new ColumnRowSource("t", users),
+      new ColumnRowSource(AliasedColumns("t"), users),
     );
     expect(out.sql).to.equal("($1::double precision)");
   });
@@ -245,7 +246,10 @@ describe("obj_index", () => {
 
   it("clears a pending timezone", () => {
     const out = STAGES.obj_index(
-      { current: new ColumnRowSource("t", users), timezone: "'UTC'" },
+      {
+        current: new ColumnRowSource(AliasedColumns("t"), users),
+        timezone: "'UTC'",
+      },
       QueryStage("obj_index", undefined, "age"),
       NewContext(),
     );
@@ -645,7 +649,7 @@ describe("null comparisons", () => {
 
 describe("stage helpers", () => {
   it("materializes a row only when a value is required", () => {
-    const source = new ColumnRowSource("t", users);
+    const source = new ColumnRowSource(AliasedColumns("t"), users);
     expect(AsValue({ current: source }).sql).to.equal(source.toJson().sql);
     expect(AsSource({ current: source })).to.equal(source);
   });

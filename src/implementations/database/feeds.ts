@@ -18,21 +18,33 @@ import {
   TABLE_COLUMN,
   TXID_COLUMN,
 } from "./changes";
-import type { TableShape } from "./fields";
+import {
+  CompileFeed,
+  DOC_KEY,
+  type FeedPlan,
+  MATCHED_KEY,
+} from "./feed-pipeline";
 import { SchemaName, TableName } from "./identifier";
 import { EnsureListening, SubscribeToChanges } from "./listener";
 import { EnsureTriggers } from "./migrate";
-import { DecodeRow } from "./result";
-import { GetTableShape, WaitForSchemaReady } from "./schema";
+import { OUTPUT_COLUMN, type TableOrigin } from "./relation";
+import { ReviveValue } from "./result";
+import { WaitForSchemaReady } from "./schema";
+import { RegisteredOrigin } from "./selection";
+import { QuoteIdentifier } from "./sql";
+import type { SqlType } from "./types";
 import { DEFAULT_INSTANCE_ID, type QueryStage } from "./utils";
 
-/** A physical row as the log stored it, keyed by column rather than by field (invariant 8). */
-type LoggedRow = Record<string, unknown>;
+/** One side of an event as the laterals answered it: what it projects, and whether it matched. */
+interface LoggedSide {
+  [DOC_KEY]: unknown;
+  [MATCHED_KEY]: boolean | null;
+}
 
 interface LoggedEvent {
   op: ChangeOperation;
-  old: LoggedRow | null;
-  new: LoggedRow | null;
+  old: LoggedSide;
+  new: LoggedSide;
 }
 
 interface PollRow {
@@ -73,6 +85,8 @@ const REMOVED: ChangeOperation = "removed";
 const EMPTY = 0;
 const NO_EVENTS = "0";
 
+const OUTPUT = QuoteIdentifier(OUTPUT_COLUMN);
+
 const INSTANCE_PARAM = 3;
 
 const POLL_FAILED =
@@ -105,14 +119,14 @@ export type FeedReader = (
 export interface FeedEnvironment {
   read: FeedReader;
   install: (schemaId: string, tableId: string) => Promise<void>;
-  shape: (schemaId: string, tableId: string) => TableShape;
+  origin: (schemaId: string, tableId: string) => TableOrigin;
   listen: () => Promise<void>;
 }
 
 const LIVE: FeedEnvironment = {
   read: (sql, params) => Query<PollRow>(sql, params),
   install: EnsureTriggers,
-  shape: GetTableShape,
+  origin: RegisteredOrigin,
   listen: EnsureListening,
 };
 
@@ -125,7 +139,7 @@ interface FeedGap {
 interface FeedState {
   chain: Promise<unknown>;
   target?: FeedTarget;
-  shape?: TableShape;
+  plan?: FeedPlan;
   watermark: bigint;
   epoch?: number;
   buffer: Changes<unknown>[];
@@ -142,7 +156,36 @@ let isSweeping = false;
 function Ignore() {}
 
 /**
+ * Blanks a side whose row is not there at all — an insert has no old row and a delete no new one.
+ *
+ * It lives here rather than inside the lateral because this is where the log row is, and because a
+ * stage that wraps moves the side's own alias out of scope: the compiled side cannot name its own
+ * source once a `filter` after a projection has rendered it into a subselect.
+ */
+function Present(column: string, value: string): string {
+  return `(CASE WHEN ${LOG}.${column} IS NOT NULL THEN ${value} END)`;
+}
+
+/**
+ * Whether one side of an event matched, read back out of the jsonb pair its lateral answered.
+ *
+ * The `OR` of the two lives in the **outer** query and never inside a lateral, because inside it
+ * each side knows only about itself. A side that did not match is `false`, and one whose row was
+ * not there at all is `null` — neither admits, and `COALESCE` is what stops the second from
+ * poisoning the disjunction.
+ */
+function Admitted(side: string): string {
+  return `COALESCE((${side} ->> '${MATCHED_KEY}')::boolean, false)`;
+}
+
+/**
  * The log read, the lag check and the restart check, in one round trip.
+ *
+ * **`LIMIT` bounds the rows *scanned*, and admission filters them afterwards.** The alternative —
+ * counting admitted rows — makes a narrow filter over a busy table scan the whole log on every
+ * poll, since there is no bound on how far it must go to find a batch. Bounding the scan instead
+ * keeps every poll one statement of predictable cost, and the watermark advancing over everything
+ * scanned is what stops that starving the feed: a batch admitting nothing still moves it forward.
  *
  * The `xmin` gate is the correctness clause and not an optimization: a `bigserial` takes its number
  * when a row is *inserted* and the row becomes visible when its transaction *commits*, so under
@@ -154,18 +197,24 @@ function Ignore() {}
  * sequence restarted describes a different sequence, and comparing a watermark against it would
  * reject every feed opened after a restart for a gap that never happened (invariant 26).
  */
-function PollSql(instanced: boolean, limit: number): string {
+function PollSql(plan: FeedPlan, instanced: boolean, limit: number): string {
+  const first = plan.params.length;
   const scope = instanced
-    ? ` AND ${LOG_INSTANCE_COLUMN} = $${INSTANCE_PARAM}`
+    ? ` AND ${LOG}.${LOG_INSTANCE_COLUMN} = $${first + INSTANCE_PARAM}`
     : "";
-  const watermark = instanced ? "$4" : "$3";
+  const watermark = `$${first + (instanced ? 4 : 3)}`;
   return `WITH "scanned" AS (
-  SELECT ${SEQ_COLUMN}, ${OP_COLUMN}, ${OLD_ROW_COLUMN}, ${NEW_ROW_COLUMN}
+  SELECT ${LOG}.${SEQ_COLUMN} AS ${SEQ_COLUMN},
+         ${LOG}.${OP_COLUMN} AS ${OP_COLUMN},
+         ${Present(OLD_ROW_COLUMN, `"o".${OUTPUT}`)} AS "old",
+         ${Present(NEW_ROW_COLUMN, `"n".${OUTPUT}`)} AS "new"
     FROM ${LOG}
-   WHERE ${SCHEMA_COLUMN} = $1 AND ${TABLE_COLUMN} = $2${scope}
-     AND ${SEQ_COLUMN} > ${watermark}::bigint
-     AND ${TXID_COLUMN} < pg_snapshot_xmin(pg_current_snapshot())
-   ORDER BY ${SEQ_COLUMN}
+    LEFT JOIN LATERAL (${plan.oldSide}) AS "o" ON true
+    LEFT JOIN LATERAL (${plan.newSide}) AS "n" ON true
+   WHERE ${LOG}.${SCHEMA_COLUMN} = $${first + 1} AND ${LOG}.${TABLE_COLUMN} = $${first + 2}${scope}
+     AND ${LOG}.${SEQ_COLUMN} > ${watermark}::bigint
+     AND ${LOG}.${TXID_COLUMN} < pg_snapshot_xmin(pg_current_snapshot())
+   ORDER BY ${LOG}.${SEQ_COLUMN}
    LIMIT ${limit}
 )
 SELECT
@@ -174,10 +223,10 @@ SELECT
     WHERE ${EPOCH_COLUMN} = pg_postmaster_start_time()) AS "high_water",
   (SELECT max(${SEQ_COLUMN})::text FROM "scanned") AS "scanned_to",
   COALESCE((SELECT jsonb_agg(jsonb_build_object(
-      'op', "s".${OP_COLUMN},
-      'old', "s".${OLD_ROW_COLUMN},
-      'new', "s".${NEW_ROW_COLUMN}) ORDER BY "s".${SEQ_COLUMN})
-    FROM "scanned" "s"), '[]'::jsonb) AS "events"`;
+      'op', "x".${OP_COLUMN}, 'old', "x"."old", 'new', "x"."new")
+      ORDER BY "x".${SEQ_COLUMN})
+    FROM "scanned" "x"
+   WHERE ${Admitted('"x"."old"')} OR ${Admitted('"x"."new"')}), '[]'::jsonb) AS "events"`;
 }
 
 /**
@@ -286,33 +335,29 @@ function Notified(payload?: string) {
 
 SubscribeToChanges(Notified);
 
-function Document(
-  row: LoggedRow | null,
-  shape: TableShape,
-): Record<string, unknown> | undefined {
-  return row ? DecodeRow(row, shape) : undefined;
-}
-
 /**
  * One logged event as the contract's `Changes<T>`.
  *
- * The document is assembled by `result.ts:DecodeRow` — the read path's **own** row decoder, given
- * the physical row the log stored — which is what makes a feed's document equal to a read's by
- * construction rather than by test. It works unchanged because a logged row is keyed by physical
- * column exactly as a driver row is; the values arrive out of jsonb rather than out of typed
- * columns, and `ReviveValue` is what already reconciles that, turning a stored timestamp back into
- * a `Date`.
+ * The document was assembled **in the database**, by the same `ColumnRowSource` the read path
+ * assembles a row with, differing only in how it addresses a column — which is what makes a feed's
+ * document equal a read's by construction rather than by test. Only the revival is left, and it is
+ * `result.ts:ReviveValue` walking the projection's own type, exactly as a read's value-mode
+ * decoding does; that is what turns a stored timestamp back into a `Date`.
  *
- * The absent side is left off rather than set to `undefined`, because `oldValue` and `newValue` are
- * optional on the contract and an `added` event has no previous value to describe.
+ * **The two sides follow the operation, not the membership.** An `added` event has no previous
+ * value to describe and a `removed` one has no next, so those keys are left *absent* rather than
+ * set to `undefined` — a caller asking `to.have.property("newValue")` and one asking whether it is
+ * undefined are making different assertions and both are reachable. An update carries both sides
+ * even where one no longer matches the filter, which is what lets a consumer see what a row looked
+ * like before it left.
  */
-function Delivered(event: LoggedEvent, shape: TableShape): Changes<unknown> {
+function Delivered(event: LoggedEvent, type: SqlType): Changes<unknown> {
   const change: Changes<unknown> = { changeType: event.op };
   if (event.op !== ADDED) {
-    change.oldValue = Document(event.old, shape);
+    change.oldValue = ReviveValue(event.old[DOC_KEY], type);
   }
   if (event.op !== REMOVED) {
-    change.newValue = Document(event.new, shape);
+    change.newValue = ReviveValue(event.new[DOC_KEY], type);
   }
   return change;
 }
@@ -340,10 +385,10 @@ function Lapsed(state: FeedState, high: string | null): boolean {
  */
 async function Poll(state: FeedState, options: ResolvedOptions): Promise<void> {
   const target = state.target as FeedTarget;
-  const shape = state.shape as TableShape;
+  const plan = state.plan as FeedPlan;
   const result = await state.env.read(
-    PollSql(target.instance !== CROSS_INSTANCE, options.changeBatchSize),
-    PollParams(target, state.watermark),
+    PollSql(plan, target.instance !== CROSS_INSTANCE, options.changeBatchSize),
+    [...plan.params, ...PollParams(target, state.watermark)],
   );
   const row = result.rows[0];
   if (row.epoch.getTime() !== state.epoch) {
@@ -359,7 +404,7 @@ async function Poll(state: FeedState, options: ResolvedOptions): Promise<void> {
     return;
   }
   for (const event of row.events) {
-    state.buffer.push(Delivered(event, shape));
+    state.buffer.push(Delivered(event, plan.type));
   }
   if (row.scanned_to !== null) {
     state.watermark = BigInt(row.scanned_to);
@@ -373,14 +418,13 @@ function RootId(stages: QueryStage[], index: number): string {
   return typeof id === "string" ? id : "";
 }
 
-/** The feed's target, refusing any stage between the root and `changes` by name. */
+/** The stages between the `schema`/`instance`/`table` prefix and the trailing `changes`. */
+function Between(stages: QueryStage[]): QueryStage[] {
+  return stages.slice(ROOT_LENGTH, stages.length - 1);
+}
+
+/** What the feed watches: the physical names the trigger wrote, and the instance it is scoped to. */
 function TargetOf(stages: QueryStage[]): FeedTarget {
-  const between = stages.slice(ROOT_LENGTH, stages.length - 1);
-  if (between.length > EMPTY) {
-    throw new Error(
-      `The '${between[0].stage}' stage is not supported before 'changes' by the PostgreSQL backend yet`,
-    );
-  }
   const schemaId = RootId(stages, 0);
   const tableId = RootId(stages, 2);
   const supplied = stages[1]?.options?.id;
@@ -412,10 +456,16 @@ function TargetOf(stages: QueryStage[]): FeedTarget {
 async function Open(state: FeedState, stages: QueryStage[]): Promise<void> {
   const target = TargetOf(stages);
   await WaitForSchemaReady(target.schemaId);
+  const plan = CompileFeed(
+    Between(stages),
+    state.env.origin(target.schemaId, target.tableId),
+    `${LOG}.${OLD_ROW_COLUMN}`,
+    `${LOG}.${NEW_ROW_COLUMN}`,
+  );
   await state.env.install(target.schemaId, target.tableId);
   const opened = await state.env.read(OPEN_SQL, []);
   state.target = target;
-  state.shape = state.env.shape(target.schemaId, target.tableId);
+  state.plan = plan;
   state.epoch = opened.rows[0].epoch.getTime();
   state.watermark = BigInt(opened.rows[0].scanned_to ?? NO_EVENTS);
   await state.env.listen();

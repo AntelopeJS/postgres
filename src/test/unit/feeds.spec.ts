@@ -9,6 +9,7 @@ import {
 } from "../../implementations/database/feeds";
 import type { TableShape } from "../../implementations/database/fields";
 import { CloseCursor, ReadCursor } from "../../implementations/database/query";
+import type { TableOrigin } from "../../implementations/database/relation";
 import type { QueryStage } from "../../implementations/database/utils";
 import { WhileConfigured } from "./spec-fixture";
 
@@ -52,8 +53,18 @@ interface Asked {
   params: unknown[];
 }
 
-/** A table with no declared fields, so every logged key reads out of the overflow document. */
-const SHAPELESS: TableShape = { fields: {} } as TableShape;
+/**
+ * A table with no declared fields, so every logged key reads out of the overflow document.
+ *
+ * `index` answers the name itself, which is `IndexFields`' own undeclared-field fallback — the
+ * feed's selection stages resolve through it exactly as the read path does.
+ */
+const SHAPELESS: TableOrigin = {
+  schemaId: SCHEMA_ID,
+  tableId: TABLE_ID,
+  shape: { fields: {} } as TableShape,
+  index: (name) => [name],
+};
 
 /** Answers each statement in turn, recording what it was asked; the last answer repeats. */
 function Reader(answers: Answer[]): { read: FeedEnvironment; asked: Asked[] } {
@@ -76,16 +87,19 @@ function Reader(answers: Answer[]): { read: FeedEnvironment; asked: Asked[] } {
     read: {
       read,
       install: () => Promise.resolve(),
-      shape: () => SHAPELESS,
+      origin: () => SHAPELESS,
       listen: () => Promise.resolve(),
     },
     asked,
   };
 }
 
-function Row(id: string, extra: Record<string, unknown> = {}) {
-  return { _id: id, _instance: "default", _extra: extra };
+/** One side of an event as the laterals answer it: what it projected, and whether it matched. */
+function Side(doc: unknown, matched = true) {
+  return { doc, matched };
 }
+
+const ABSENT = Side(null, false);
 
 /**
  * Runs a feed spec with *a* configuration in place for the whole of it.
@@ -104,14 +118,53 @@ function Step(reqId: number, read: FeedEnvironment, ...between: string[]) {
 }
 
 describe("a change feed's refusals", () => {
-  it("refuses a stage between the table and 'changes', naming it", async () => {
+  it("refuses a stage that needs an order, naming the stage and the position", async () => {
     const { read } = Reader([{}]);
     await Feed(async (reqId) => {
-      await Step(reqId, read, "filter").then(
-        () => expect.fail("a filtered feed is not supported yet"),
+      await Step(reqId, read, "orderBy").then(
+        () => expect.fail("a feed has no total order to sort by"),
         (err: Error) => {
-          expect(err.message).to.contain("'filter'");
+          expect(err.message).to.contain("'orderBy'");
           expect(err.message).to.contain("'changes'");
+        },
+      );
+    });
+  });
+
+  it("refuses a stage that needs a finite relation, for the reason it names", async () => {
+    const { read } = Reader([{}]);
+    await Feed(async (reqId) => {
+      await Step(reqId, read, "count").then(
+        () => expect.fail("a feed is not finite"),
+        (err: Error) => {
+          expect(err.message).to.contain("'count'");
+          expect(err.message).to.contain("total order or a finite relation");
+        },
+      );
+    });
+  });
+
+  it("refuses a terminal write before a feed, which is legal one level out", async () => {
+    const { read } = Reader([{}]);
+    await Feed(async (reqId) => {
+      await Step(reqId, read, "insert").then(
+        () => expect.fail("a feed writes nothing"),
+        (err: Error) => {
+          expect(err.message).to.contain("'insert'");
+          expect(err.message).to.contain("'changes'");
+        },
+      );
+    });
+  });
+
+  it("keeps the fold's own wording for a stage nothing knows, which is a typo", async () => {
+    const { read } = Reader([{}]);
+    await Feed(async (reqId) => {
+      await Step(reqId, read, "filtr").then(
+        () => expect.fail("no such stage"),
+        (err: Error) => {
+          expect(err.message).to.contain("Unsupported query stage 'filtr'");
+          expect(err.message).to.not.contain("'changes'");
         },
       );
     });
@@ -121,7 +174,7 @@ describe("a change feed's refusals", () => {
     const { read } = Reader([{}]);
     await Feed(async (reqId) => {
       await Step(reqId, read, "orderBy", "slice").then(
-        () => expect.fail("neither stage is supported yet"),
+        () => expect.fail("neither stage is supported"),
         (err: Error) => {
           expect(err.message).to.contain("'orderBy'");
           expect(err.message).to.not.contain("'slice'");
@@ -181,7 +234,10 @@ describe("a change feed's watermark", () => {
   it("advances over the rows it scanned rather than the ones it delivered", async () => {
     const { read, asked } = Reader([
       { scanned_to: "10" },
-      { scanned_to: "17", events: [{ op: "added", old: null, new: Row("a") }] },
+      {
+        scanned_to: "17",
+        events: [{ op: "added", old: ABSENT, new: Side({ _id: "a" }) }],
+      },
       { scanned_to: null, events: [] },
     ]);
     await Feed(async (reqId) => {
@@ -213,7 +269,9 @@ describe("a change feed's events", () => {
       { scanned_to: "0" },
       {
         scanned_to: "1",
-        events: [{ op: "added", old: null, new: Row("a", { car: "Renault" }) }],
+        events: [
+          { op: "added", old: ABSENT, new: Side({ _id: "a", car: "Renault" }) },
+        ],
       },
     ]);
     await Feed(async (reqId) => {
@@ -230,7 +288,7 @@ describe("a change feed's events", () => {
       { scanned_to: "0" },
       {
         scanned_to: "1",
-        events: [{ op: "removed", old: Row("a"), new: null }],
+        events: [{ op: "removed", old: Side({ _id: "a" }), new: ABSENT }],
       },
     ]);
     await Feed(async (reqId) => {
@@ -250,8 +308,8 @@ describe("a change feed's events", () => {
         events: [
           {
             op: "modified",
-            old: Row("a", { price: 1 }),
-            new: Row("a", { price: 2 }),
+            old: Side({ _id: "a", price: 1 }),
+            new: Side({ _id: "a", price: 2 }),
           },
         ],
       },
@@ -265,14 +323,36 @@ describe("a change feed's events", () => {
     });
   });
 
+  it("carries both sides of an update even where one no longer matches the filter", async () => {
+    const { read } = Reader([
+      { scanned_to: "0" },
+      {
+        scanned_to: "1",
+        events: [
+          {
+            op: "modified",
+            old: Side({ _id: "a", price: 50 }, true),
+            new: Side({ _id: "a", price: 200 }, false),
+          },
+        ],
+      },
+    ]);
+    await Feed(async (reqId) => {
+      const step = await Step(reqId, read);
+      const value = step.value as Record<string, unknown>;
+      expect(value.oldValue).to.deep.equal({ _id: "a", price: 50 });
+      expect(value.newValue).to.deep.equal({ _id: "a", price: 200 });
+    });
+  });
+
   it("buffers a batch and answers it one event per read, in order", async () => {
     const { read } = Reader([
       { scanned_to: "0" },
       {
         scanned_to: "2",
         events: [
-          { op: "added", old: null, new: Row("first") },
-          { op: "added", old: null, new: Row("second") },
+          { op: "added", old: ABSENT, new: Side({ _id: "first" }) },
+          { op: "added", old: ABSENT, new: Side({ _id: "second" }) },
         ],
       },
     ]);
@@ -307,7 +387,10 @@ describe("the three ways a change feed ends", () => {
   it("does not reject on a high-water it is still above", async () => {
     const { read } = Reader([
       { scanned_to: "9" },
-      { high_water: "9", events: [{ op: "added", old: null, new: Row("a") }] },
+      {
+        high_water: "9",
+        events: [{ op: "added", old: ABSENT, new: Side({ _id: "a" }) }],
+      },
     ]);
     await Feed(async (reqId) => {
       const step = await Step(reqId, read);

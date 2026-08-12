@@ -1,6 +1,6 @@
 import { Cast, WithDefault } from "./coerce";
 import { DocumentKeys, type TableShape } from "./fields";
-import { Defaulted } from "./readings";
+import { Defaulted, StoredAs } from "./readings";
 import { type Compiled, JsonKey, QualifiedColumn, QuoteLiteral } from "./sql";
 import {
   IsJsonBacked,
@@ -81,32 +81,65 @@ function KeySubject(name: string): string {
   return `The default for key '${name}'`;
 }
 
+/**
+ * How a row source reaches one physical column, *as* the type that column holds.
+ *
+ * The one thing a table row and a logged row disagree about, and therefore the whole of the seam
+ * between them. It answers a `Compiled` rather than a bare name because the two differ in type as
+ * well as in text: a table's column already **is** its declared type, while a logged one is a jsonb
+ * member that has to be read as that type. Returning a name alone would let a jsonb value be
+ * labelled `float` and compared as one, which is a wrong answer rather than an error.
+ */
+export type ColumnAddress = (column: string, type: SqlType) => Compiled;
+
+/** A column of a real table row, which already is the type it was declared as. */
+export function AliasedColumns(alias: string): ColumnAddress {
+  return (column, type) => ({ sql: QualifiedColumn(alias, column), type });
+}
+
+/**
+ * A column of a **logged** row — a physical row stored whole in jsonb by the change log.
+ *
+ * Every member is read through `readings.ts:StoredAs`, which is the same table the write path
+ * stores through and the expression compiler reads columns back through (invariant 17). A bare cast
+ * would be wrong in the one direction that matters: invariant 13's rule is that a cast to a scalar
+ * is total *from a jsonb source*, which is exactly what this is, and `StoredAs` is where that
+ * knowledge already lives rather than something to restate here.
+ *
+ * The row expression is spelled once per member, so pass one that is cheap — a column of the log,
+ * never an assembled document.
+ */
+export function LoggedColumns(row: string): ColumnAddress {
+  return (column, type) =>
+    StoredAs({ sql: JsonKey(row, column), type: OPAQUE }, type);
+}
+
 export class ColumnRowSource implements RowSource {
   public constructor(
-    private readonly alias: string,
+    private readonly address: ColumnAddress,
     private readonly table: TableShape,
   ) {}
 
   public field(name: string, def?: Compiled): Compiled {
     if (name === ID_COLUMN) {
-      return Defaulted(
-        { sql: this.column(ID_COLUMN), type: TEXT },
-        def,
-        KeySubject(name),
-      );
+      return Defaulted(this.address(ID_COLUMN, TEXT), def, KeySubject(name));
     }
     if (Object.hasOwn(this.table.fields, name)) {
       const spec = this.table.fields[name];
       return Defaulted(
-        { sql: this.column(spec.column), type: spec.type },
+        this.address(spec.column, spec.type),
         def,
         KeySubject(name),
       );
     }
     return WithDefault(
-      { sql: JsonKey(this.column(EXTRA_COLUMN), name), type: OPAQUE },
+      { sql: JsonKey(this.overflow(), name), type: OPAQUE },
       def,
     );
+  }
+
+  private overflow(): string {
+    return this.address(EXTRA_COLUMN, OPAQUE).sql;
   }
 
   public dynamicField(key: Compiled, def?: Compiled): Compiled {
@@ -125,16 +158,12 @@ export class ColumnRowSource implements RowSource {
   }
 
   public toJson(): Compiled {
-    const overflow = `COALESCE(${this.column(EXTRA_COLUMN)}, '{}'::jsonb)`;
+    const overflow = `COALESCE(${this.overflow()}, '{}'::jsonb)`;
     return BuildDocument(this.members(), overflow);
   }
 
   public shape(): SqlShape {
     return MemberShape(this.members());
-  }
-
-  private column(name: string): string {
-    return QualifiedColumn(this.alias, name);
   }
 }
 

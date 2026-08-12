@@ -7,7 +7,10 @@ import {
   STAGES,
 } from "../../implementations/database/expression";
 import type { TableShape } from "../../implementations/database/fields";
-import { ColumnRowSource } from "../../implementations/database/row-source";
+import {
+  AliasedColumns,
+  ColumnRowSource,
+} from "../../implementations/database/row-source";
 import type { Compiled } from "../../implementations/database/sql";
 import {
   ArrayOf,
@@ -44,7 +47,7 @@ function NewContext(): DecodingContext {
     ...RefusingCompilers(),
     expression: CompileExpression,
   });
-  context.bind(ROW_ID, new ColumnRowSource("t", users));
+  context.bind(ROW_ID, new ColumnRowSource(AliasedColumns("t"), users));
   return context;
 }
 
@@ -153,29 +156,31 @@ describe("obj_merge", () => {
 
   it("merges a bound row, which is the only form a join projection builds", () => {
     const context = NewContext();
-    context.bind(OTHER_ROW_ID, new ColumnRowSource("r", users));
+    context.bind(OTHER_ROW_ID, new ColumnRowSource(AliasedColumns("r"), users));
     const out = CompileExpression(
       ValueProxy.arg<any>(ROW_ID)
         .merge({ customer: ValueProxy.arg(OTHER_ROW_ID) })
         .build(),
       context,
     );
-    const left = new ColumnRowSource("t", users).toJson().sql;
-    const right = new ColumnRowSource("r", users).toJson().sql;
+    const left = new ColumnRowSource(AliasedColumns("t"), users).toJson().sql;
+    const right = new ColumnRowSource(AliasedColumns("r"), users).toJson().sql;
     expect(out.sql).to.equal(
       Merged(left, `jsonb_build_object('customer', ${right})`, "t0"),
     );
     expect(out.type).to.deep.equal(
       JsonOf({
-        ...new ColumnRowSource("t", users).shape(),
-        customer: JsonOf(new ColumnRowSource("r", users).shape()),
+        ...new ColumnRowSource(AliasedColumns("t"), users).shape(),
+        customer: JsonOf(
+          new ColumnRowSource(AliasedColumns("r"), users).shape(),
+        ),
       }),
     );
   });
 
   it("emits each operand once, so chained merges grow linearly", () => {
     const context = NewContext();
-    context.bind(OTHER_ROW_ID, new ColumnRowSource("r", users));
+    context.bind(OTHER_ROW_ID, new ColumnRowSource(AliasedColumns("r"), users));
     const out = CompileExpression(
       ValueProxy.arg<any>(ROW_ID)
         .merge({ customer: ValueProxy.arg(OTHER_ROW_ID) })

@@ -7,7 +7,10 @@ import {
   STAGES,
 } from "../../implementations/database/expression";
 import type { TableShape } from "../../implementations/database/fields";
-import { ColumnRowSource } from "../../implementations/database/row-source";
+import {
+  AliasedColumns,
+  ColumnRowSource,
+} from "../../implementations/database/row-source";
 import type { Compiled } from "../../implementations/database/sql";
 import { STRING_STAGES } from "../../implementations/database/stages-string";
 import {
@@ -41,7 +44,7 @@ function NewContext(): DecodingContext {
     ...RefusingCompilers(),
     expression: CompileExpression,
   });
-  context.bind(ROW_ID, new ColumnRowSource("t", users));
+  context.bind(ROW_ID, new ColumnRowSource(AliasedColumns("t"), users));
   return context;
 }
 

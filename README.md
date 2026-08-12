@@ -43,9 +43,9 @@ over a declared field reaches its btree index.
 value which is not a parseable date yields `null` instead of aborting the whole statement. It is
 the only construct used above PostgreSQL 9.5.
 
-**Change feeds are not implemented.** `table.changes()` always throws
-`Change feeds are not supported by the PostgreSQL backend`. See
-[Not supported](#not-supported) below.
+**Change feeds are implemented**, as a durable log plus a pull-based reader. See
+[Change feeds](#change-feeds) for the ordering guarantee, the retention contract and the blind
+spots.
 
 ## Storage layout
 
@@ -159,6 +159,10 @@ stored as the index comment rather than by parsing the index definition back.
     cursorBatchSize: 100,               // Rows fetched per round trip when iterating
     cursorIdleTimeoutMs: 60000,         // Idle cursors are reclaimed after this delay
     statementTimeoutMs: undefined,      // Optional per-statement timeout
+    changeRetentionMs: 300000,          // How long a change event stays readable — a contract
+    changeBatchSize: 256,               // Change events read per round trip
+    changePollIntervalMs: 5000,         // Fallback poll; NOTIFY is the primary wakeup
+    changeBufferLimit: 4096,            // Undelivered events a feed buffers
     pool: {                             // Optional pg.Pool options, merged over the URL
         max: 10,
         connectionTimeoutMillis: 30000,
@@ -185,6 +189,50 @@ The module uses the `pg` driver and delegates pooling to `pg.Pool`:
   where every other numeric option is taken as given. `FETCH` will not accept a bound parameter for
   its count, so `cursorBatchSize` is the one configured value that reaches SQL as text rather than
   as a parameter, and it is validated at `construct()` for that reason
+- The four `change*` options are validated the same way. `changeRetentionMs` is a **contract rather
+  than a tuning knob**: it is the answer to how long a consumer may stall before its feed is ended —
+  see [Change feeds](#change-feeds)
+
+## Change feeds
+
+`table.changes()` returns an async iterable of `{ changeType, oldValue?, newValue? }`. It must be
+**iterated**, and it must be the **last** stage of a query.
+
+```typescript
+for await (const change of table.filter((d) => d.key("price").lt(100)).changes()) {
+    console.log(change.changeType, change.oldValue, change.newValue);
+}
+```
+
+Writes are captured by statement-level triggers into an unlogged `__antelope.changes` table, which
+readers poll. Triggers are installed on a table the first time something watches it, and are never
+removed — a table that was watched once costs one log row per write from then on.
+
+**Ordering.** Per-row order is guaranteed: two writers to the same row serialize on its lock and so
+are delivered in commit order. Across unrelated rows, delivery is in insert order. A reader consumes
+only events whose transaction has settled, so nothing is skipped when two writers commit out of
+order — the cost is that one long-running *writing* transaction anywhere in the database delays
+delivery until it ends. A long-running read-only transaction does not.
+
+**Retention is a contract.** Events older than `changeRetentionMs` (five minutes by default) are
+deleted. A consumer that stalls longer than that is **ended with an error naming the events it
+lost**, rather than quietly falling out of sync. A feed also ends if the server restarts, because
+the log does not survive one.
+
+**A filtered feed shows a row's whole lifetime.** The predicate is evaluated on both sides of an
+event and the event is delivered if *either* matched, so you see rows entering and leaving the
+filter as well as changing within it. `changeType` describes what happened to the **row**, not to
+its membership, so entering and leaving are both `modified`; compare `oldValue` and `newValue` to
+tell them apart.
+
+Accepted before `changes()`: `filter`, `map`, `pluck`, `without`, `key`, `default`, `get`, `getAll`,
+`between` and `lookup`. A `lookup` resolves against the other table **as of delivery**, not as of
+the event.
+
+**What a feed cannot see.** `TRUNCATE` fires no row triggers, and neither does a destructive
+migration that rewrites a column. There is no `includeInitial` in the contract, so a consumer
+building a mirror must **open the feed first, then read the table, then dedupe** — reading first
+races and loses everything in between.
 
 ## Not supported
 
@@ -193,12 +241,17 @@ passed.
 
 ### Change feeds
 
-```
-Change feeds are not supported by the PostgreSQL backend
-```
+| What you did | Message |
+| --- | --- |
+| Awaited a feed instead of iterating it | `A 'changes' feed must be the last stage of a query and must be iterated rather than awaited` |
+| Put a stage after `changes()` | same message |
+| Put an ordering or aggregating stage before `changes()` | `The '{stage}' stage cannot be used before 'changes': it needs a total order or a finite relation, and a change feed is neither` |
+| Stalled past the retention window | `change feed on '{schema}.{table}' fell behind the retention window (changeRetentionMs): events {from} through {to} were reaped before it read them, so it cannot continue; re-open the feed` |
+| Kept a feed open across a server restart | `change feed on '{schema}.{table}' cannot continue: the PostgreSQL server restarted, and the change log does not survive a restart, so every event it had not read is lost; re-open the feed` |
 
-`table.changes()` and anything that iterates it. This is the one interface method this module does
-not implement; it is planned rather than declined.
+The refused stages are `orderBy`, `slice`, `nth`, `count`, `sum`, `avg`, `min`, `max`, `distinct`,
+`group`, `union` and `join`. Each is legal on the query one level out, which is why the message
+names the position as well as the stage.
 
 ### Declaring a schema
 
@@ -312,7 +365,7 @@ PG_TEST_URL=postgres://postgres:postgres@localhost:5432/antelopejs_test pnpm tes
 `pnpm test` is the full conformance run and needs a Docker daemon. No test cases live in this repo:
 the suite ships in the interface package and is discovered automatically from
 `antelopeJs.implements`, so building and booting the module is all that is needed to exercise it.
-The change-feed suite fails by design, for the reason given under [Not supported](#not-supported).
+All fourteen suites pass.
 
 ## License
 
