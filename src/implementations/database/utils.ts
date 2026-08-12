@@ -18,6 +18,8 @@ export const DEFAULT_INSTANCE_ID = "";
 
 export const REGISTRY_SCHEMA = "__antelope";
 export const REGISTRY_INSTANCES_TABLE = "instances";
+export const CHANGE_LOG_TABLE = "changes";
+export const CHANGE_REAPED_TABLE = "changes_reaped";
 
 /** PostgreSQL truncates identifiers past this many bytes. */
 export const MAX_IDENTIFIER_BYTES = 63;

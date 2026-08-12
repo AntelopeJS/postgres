@@ -4,14 +4,29 @@ import { WithOptions } from "./spec-fixture";
 
 const DEFAULT_CURSOR_BATCH_SIZE = 100;
 const DEFAULT_CURSOR_IDLE_TIMEOUT_MS = 60_000;
+const DEFAULT_CHANGE_RETENTION_MS = 300_000;
+const DEFAULT_CHANGE_BATCH_SIZE = 256;
+const DEFAULT_CHANGE_POLL_INTERVAL_MS = 5_000;
+const DEFAULT_CHANGE_BUFFER_LIMIT = 4_096;
 
-const VALIDATED = ["cursorBatchSize", "cursorIdleTimeoutMs"] as const;
+const VALIDATED = [
+  "cursorBatchSize",
+  "cursorIdleTimeoutMs",
+  "changeRetentionMs",
+  "changeBatchSize",
+  "changePollIntervalMs",
+  "changeBufferLimit",
+] as const;
 
 type ValidatedOption = (typeof VALIDATED)[number];
 
 const DEFAULTS: Record<ValidatedOption, number> = {
   cursorBatchSize: DEFAULT_CURSOR_BATCH_SIZE,
   cursorIdleTimeoutMs: DEFAULT_CURSOR_IDLE_TIMEOUT_MS,
+  changeRetentionMs: DEFAULT_CHANGE_RETENTION_MS,
+  changeBatchSize: DEFAULT_CHANGE_BATCH_SIZE,
+  changePollIntervalMs: DEFAULT_CHANGE_POLL_INTERVAL_MS,
+  changeBufferLimit: DEFAULT_CHANGE_BUFFER_LIMIT,
 };
 
 const REFUSED: readonly unknown[] = [

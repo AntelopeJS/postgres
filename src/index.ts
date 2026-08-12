@@ -6,6 +6,7 @@ export type { MigrationMode, Options } from "./config";
 
 export async function construct(options?: Options) {
   await Connect(options);
+  (await import("./implementations/database/reaper")).StartReaper();
 
   void ImplementInterface(
     await import("@antelopejs/interface-database/query"),

@@ -3,6 +3,7 @@ import { DatabaseError, type Pool, type PoolClient } from "pg";
 import { GetOptions, type MigrationMode } from "../../config";
 import { AcquireClient, GetPool } from "../../connection";
 import { Logger } from "../../logger";
+import { CHANGE_LOG_STATEMENTS, TriggerStatements } from "./changes";
 import {
   BuildSchemaPlan,
   type ConvergencePlan,
@@ -29,9 +30,25 @@ const ABORTED_TRANSACTION = new Error(
   "PostgreSQL client discarded: its migration transaction could not be rolled back",
 );
 
+/**
+ * Everything `__antelope` holds, applied as one transaction the first time a pool needs any of it.
+ *
+ * The instance registry and the change log share this one memoized bootstrap rather than each
+ * carrying its own: a second memoized path would run a second transaction for objects in the same
+ * schema, and every schema registration in the process goes through this one.
+ */
+const BOOTSTRAP_STATEMENTS: readonly string[] = [
+  ...REGISTRY_STATEMENTS,
+  ...CHANGE_LOG_STATEMENTS,
+];
+
+/** Joins a schema and a table into one memo key, taking a character neither caller-supplied half can hold. */
+const MEMO_SEPARATOR = "\u0000";
+
 const warned = new Set<string>();
 let registryReady: Promise<void> | undefined;
 let registryFor: Pool | undefined;
+const triggersReady = new Map<string, Promise<void>>();
 
 function IsDuplicateObject(err: unknown): boolean {
   if (err instanceof DatabaseError) {
@@ -144,8 +161,9 @@ function EnsureRegistry(): Promise<void> {
   if (registryReady && registryFor === pool) {
     return registryReady;
   }
+  triggersReady.clear();
   const pending: Promise<void> = RetryOnDuplicateObject(() =>
-    Apply(REGISTRY_SCHEMA, REGISTRY_STATEMENTS),
+    Apply(REGISTRY_SCHEMA, BOOTSTRAP_STATEMENTS),
   ).catch((err) => {
     if (registryReady === pending) {
       registryReady = undefined;
@@ -155,6 +173,54 @@ function EnsureRegistry(): Promise<void> {
   });
   registryReady = pending;
   registryFor = pool;
+  return pending;
+}
+
+async function InstallTriggers(
+  schemaId: string,
+  tableId: string,
+): Promise<void> {
+  await EnsureRegistry();
+  await Apply(SchemaName(schemaId), TriggerStatements(schemaId, tableId));
+}
+
+/**
+ * Puts the change-log triggers on a table, once per process however many feeds ask for them.
+ *
+ * Installed the first time something watches a table rather than at convergence, because a trigger
+ * installed at convergence taxes every write to every table forever whether or not anything ever
+ * reads the log. They are never removed again: with two processes sharing a database, the one that
+ * sees no local feed cannot know the other has one, so an unwatched-for-too-long drop would make
+ * the other process's feed go deaf with no error on either side. Doing it safely needs a watcher
+ * registry with heartbeats, which is its own piece of work — until then the cost of a table that
+ * was watched once is one log row per write.
+ *
+ * Safe against a concurrent installer in **another** process without the bootstrap's
+ * duplicate-object retry: `CREATE OR REPLACE TRIGGER` takes `ShareRowExclusiveLock`, so two
+ * installers serialize and the loser's statement is a no-op rather than a `42710`. A trigger is one
+ * object where a convergence is a whole plan, which is what makes the cheaper guard sufficient.
+ *
+ * **A failed install is not remembered.** The memo holds the promise, so a rejection removes its
+ * own entry and the next feed on that table tries again — a table memoized as installed after a
+ * failure would log nothing for the lifetime of the process, and its feeds would sit silent on a
+ * table being written to.
+ */
+export function EnsureTriggers(
+  schemaId: string,
+  tableId: string,
+): Promise<void> {
+  const key = `${schemaId}${MEMO_SEPARATOR}${tableId}`;
+  const known = triggersReady.get(key);
+  if (known) {
+    return known;
+  }
+  const pending = InstallTriggers(schemaId, tableId).catch((err: unknown) => {
+    if (triggersReady.get(key) === pending) {
+      triggersReady.delete(key);
+    }
+    throw err;
+  });
+  triggersReady.set(key, pending);
   return pending;
 }
 
