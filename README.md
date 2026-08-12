@@ -348,6 +348,12 @@ Coming from another backend:
 
 ## Development
 
+**Node 22 or later is required to develop or test this module**, though the published module itself
+runs on any version its `pg` dependency supports. The floor comes from `testcontainers`, a
+devDependency whose bundled `undici` calls `worker_threads.markAsUncloneable` — absent from Node 20
+at every patch level, where it surfaces as `TypeError: webidl.util.markAsUncloneable is not a
+function` while the test config is still loading, before a single case runs.
+
 ```bash
 pnpm install
 pnpm build

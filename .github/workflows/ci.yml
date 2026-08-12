@@ -6,13 +6,20 @@ on:
 jobs:
   ubuntu:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 is the floor: testcontainers' bundled undici calls
+        # worker_threads.markAsUncloneable, which Node 20 does not have at any
+        # patch level. 24 is the current LTS line developers actually run.
+        node-version: ['22', '24']
     env:
       COREPACK_DEFAULT_TO_LATEST: 0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node-version }}
       - run: npm i -g --force corepack && corepack enable
       - run: npm i -g @antelopejs/core
       - run: pnpm install
