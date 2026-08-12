@@ -1,3 +1,4 @@
+import { CHANGES_STAGE } from "./changes";
 import type { DecodingContext } from "./context";
 import type { Relation } from "./relation";
 import { BuildRoot } from "./selection";
@@ -56,8 +57,17 @@ export const PIPELINE_STAGES: PipelineStageMap = {
 export const DEFERRED_STAGES: Record<string, string> = {};
 
 /** Stages this backend declines permanently, with the message it will always give. */
+/**
+ * Stages this backend refuses permanently, with the message each is refused by.
+ *
+ * `changes` is here for what reaching the *fold* means rather than for the stage being unsupported:
+ * an iterated feed is dispatched by `query.ts` before any compilation, so a `changes` that arrives
+ * here is either not the last stage or is being awaited rather than iterated. Awaiting one asks for
+ * a finite answer to an unbounded question, and refusing by name is what keeps it from hanging.
+ */
 export const REJECTED_STAGES: Record<string, string> = {
-  changes: "Change feeds are not supported by the PostgreSQL backend",
+  [CHANGES_STAGE]:
+    "A 'changes' feed must be the last stage of a query and must be iterated rather than awaited",
 };
 
 function StageError(name: string): Error {

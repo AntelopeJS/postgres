@@ -1,8 +1,10 @@
 import assert from "node:assert";
 import { Query } from "../../connection";
+import { CHANGES_STAGE } from "./changes";
 import { DecodingContext } from "./context";
 import { CloseOneCursor, type CursorRequest, ReadCursorRow } from "./cursors";
 import { CompileExpression } from "./expression";
+import { CloseOneFeed, IsRegisteredFeed, ReadFeedEvent } from "./feeds";
 import { CreateInstance, DestroyInstance, ListInstances } from "./instances";
 import { ApplyStages, CompileRelation } from "./pipeline";
 import {
@@ -238,13 +240,43 @@ export async function CompileCursor(
   };
 }
 
+/** A query is a feed exactly when it ends in `changes`; anywhere else the fold still refuses it. */
+function IsFeed(stages: QueryStage[]): boolean {
+  return stages[stages.length - 1]?.stage === CHANGES_STAGE;
+}
+
+/**
+ * Answers one element of whichever kind of iteration `reqId` names.
+ *
+ * `ReadCursor` is the contract's one entry point for both, and `reqId` comes from the same
+ * module-global counter either way, so the kind is decided from the *stages* — and a `reqId`
+ * belongs to one kind for the whole of its life, which is what {@link CloseCursor} relies on.
+ *
+ * A `changes` stage anywhere but last is deliberately **not** handled here: it is a pipeline stage,
+ * so the fold declines it with `REJECTED_STAGES`' permanent message unaided, and awaiting a feed
+ * rather than iterating it reaches `RunQuery`, which refuses it the same way.
+ */
 export function ReadCursor(
   reqId: number,
   stages: QueryStage[],
 ): Promise<IteratorResult<any, void>> {
+  if (IsFeed(stages) || IsRegisteredFeed(reqId)) {
+    return ReadFeedEvent(reqId, stages);
+  }
   return ReadCursorRow(reqId, () => CompileCursor(stages, QueryContext()));
 }
 
+/**
+ * Closes whichever kind `reqId` named, and is total for a `reqId` that never opened.
+ *
+ * The consumer calls this unconditionally — `IterableCursor.return()` does, for a cursor that was
+ * built and never iterated — so it cannot ask the caller which kind it is closing. A feed is
+ * recognised by the registry that opened it; everything else goes to the cursor path, which is
+ * already total for an id it has never seen and must stay the answer for one that never read.
+ */
 export function CloseCursor(reqId: number): Promise<void> {
+  if (IsRegisteredFeed(reqId)) {
+    return CloseOneFeed(reqId);
+  }
   return CloseOneCursor(reqId);
 }

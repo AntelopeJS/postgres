@@ -17,6 +17,15 @@ import {
  */
 export type ChangeOperation = "added" | "modified" | "removed";
 
+/**
+ * The stage that opens a feed, named once for the three places that must agree about it.
+ *
+ * `query.ts` dispatches an iteration on it, `feeds.ts` locates the target behind it, and
+ * `pipeline.ts` refuses it — because a `changes` that reaches the *fold* is one that is not last,
+ * or one being awaited rather than iterated, and neither is a feed this backend can answer.
+ */
+export const CHANGES_STAGE = "changes";
+
 const ADDED: ChangeOperation = "added";
 const MODIFIED: ChangeOperation = "modified";
 const REMOVED: ChangeOperation = "removed";

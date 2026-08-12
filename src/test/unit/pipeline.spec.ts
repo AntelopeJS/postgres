@@ -89,9 +89,9 @@ describe("ApplyStages", () => {
     expect(Object.keys(DEFERRED_STAGES)).to.deep.equal([]);
   });
 
-  it("declines a change feed permanently rather than deferring it", () => {
+  it("declines a change feed that reached the fold, which is one not last or one awaited", () => {
     expect(() => Apply(REJECTED_STAGE)).to.throw(
-      "Change feeds are not supported by the PostgreSQL backend",
+      "must be the last stage of a query and must be iterated rather than awaited",
     );
   });
 
