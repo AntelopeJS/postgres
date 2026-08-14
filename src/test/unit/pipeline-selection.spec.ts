@@ -57,7 +57,7 @@ const TWO_SKILLS = `(${Contains("$1")} OR ${Contains("$2")})`;
  * `getAll`'s key is typed `string | number | boolean`, so a compound key — an array per key — has
  * no typed spelling at all, and `between` types both bounds as required. Recorded through the
  * interface's own {@link QueryStage} rather than transcribed as an object literal; neither stage
- * takes a lambda, so no argument id is invented here (invariant 15).
+ * takes a lambda, so no argument id is invented here.
  */
 function Recorded(
   stage: string,

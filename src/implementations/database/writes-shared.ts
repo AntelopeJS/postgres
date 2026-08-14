@@ -108,7 +108,7 @@ export function WriteRowSource(origin: TableOrigin): RowSource {
  * One `SET` assignment, which is the spelling every write and the conflict clause share.
  *
  * The column arrives already resolved through `FieldSpec.column`, never as the field name it was
- * declared under, since `PgIdentifier` may have truncated the two apart (invariant 8).
+ * declared under, since `PgIdentifier` may have truncated the two apart.
  */
 export function Assignment(column: string, value: string): string {
   return `${QuoteIdentifier(column)} = ${value}`;
@@ -123,7 +123,7 @@ export function Assignment(column: string, value: string): string {
  * it. Shared by `insert`'s merging conflict mode and by `update`, which compose it the same way.
  *
  * A constant rather than a function: this module is a leaf that no write family leads back to, so
- * a fragment composed from it at module scope cannot read it before it is assigned (invariant 20).
+ * a fragment composed from it at module scope cannot read it before it is assigned.
  */
 export const EXISTING_EXTRA = `COALESCE(${QualifiedColumn(WRITE_ALIAS, EXTRA_COLUMN)}, ${EMPTY_EXTRA})`;
 

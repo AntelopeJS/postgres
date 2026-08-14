@@ -38,7 +38,7 @@ import { DecodeFunction } from "./value";
  * `value` is what one row yields and `source` is how a field name resolves against it — the pair
  * {@link Relation} carries as its projection and its row source, and carried here for the same
  * reason: a named field has to reach the table's own typed column, so `sum("age")` inside a group
- * is the text `sum("age")` outside one (invariant 17). Resolving a name out of the materialized
+ * is the text `sum("age")` outside one. Resolving a name out of the materialized
  * document instead would spell that document once per member of the mapper and lose nothing but
  * the resemblance.
  *
@@ -127,7 +127,7 @@ function AggregateSubStream(aggregate: Aggregation): SubStreamStage {
  * own.
  *
  * The five aggregate spellings are imported already applied from `stages-aggregate.ts`, so this
- * module names no PostgreSQL function of its own (invariant 17), and the collected form goes
+ * module names no PostgreSQL function of its own, and the collected form goes
  * through `jsonb.ts:Collected` for the same reason — `AGGREGATE_STAGES` is where the consequence of
  * a second table of either is written down.
  *
@@ -216,7 +216,7 @@ function IsRowCount(stages: QueryStage[]): boolean {
  *
  * The seed is read off the relation as the group found it, before any projection, and **once**,
  * before any of the mapper is decoded, so a sub-stream cannot change what the group selects after a
- * `$n` has been spent on it (invariant 16). The state it seeds is never mutated, since one mapper
+ * `$n` has been spent on it. The state it seeds is never mutated, since one mapper
  * binds this provider as many times as it names the parameter and each fold has to start where the
  * others did.
  *
@@ -258,21 +258,7 @@ export function SubStreamProvider(
 
 /**
  * Everything that blocks a whole-stream aggregate, plus an existing ordering.
- *
- * Copied from `stages-aggregate.ts`'s `AGGREGATE_BLOCKERS` rather than shared with it, and the one
- * entry that list omits is the one added back here — for exactly the reason its own
- * `DISTINCT_BLOCKERS` adds it. `SELECT …, sum(x) … ORDER BY y GROUP BY g` is
- * `42803 column "y" must appear in the GROUP BY clause`, and wrapping moves the sort inside a
- * subselect where it is legal and inert, which is the argument that list already makes for
- * `42P10`. Same shape, different SQLSTATE.
- *
- * The five it starts from are enumerated by `WHERE_BLOCKERS`, `AGGREGATE_BLOCKERS` and
- * `JOIN_BLOCKERS` too, and that is a coincidence of three different reasons rather than one rule
- * with four copies: unifying them would tie a change made for any one of the four to the other
- * three, which is what makes a fourth copy the right shape here.
- *
- * An `orderBy` *after* a group is a different thing and is not blocked by anything: it orders the
- * groups, and it lands on a relation whose `aggregated` flag makes it wrap first.
+ * A deliberate fourth copy of the five flags: each list names a different reason for the same set.
  */
 const GROUP_BLOCKERS: readonly RelationFlag[] = [
   "projection",
@@ -328,7 +314,7 @@ const GroupStage: PipelineStage = (relation, stage, context) => {
  * then a correlated subselect per member per group would re-read the table once per member and make
  * the group key the only thing the outer query computes.
  *
- * **The shape is settled before anything is decoded** (invariant 16): the columns are resolved and
+ * **The shape is settled before anything is decoded**: the columns are resolved and
  * the group value is built ahead of the mapper's body, because a handler that decoded the body and
  * then changed its mind about the grouping would have bound a `$n` no fragment references. Both
  * lambda parameters are bound through `value.ts:WithBoundArguments`, which unbinds them however the

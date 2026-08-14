@@ -63,8 +63,8 @@ export type JoinKind = "JOIN" | "LEFT JOIN" | "LEFT JOIN LATERAL";
  *
  * `on` is a complete boolean fragment: a parenthesised condition where a condition is what the
  * join needs, and the bare literal `true` for a lateral that answers at most one row and carries
- * its correlation inside the subselect instead. Invariant 5 is about fragments that later get
- * composed and an `ON` is composed with nothing, so the parentheses are the obligation of
+ * its correlation inside the subselect instead. {@link Relation.where}'s rule is about fragments
+ * that later get composed and an `ON` is composed with nothing, so the parentheses are the obligation of
  * whoever built the condition rather than of this field — `"(true)"` would be cargo.
  */
 export interface JoinClause {
@@ -96,6 +96,15 @@ export interface Relation {
   from: string;
   alias: string;
   joins: JoinClause[];
+  /**
+   * The conjuncts of the `WHERE`, **each one already parenthesised by whoever pushed it**.
+   *
+   * They are joined with `AND`, so a fragment that arrives spelling a bare disjunction rebinds
+   * across every other conjunct and answers a different question with nothing failing. `Predicate`
+   * over a `bool` operand is the identity, so nothing downstream adds the parentheses on a stage's
+   * behalf: the obligation belongs to the stage that pushes, and it is why `filter`, the three
+   * selection stages and the write target each wrap their own condition.
+   */
   where: string[];
   groupBy: Compiled[];
   orderBy: OrderTerm[];
@@ -241,19 +250,19 @@ const BOUND_PARAMETER = /\$\d/;
 /**
  * Takes the order terms off the relation, spelled exactly as the clause spells them.
  *
- * The one door for a stage that absorbs an aggregate (invariant 17), which each of the two do for a
+ * The one door for a stage that absorbs an aggregate, which each of the two do for a
  * different reason and with a different answer: a stream aggregate discards the terms outright,
  * since no ordering can change what it reduces to, while a subquery's aggregate re-emits them
  * inside `jsonb_agg(… ORDER BY …)`, where they are the whole of what makes the array's order a
  * promise rather than an observation.
  *
- * **The refusal is invariant 19 asserted rather than assumed.** Absorbing is the one place this
- * pipeline discards compiled text, and a discarded term holding a `$n` leaves the statement binding
- * a parameter no fragment references — `bind message supplies N parameters, but prepared statement
- * requires M`, naming nothing about the query. It holds today because `orderBy` builds its terms
- * from `source.field(name)` with no default and therefore decodes nothing; an `orderBy` that ever
- * decoded an argument has to render its terms into a subselect instead, and this says so where the
- * edit lands rather than in a comment nobody reads.
+ * **The refusal asserts that an order term carries no `$n`, rather than assuming it.** Absorbing is
+ * the one place this pipeline discards compiled text, and a discarded term holding a `$n` leaves
+ * the statement binding a parameter no fragment references — `bind message supplies N parameters,
+ * but prepared statement requires M`, naming nothing about the query. It holds today because
+ * `orderBy` builds its terms from `source.field(name)` with no default and therefore decodes
+ * nothing; an `orderBy` that ever decoded an argument has to render its terms into a subselect
+ * instead, and this says so where the edit lands rather than in a comment nobody reads.
  */
 export function AbsorbOrder(relation: Relation): string | undefined {
   const terms = OrderTerms(relation);
@@ -270,7 +279,7 @@ const ONE_ROW = "1";
 /**
  * Reads a row bound as the `bigint` {@link LimitClause} and {@link OffsetClause} take.
  *
- * The one owner of that cast (invariant 17), because it is this clause's business rather than any
+ * The one owner of that cast, because it is this clause's business rather than any
  * one stage's: a decoded number is `double precision`, whose assignment cast is not guaranteed in
  * this position. Making the fragment total against a caller's number is the caller's half — the
  * clamp lives with the stage that decodes one.
@@ -285,7 +294,7 @@ export function RowBound(sql: string): string {
  * `nth` takes it because the contract asks for one row, and `lookup`'s lateral takes it because a
  * lateral answering more than one row would multiply the left side it was given. A second spelling
  * would be free to drift from this one — a bound that stopped clamping, or that stopped casting to
- * the type `LIMIT` takes — with nothing failing (invariant 17).
+ * the type `LIMIT` takes — with nothing failing.
  */
 export const SINGLE_ROW = RowBound(ONE_ROW);
 
@@ -338,7 +347,7 @@ export function TableRelation(
  * the row was logged — none of which any conformance case touches.
  *
  * It carries the table's real origin, so `getAll` and `between` expand an index name through the
- * one expansion the DDL and the read path already share (invariant 17).
+ * one expansion the DDL and the read path already share.
  */
 export function LoggedRelation(
   from: string,
@@ -382,8 +391,8 @@ export function ValueRelation(
  * {@link Prepare} is the only door to a *conditional* wrap — the one a stage takes because a flag
  * blocks it. `Nested` is the door for a relation that is *becoming a FROM item of another
  * relation*, where the wrap is unconditional and the caller is not continuing the relation it
- * wrapped. The rule that mattered is untouched: a relation is still rendered exactly once
- * (invariant 16), and `Nested` is still the only thing that renders one into a subselect.
+ * wrapped. The rule that mattered is untouched: a relation is still rendered exactly once, and
+ * `Nested` is still the only thing that renders one into a subselect.
  *
  * The inner text is produced **once** and stored, so a fragment that took a guard emitting its
  * operand twice is paid for once per wrap level instead of compounding down the chain — the same
@@ -427,7 +436,7 @@ export type RelationFlag =
  *
  * Stated here rather than in the family that first needed it: every stage pushing onto
  * {@link Relation.where} blocks on exactly these, and a second copy of the list would be free to
- * drift from this one with nothing failing (invariant 17).
+ * drift from this one with nothing failing.
  */
 export const WHERE_BLOCKERS: readonly RelationFlag[] = [
   "projection",

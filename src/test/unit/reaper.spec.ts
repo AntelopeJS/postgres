@@ -8,7 +8,7 @@ const RETENTION_MS = 300_000;
 /**
  * A table no registration can create, so the install fails the same way under both test commands.
  *
- * These specs share a process with a live adapter under `pnpm test` (invariant 7), where a
+ * These specs share a process with a live adapter under `pnpm test`, where a
  * plausible schema id could genuinely exist and the install would then *succeed* — a spec whose
  * outcome depends on which command ran it is worse than the gap it covers.
  */

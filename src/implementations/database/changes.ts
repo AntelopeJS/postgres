@@ -13,7 +13,8 @@ import {
  *
  * The three spellings are the interface's own `Changes<T>.changeType` values, so the reader hands
  * this column straight to a caller rather than mapping it. An update is `modified` whether or not
- * it crossed a filter boundary — design §10 owns why membership is not expressible here.
+ * it crossed a filter boundary: the log records what happened to the *row*, and a feed's predicate
+ * is applied to both sides of the event long after this, so membership is not a thing this can say.
  */
 export type ChangeOperation = "added" | "modified" | "removed";
 
@@ -57,7 +58,7 @@ export const EPOCH_COLUMN = QuoteIdentifier("postmaster_started_at");
  *
  * It is declared here rather than with the listener that will consume it because the trigger bodies
  * below are what write to it, and a listener that subscribed to a different string would go silent
- * with nothing failing (invariant 17).
+ * with nothing failing.
  */
 export const CHANGE_CHANNEL = "antelopejs_changes";
 
@@ -77,13 +78,7 @@ const NEW_ROW = "n";
 
 /**
  * The whole transition-table row as jsonb, written `alias.*` rather than as a bare alias.
- *
- * A bare `to_jsonb(n)` resolves `n` as a **column** before it resolves it as a row alias, so a table
- * declaring a field named `n` logged that column's scalar instead of the row — measured: an insert
- * logged `7`, and the feed delivered `{}` as the document. With *both* `n` and `o` declared, the
- * update body's join made every `UPDATE` on that table fail outright with `42702 column reference
- * "o" is ambiguous` — a table that accepted writes yesterday refusing them today, from the moment
- * something first opened a feed on it. `alias.*` is unambiguous whatever the caller declared.
+ * A bare `to_jsonb(n)` resolves `n` as a column first, so a field named `n` would log its scalar.
  */
 function WholeRow(alias: string): string {
   return `to_jsonb(${alias}.*)`;
@@ -123,14 +118,8 @@ const ADDED_BODY = LogInsert(
 );
 
 /**
- * The one place this module depends on a decision made elsewhere.
- *
- * `OLD TABLE` and `NEW TABLE` arrive as two unordered sets and are paired on `(_instance, _id)`,
- * which is a key only because **design §5 makes the primary key immutable**: `_instance` is refused
- * outright in an `update`/`replace` payload, and a payload `_id` is an identity *assertion* rather
- * than an assignment. A future change that lets either be reassigned would mispair old rows against
- * new ones silently — a wrong `old_row` on a delivered event, not an error — so the dependency is
- * named here rather than left to be rediscovered.
+ * Pairs `OLD TABLE` and `NEW TABLE` on `(_instance, _id)`, which is a key only because the
+ * primary key is immutable — letting either be reassigned would mispair the two sets silently.
  */
 const MODIFIED_BODY = LogInsert(
   [OLD_ROW_COLUMN, NEW_ROW_COLUMN],
@@ -149,8 +138,8 @@ const REMOVED_BODY = LogInsert(
  *
  * Applied by the migrator's bootstrap beside `instances.ts:REGISTRY_STATEMENTS`, and by nothing
  * else; the shape lives here because every read and write of these rows does. It carries no DML, so
- * the bootstrap's duplicate-object retry region stays free of the statements invariant 10 warns
- * about — the reaper seeds its own row on its first pass instead.
+ * the bootstrap's duplicate-object retry region holds nothing whose replay could swallow a genuine
+ * violation — the reaper seeds its own row on its first pass instead.
  *
  * **`changes` is `UNLOGGED` and `changes_reaped` deliberately is not.** No feed replays events from
  * before it opened, so the WAL write on every logged change buys nothing — but the sequence behind
@@ -164,7 +153,7 @@ const REMOVED_BODY = LogInsert(
  * present, under column names `PgIdentifier` may have truncated. That keeps one function body
  * serving every table, keeps a row logged before an `ADD COLUMN` readable after it, and lets the
  * reader assemble the document with the read path's own machinery. Anything reading these rows must
- * resolve fields through `FieldSpec.column` and never through the logical key (invariant 8).
+ * resolve fields through `FieldSpec.column` and never through the logical key.
  */
 export const CHANGE_LOG_STATEMENTS: readonly string[] = [
   `CREATE UNLOGGED TABLE IF NOT EXISTS ${LOG} (

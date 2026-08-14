@@ -123,7 +123,7 @@ const PRODUCTS: TableShape = {
  * A shape whose column is not the field name it was declared under.
  *
  * `PgIdentifier` truncates a name past 63 bytes, so the two differ for any long enough field
- * (invariant 8) — and every other shape here spells them the same, which is the reading that
+ * — and every other shape here spells them the same, which is the reading that
  * cannot tell a write naming the field apart from one naming the column.
  */
 const NOTES: TableShape = {
@@ -335,7 +335,7 @@ export function CrossInstanceRoot() {
   return Table(TABLE_ID, CROSS_INSTANCE);
 }
 
-/** The table whose one declared field is stored under a column of another name (invariant 8). */
+/** The table whose one declared field is stored under a column of another name. */
 export function NotesRoot() {
   return Table(NOTES_TABLE_ID, undefined);
 }
@@ -542,7 +542,7 @@ export const EVERY_ROW =
   ` WHERE ("${ROOT_ALIAS}"."_instance" = ($1::text))`;
 
 /**
- * Asserts invariant 16's bind half over a list of compiled writes.
+ * Asserts the bind ledger over a list of compiled writes.
  *
  * The one assertion every write spec makes and none of them varies: a statement referencing a `$n`
  * the bind will not supply, or binding one it never names, is a driver-level

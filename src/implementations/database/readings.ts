@@ -93,7 +93,7 @@ export function Text(value: Compiled): Compiled {
  * this compiler emits either reads one of these three directly or falls back to {@link Numeric}.
  * The stream aggregates and the array reducers share the table rather than each carrying one,
  * because a divergence would answer the same data differently through `min("x")` than through
- * `key("x").arr_min()` with nothing failing (invariant 17).
+ * `key("x").arr_min()` with nothing failing.
  */
 export const ORDERED_KINDS: Partial<Record<SqlType["kind"], SqlType>> = {
   text: TEXT,
@@ -200,12 +200,8 @@ export function Moment(value: Compiled): Compiled {
 type Truthiness = (sql: string) => string;
 
 /**
- * The whole of JavaScript's falsy table over a jsonb value.
- *
- * `NaN` and `undefined` have no json spelling, and the remaining four are exactly these literals:
- * jsonb compares numbers as `numeric`, so `0`, `0.0`, `-0` and `0e5` are all equal to `0`, and no
- * value of another json type is equal to any of them. Everything not listed is true — including
- * `[]`, `{}` and the string `"false"`, which is JavaScript's own answer for each.
+ * The whole of JavaScript's falsy table over a jsonb value; `NaN` and `undefined` have no spelling.
+ * Everything not listed is true, including `[]`, `{}` and the string `"false"`.
  */
 const FALSY_JSON = ["null", "false", "0", '""'];
 
@@ -240,8 +236,8 @@ const TRUTHINESS: Record<SqlType["kind"], Truthiness> = {
  * logic agree with JavaScript: an absent key is dropped from `filter(k)` and `filter(k.and(x))`,
  * kept by `filter(k.not())` and `filter(k.or(true))`, exactly as `undefined` is.
  *
- * Spelled as one operator over a constant array rather than a `jsonb_typeof` dispatch (invariant
- * 14): a `CASE` is one opaque expression no index can serve, and it would have to spell the
+ * Spelled as one operator over a constant array rather than a `jsonb_typeof` dispatch: a `CASE`
+ * is one opaque expression no index can serve, and it would have to spell the
  * operand twice where this spells it once.
  */
 export function Predicate(value: Compiled): Compiled {
@@ -264,10 +260,10 @@ const STORED_READINGS: Record<ScalarType["kind"], Reading> = {
  *
  * Over a scalar key the readings are exactly the ones the expression compiler applies, so a key that
  * addressed a row on the way in addresses it on the way back; a second reading table would answer
- * the same data differently in each direction with nothing failing (invariant 17). The write path
+ * the same data differently in each direction with nothing failing. The write path
  * goes through {@link WrittenAs}, which is this table with one entry narrowed and states why there.
  *
- * Deliberately not {@link Cast}, which is only total from a jsonb source (invariant 13): a caller
+ * Deliberately not {@link Cast}, which is only total from a jsonb source: a caller
  * writing `insert({ price: "3000" })` or `getAll(0, "isActive")` would lose the whole statement to
  * `22P02` or to a plan-time refusal rather than have one value read as best it can. The table is
  * total over the scalar kinds so a kind added later cannot fall through to the cast unnoticed.
@@ -291,27 +287,7 @@ type Written = (value: Compiled, subject: string) => Compiled;
 
 /**
  * Reads a caller-supplied value against a `boolean` column, which only a boolean is.
- *
- * The one reading narrower than {@link StoredAs}'s, and it is narrower for the same reason the other
- * three did not need narrowing: `Numeric("abc")` and `Moment("abc")` are NULL, so a caller who
- * supplied nonsense for a `number` or a `date` column gets an answer they can notice, while
- * {@link Predicate} is total — every text is true but the empty one, every number true but zero —
- * and totality is what makes it silent. `insert({ flag: "false" })` would store `true` and
- * `key("flag", "false")` would default to it, and no later read could tell either.
- *
- * Read/write symmetry (invariant 17) is not an argument against this. It holds for a *comparison
- * operand*, where both sides are questions about data that already exists and each has to be read
- * the way the other was. A value the caller supplied has no second side: the symmetry partner for
- * `insert({ flag: X })` is `read() === X`, which is round-trip identity, and truthiness is exactly
- * what breaks it.
- *
- * A json operand keeps the guarded projection rather than being refused, since it is already
- * partial: it is NULL for anything that is not a json boolean, which is how a written `null`
- * clears the column.
- *
- * `subject` is the whole noun phrase the message opens with rather than a bare field name, because
- * the three callers name themselves differently and a message that guessed would be wrong for two
- * of them.
+ * The one reading narrower than {@link StoredAs}'s, since {@link Predicate} is total and so silent.
  */
 const BOOLEAN_ONLY =
   `takes a ${PhysicalType(BOOL)} or a json ${PhysicalType(BOOL)}` +
@@ -339,7 +315,7 @@ const WRITTEN_READINGS: Partial<Record<SqlType["kind"], Written>> = {
  * {@link StoredAs} with one narrower entry rather than a table of its own: the readings a typed
  * column forces on the way in are genuinely useful — `Numeric("3000")` is `3000` and
  * `Moment("2023-01-15")` is a timestamp — and a second table would be free to answer the same data
- * differently in each direction with nothing failing (invariant 17). Only `bool` differs, and
+ * differently in each direction with nothing failing. Only `bool` differs, and
  * {@link StoredBoolean} says why.
  *
  * **Both callers hand this a value the caller supplied against a declared column**, which is what

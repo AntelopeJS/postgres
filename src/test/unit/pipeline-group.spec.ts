@@ -89,7 +89,7 @@ function SubSql(build: SubStreamBuild): string {
 /**
  * The expression a whole-stream stage projects, which is what its sub-stream twin must also emit.
  *
- * Read off the compiled relation rather than transcribed, so the two halves of invariant 17 are
+ * Read off the compiled relation rather than transcribed, so the two spellings that must agree are
  * compared against each other rather than against a pair of independently written strings that a
  * change to the spelling would leave agreeing with neither.
  */
@@ -135,7 +135,7 @@ function Collects(target: string, deduped = ""): string {
 /**
  * The bind ledger of a mapper's document of sub-streams, projected as `group` will project it.
  *
- * Invariant 16 over the one position that can break it without any stage being wrong: a sub-stream
+ * The bind ledger over the one position that can break it without any stage being wrong: a sub-stream
  * that decodes a body and then answers something the body is not part of leaves the statement
  * binding a `$n` no fragment references.
  */

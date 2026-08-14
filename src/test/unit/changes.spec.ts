@@ -27,7 +27,7 @@ const FUNCTIONS = [ADDED_FUNCTION, MODIFIED_FUNCTION, REMOVED_FUNCTION];
  *
  * `TriggerStatements` names the *physical* table, so it reads the process-wide schema prefix
  * through `SchemaName`; setting and restoring inside one synchronous call is what keeps a
- * concurrent registration from observing either (invariant 7).
+ * concurrent registration from observing either.
  */
 function Installed(schemaPrefix = ""): readonly string[] {
   return WithOptions({ schemaPrefix }, () =>
@@ -90,7 +90,7 @@ describe("the change log's DDL", () => {
     }
   });
 
-  it("pairs the update's two transition tables on the key design §5 makes immutable", () => {
+  it("pairs the update's two transition tables on the key writes cannot reassign", () => {
     expect(CHANGE_LOG_STATEMENTS[MODIFIED_FUNCTION]).to.contain(
       'JOIN "old_table" o ON o."_instance" = n."_instance" AND o."_id" = n."_id"',
     );

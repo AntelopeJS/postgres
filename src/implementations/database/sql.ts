@@ -10,7 +10,7 @@ export interface Compiled {
  *
  * Both facts that need it are downstream of that distinction — `eq(null)` has to test for it beside
  * `IS NULL`, and `COALESCE` has to be told about it — and they live in modules that cannot import
- * each other, so the literal itself lives here (invariant 17).
+ * each other, so the literal itself lives here.
  */
 export const JSON_NULL = "'null'::jsonb";
 

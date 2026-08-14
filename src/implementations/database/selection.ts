@@ -28,7 +28,7 @@ const ROOT_STAGES: readonly string[] = [
  * fact read twice — a named instance always bound a parameter and `CROSS_INSTANCE` never does — and
  * a pair admits two states nothing can produce. The fragment is the one the predicate itself used:
  * a write that does not render the relation still needs the instance, and binding a second
- * parameter for it would leave this one bound and unreferenced (invariant 16).
+ * parameter for it would leave this one bound and unreferenced.
  *
  * A relation records only the *absence* of an instance predicate, so it cannot tell a
  * cross-instance query from a table nobody filtered; this is what the writes read instead.
@@ -93,11 +93,7 @@ function RootId(stage: QueryStage): string {
 
 /**
  * The instance a query reads, bound once for the predicate and for any write that follows.
- *
- * An absent id is the default instance, stored as the empty string so it compares like any
- * other. `CROSS_INSTANCE` reads every instance, so it binds nothing and contributes no predicate —
- * which is also why `NormalizeInstanceId` cannot serve here, since it rejects that sentinel
- * outright.
+ * An absent id is the empty string; `CROSS_INSTANCE` binds nothing and contributes no predicate.
  */
 function RootInstanceScope(
   id: unknown,
@@ -113,7 +109,7 @@ function RootInstanceScope(
   return Param(context.params, id ?? DEFAULT_INSTANCE_ID, TEXT);
 }
 
-/** Restricts the relation to one instance, parenthesised as every `where` entry is (invariant 5). */
+/** Restricts the relation to one instance, parenthesised as every `where` entry is. */
 function InstancePredicate(alias: string, value: Compiled): string {
   return `(${QualifiedColumn(alias, INSTANCE_COLUMN)} = ${value.sql})`;
 }
@@ -158,12 +154,7 @@ interface SchemaWalk {
 
 /**
  * Walks a stage argument, which is caller data and may be any shape a document may be.
- *
- * A recorded lambda is the plain object `{ stage: "func", args: [[id], body] }`, so walking plain
- * objects reaches every body a caller wrote and no case for a recorded function is needed.
- * {@link IsPlainObject} rather than a bare object test, so a `Date` is read as the value it is
- * instead of a record of whatever keys it happens to carry; and the visited set, because a caller's
- * own object may be cyclic where builder output never is.
+ * Plain objects reach every recorded lambda body; the visited set is for a caller's cyclic object.
  */
 function CollectValue(value: unknown, walk: SchemaWalk): void {
   if (typeof value !== "object" || value === null || walk.visited.has(value)) {

@@ -45,12 +45,7 @@ function Excluded(column: string): string {
 
 /**
  * What a conflicting row does with the tuple that collided with it.
- *
- * The two modes differ in **which columns the statement names**, not in what the `DO UPDATE` does
- * with them: a uniform assignment over every declared column would null every field an upsert's
- * payload omitted, which is the opposite of what `update` means. `update` therefore names only the
- * keys the batch supplied and concatenates the overflow document, while `replace` names every
- * declared column so an omitted one is set to NULL and replaces the overflow document outright.
+ * The two modes differ in which columns the statement names, not in what the `DO UPDATE` does.
  */
 interface ConflictMode {
   everyColumn: boolean;
@@ -78,10 +73,7 @@ function ConflictModeOf(stage: QueryStage): ConflictMode | undefined {
 
 /**
  * The documents one `insert` stage writes, whether the caller passed one or a batch.
- *
- * An array is the batch and never a document, which is the reading {@link AsDocument} shares with
- * every other write: a nested array would otherwise be stored as an overflow document keyed by its
- * indices rather than refused.
+ * An array is the batch and never a document, which is the reading every other write shares.
  */
 function Documents(stage: QueryStage): Record<string, unknown>[] {
   const argument = stage.args[FIRST_OPERAND];
@@ -105,11 +97,7 @@ interface InsertRow {
 
 /**
  * The key a document supplies, if it supplies one at all.
- *
- * It has to be read off the raw payload as well as split out of it, because the id is part of the
- * answer `insert` returns and a compiled parameter cannot be read back. What counts as supplied is
- * {@link NoIdSupplied}'s to say, so this generates a key exactly where the split takes none; a
- * wrong-typed key is still refused by name, since only absence has a second spelling.
+ * Read off the raw payload as well as split out of it, since `insert` answers the id it wrote.
  */
 function SuppliedId(document: Record<string, unknown>): string | undefined {
   const supplied = Object.hasOwn(document, ID_COLUMN)
@@ -127,11 +115,7 @@ function SuppliedId(document: Record<string, unknown>): string | undefined {
 
 /**
  * One document, compiled into the pieces a tuple is assembled from.
- *
- * The key comes from whichever of the two sources produced it: a supplied one is already a member
- * of the split and is used as it was compiled there, and a generated one is bound here — taking
- * both would name the column twice in one tuple. It is bound before the payload is split so the
- * `$n` a tuple binds run in the order the tuple reads.
+ * A generated key is bound before the split, so a tuple's `$n` run in the order it reads them.
  */
 function InsertRowOf(
   document: Record<string, unknown>,
@@ -155,11 +139,7 @@ function InsertRowOf(
 
 /**
  * The declared columns some row of the batch writes, in the order the table declares them.
- *
- * Derived from the compiled rows rather than from the raw payloads, so every column that bound a
- * `$n` is one the tuples name: a value decoded into a column the list then omitted would leave the
- * statement binding a parameter no text references (invariant 16). Reading the payloads a second
- * time would decide the same question with a second copy of `payload.ts`'s routing rules.
+ * Derived from the compiled rows, so every column that bound a `$n` is one the tuples name.
  */
 function BatchColumns(shape: TableShape, rows: InsertRow[]): string[] {
   return DeclaredColumns(shape).filter((column) =>
@@ -168,11 +148,8 @@ function BatchColumns(shape: TableShape, rows: InsertRow[]): string[] {
 }
 
 /**
- * One document's tuple, naming the batch's columns rather than its own.
- *
- * Every tuple of a `VALUES` list has to be the same width, so a document that did not supply a
- * column another one did writes NULL there. The overflow document is `NOT NULL`, so a row with no
- * undeclared keys writes an empty object rather than nothing.
+ * One document's tuple, naming the batch's columns rather than its own, since widths must match.
+ * The overflow document is `NOT NULL`, so a row with no undeclared keys writes an empty object.
  */
 function RowTuple(row: InsertRow, columns: string[], instance: string): string {
   const declared = columns.map(
@@ -203,9 +180,7 @@ function ConflictClause(
 
 /**
  * The insert target, aliased so a `DO UPDATE` clause can name the row it collided with.
- *
- * Without an alias that reference has to be the bare table name, which is the unqualified half of
- * a schema-qualified target and reads as a different object.
+ * Unaliased, that reference is the bare table name, which reads as a different object.
  */
 function InsertInto(origin: TableOrigin, columns: string[]): string {
   const named = PhysicalOrder(
@@ -236,15 +211,7 @@ function GroupStatement(plan: InsertPlan, rows: InsertRow[]): string {
 
 /**
  * The rows of a batch, split into the groups that can share one column list without lying.
- *
- * A `DO UPDATE` assigns `EXCLUDED.col` for every column the statement names, and a row that omitted
- * one writes NULL into that column of the tuple — so a heterogeneous batch under a merging conflict
- * would null a stored value the payload never mentioned. Grouping by the keys a row supplied is
- * what keeps each `DO UPDATE` to the columns its own rows wrote.
- *
- * Only that one mode groups. A batch with no conflict clause writes new rows, where NULL is exactly
- * what an omitted key means, and `replace` names every declared column by definition — both are one
- * statement, spelled the way they were before this existed.
+ * Only `conflict: "update"` groups, so each `DO UPDATE` names the columns its own rows wrote.
  */
 function RowGroups(plan: InsertPlan, rows: InsertRow[]): InsertRow[][] {
   if (!plan.mode || plan.mode.everyColumn) {
@@ -267,14 +234,7 @@ function RowGroups(plan: InsertPlan, rows: InsertRow[]): InsertRow[][] {
 
 /**
  * The one statement a batch runs, however many column lists its rows needed.
- *
- * Data-modifying CTEs are what make several column lists one round trip rather than one statement
- * per group. A single group is emitted bare: the common batch is homogeneous, and a wrapper it does
- * not need would put every insert this adapter has ever emitted inside a `WITH`.
- *
- * Two CTEs writing the same key have undefined ordering between them, which is not a case this can
- * reach — a duplicate key within one batch already raises, `21000` under a conflict mode and
- * `23505` without one.
+ * Data-modifying CTEs make several column lists one round trip; a single group is emitted bare.
  */
 function OneStatement(statements: string[]): string {
   if (statements.length === SINGLE_GROUP) {

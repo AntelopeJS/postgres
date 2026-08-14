@@ -26,7 +26,7 @@ const REAP_WINDOW_MS = 40;
  *
  * `CapturingTimers` records only the timers armed with exactly this delay, so a `pg-pool` idle
  * timer or anything else the live adapter arms while a spec runs passes through uncounted
- * (invariant 7 — these specs share their process with a constructed adapter).
+ * (these specs share their process with a constructed adapter).
  */
 const REAPER_PROBE_MS = 987_654;
 
@@ -84,8 +84,7 @@ const REMEMBERED_ENDINGS = 1024;
 
 /**
  * The interface's `nextReqId` is a process-global counter that starts at 0 and shares this process
- * with the specs, so the specs count down instead — the counter can never reach a negative id
- * (invariant 15).
+ * with the specs, so the specs count down instead — the counter can never reach a negative id.
  */
 const FIRST_SPEC_REQ_ID = -1;
 
@@ -220,7 +219,7 @@ function NextReqId(): number {
   return lastReqId;
 }
 
-/** One read, through a temporary configuration set and restored inside this one turn (invariant 7). */
+/** One read, through a temporary configuration set and restored inside this one turn. */
 function Read(reqId: number, open: CursorOpener, options: Options = OPTIONS) {
   return WithOptions(options, () => ReadCursorRow(reqId, open));
 }
@@ -342,7 +341,7 @@ describe("the cursor registry", () => {
    * A spec leaves nothing of its own checked out, and the sweep specs leave *less* than they found.
    *
    * `CloseAllCursors` is global, so a spec that drives it also reclaims whatever the live adapter
-   * this process shares had open when the spec started (invariant 7). The check is therefore a
+   * this process shares had open when the spec started. The check is therefore a
    * ceiling on the count rather than an equality with the baseline, which would read another
    * subsystem's reclaimed cursor as this file's leak.
    */
@@ -593,7 +592,7 @@ describe("the cursor registry", () => {
    * never seen — and a close that registered nothing would leave that id looking new. The next
    * read then takes the *open* path: a client acquired, the query declared and row 0 served to a
    * consumer that has already closed the iterator. Nothing orders a first read against a close, so
-   * this is decision 7b's shape one step earlier rather than a second problem.
+   * this is a remembered ending one step earlier rather than a second problem.
    */
   it("answers done, acquiring nothing, after a close that preceded every read", async () => {
     const log = Recorder();
@@ -815,7 +814,7 @@ describe("the cursor registry", () => {
    * The one place this file asks the absolute question, because the sweep is the one global answer.
    *
    * Every other count is read against the baseline the spec started from — these specs share their
-   * process with a live adapter (invariant 7), and a cursor this file never opened is not its leak.
+   * process with a live adapter, and a cursor this file never opened is not its leak.
    * `CloseAllCursors` is the exception by contract: it is what runs before `pool.end()`, which was
    * measured not to resolve while **any** client is checked out, so "none of ours" would be the
    * wrong claim to make about it.
@@ -944,7 +943,7 @@ describe("the cursor registry", () => {
    * `SettleBeforeDisconnect` is handed a probe in place of `EndPool`, so no pool is ever ended.
    *
    * That substitution is the whole reason this spec can exist here: the real teardown would take
-   * the adapter this process shares with the conformance suites down with it (invariant 7), while
+   * the adapter this process shares with the conformance suites down with it, while
    * the probe runs at exactly the instant `pool.end()` would and reads what it would have found.
    *
    * What it reads is absolute, and deliberately so. `pool.end()` was measured not to resolve while

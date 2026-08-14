@@ -16,7 +16,7 @@ import { WhileConfigured } from "./spec-fixture";
 /**
  * A feed that never opens against a live schema, driven entirely through the reader seam.
  *
- * These `reqId`s are negative for invariant 15's reason: the interface's own counter starts at 0
+ * These `reqId`s are negative because the interface's own counter starts at 0
  * and counts up, so a fixture using a positive id would collide with a lambda or a cursor the
  * process allocated for something else.
  */

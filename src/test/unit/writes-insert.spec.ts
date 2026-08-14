@@ -58,7 +58,7 @@ function Insert(
   );
 }
 
-/** A pipeline stage the builders record without allocating a lambda id (invariant 15). */
+/** A pipeline stage the builders record without allocating a lambda id. */
 function ReadStages(): QueryStage[] {
   return Stages(Root().slice(SLICE_START, SLICE_END));
 }

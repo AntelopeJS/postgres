@@ -105,17 +105,7 @@ export function AliasedColumns(alias: string): ColumnAddress {
 
 /**
  * A logged jsonb member read as the column it came from: a json `null` is the column being absent.
- *
- * `to_jsonb` of a row renders **every** column, so a jsonb-backed column that is SQL NULL arrives
- * as jsonb `null` rather than as SQL NULL — and {@link BuildDocument}'s container guard tests for
- * SQL NULL, so without this the member is merged in as `{"tags": null}` where a read of the same row
- * omits it. That is not only a shape difference: `hasfields("tags")` then **admits** a row a read
- * does not, so a filtered feed matches rows its own query would not.
- *
- * Lossless, because a declared jsonb-backed column cannot hold a stored json null in the first
- * place — design §5 writes a caller's `null` to such a column as SQL NULL, measured — so there is no
- * value here for the two spellings to conflate. The *undeclared* keys, where a stored json null is a
- * real and distinguishable value, are read out of the overflow document and never come through here.
+ * Lossless, since a declared jsonb-backed column cannot hold a stored json null in the first place.
  */
 function Present(member: Compiled): Compiled {
   return { sql: `NULLIF(${member.sql}, ${JSON_NULL})`, type: member.type };
@@ -125,9 +115,9 @@ function Present(member: Compiled): Compiled {
  * A column of a **logged** row — a physical row stored whole in jsonb by the change log.
  *
  * Every member is read through `readings.ts:StoredAs`, which is the same table the write path
- * stores through and the expression compiler reads columns back through (invariant 17). A bare cast
- * would be wrong in the one direction that matters: invariant 13's rule is that a cast to a scalar
- * is total *from a jsonb source*, which is exactly what this is, and `StoredAs` is where that
+ * stores through and the expression compiler reads columns back through. A bare cast
+ * would be wrong in the one direction that matters: a cast to a scalar is total only
+ * *from a jsonb source*, which is exactly what this is, and `StoredAs` is where that
  * knowledge already lives rather than something to restate here.
  *
  * The row expression is spelled once per member, so pass one that is cheap — a column of the log,
@@ -197,18 +187,8 @@ export class ColumnRowSource implements RowSource {
  * A row source whose *document* is null when the row it addresses is not there, which is what a
  * missed `LEFT JOIN` row must read as.
  *
- * Everything but {@link RowSource.toJson} delegates untouched, and that is the whole design rather
- * than an economy. Every column of a missed row is already SQL NULL, so a field of it answers
- * `null` with no help and stays a bare column a btree index can serve; the one reading that needs
- * fixing is the whole document, because {@link BuildDocument} over all-NULL columns is `{}` — a
- * materialized empty object where the caller was promised nothing. Guarding the value instead
- * would spell the guarded document again for every field the caller touches, which is invariant
- * 11's argument one layer up.
- *
- * `_id` is the test because it is `NOT NULL` on every row this adapter writes, so it is the one
- * exact reading of "there was no right row"; a nullable declared column cannot tell a miss from a
- * stored null. It is resolved through {@link RowSource.field}, which handles it explicitly —
- * invariant 3 makes it absent from the shape.
+ * Only {@link RowSource.toJson} needs fixing: a field of a missed row is already SQL NULL, where
+ * the document over all-NULL columns would be `{}`. `_id` is the test, being `NOT NULL` on any row.
  */
 export class NullableRowSource implements RowSource {
   public constructor(private readonly inner: RowSource) {}

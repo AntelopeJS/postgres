@@ -40,20 +40,8 @@ import { DecodeFunction } from "./value";
 const MAPPER_OPERAND = 2;
 
 /**
- * Everything that has already decided *which rows* there are blocks a join.
- *
- * A join changes row multiplicity, so a bound, a `DISTINCT` or an aggregate ahead of it has to
- * apply to the rows it was written against rather than to the joined result. `projection` blocks
- * for the reason every stage reading a field through the relation's source blocks it: a source over
- * a pending projection would inline that projection into the new one.
- *
- * **`ordered` deliberately does not block, and this is not an omission.** The left's `ORDER BY`
- * stays on the relation and applies to the joined result, so the ordering *key* is respected — and
- * that is all it promises: two left rows tied on the key, each matching several right rows, may
- * interleave, because nothing orders the duplicates a join produces. It is still the better answer,
- * because wrapping would push the sort into a subselect where SQL guarantees nothing about it
- * surviving at all. Adding `ordered` here would trade an ordering that holds for one that is a
- * planner's choice.
+ * Everything that has already decided *which rows* there are blocks a join, which changes their count.
+ * `ordered` deliberately does not: the key is respected, and wrapping would only weaken that.
  */
 const JOIN_BLOCKERS: readonly RelationFlag[] = [
   "projection",
@@ -65,15 +53,7 @@ const JOIN_BLOCKERS: readonly RelationFlag[] = [
 
 /**
  * What one of the two joins is, decided before anything is decoded.
- *
- * `nullable` is not `kind`'s spelling in another form: it says whether the mapper's right parameter
- * can be a row that is not there, which is exactly what an outer join adds and an inner join
- * cannot produce.
- *
- * Chosen by a ternary rather than by a lookup object, which is not the no-`switch` rule being
- * broken: that rule dispatches an open set of *names*, and this is a `boolean` with two states and
- * no room for a third. Keying a map on one costs a `String` coercion and an index signature wide
- * enough to answer `undefined` for a typo, where a ternary is total by construction.
+ * `nullable` says whether the mapper's right parameter can be a row that is not there.
  */
 interface JoinFlavour {
   kind: JoinKind;
@@ -88,14 +68,8 @@ function FlavourOf(stage: QueryStage): JoinFlavour {
 }
 
 /**
- * Compiles the query being joined, from its own `schema`/`instance`/`table` root, and makes it a
- * FROM item addressable at a fresh alias.
- *
- * The argument is read off the stage directly rather than through `DecodeValue`, which routes a
- * query to the correlated-subquery compiler and would silently compile the right side as a value.
- * The nesting is unconditional — the right may carry a bound, an ordering, a `DISTINCT` or a
- * projection, none of which survives being spliced into a join condition, and the failure of
- * splicing is a wrong answer rather than an error.
+ * Compiles the query being joined, from its own root, as a FROM item at a fresh alias.
+ * Read off the stage directly, and nested unconditionally since nothing the right carries splices.
  */
 function JoinedRelation(stage: QueryStage, context: DecodingContext): Relation {
   const right = stage.args[FIRST_OPERAND];
@@ -109,11 +83,6 @@ function JoinedRelation(stage: QueryStage, context: DecodingContext): Relation {
 /**
  * Binds both lambda parameters to raw row sources, which is what leaves the condition two bare
  * qualified columns and the planner free to pick a hash or a merge join.
- *
- * Compiling either side through a materialized document would work and would defeat that
- * silently — invariant 11's argument one layer up. It goes through {@link Predicate} for invariant
- * 13's reason, and is parenthesised here because a bare disjunction would rebind against whatever
- * the condition is later composed with (invariant 5).
  */
 function Condition(
   stage: QueryStage,
@@ -126,12 +95,8 @@ function Condition(
 }
 
 /**
- * The source the mapper reads the right row through, which is the nested right's own unless a
- * missed row is possible.
- *
- * A value-mode right needs no wrapper either: its `toJson()` *is* the projected column, genuinely
- * NULL on a miss, where a row-mode one builds a document out of columns that are all NULL and so
- * answers `{}`. See {@link NullableRowSource} for what the wrapper does and does not guard.
+ * The source the mapper reads the right row through, wrapped only where a missed row is possible.
+ * A value-mode right needs no wrapper: its projected column is genuinely NULL on a miss.
  */
 function MapperSource(right: Relation, flavour: JoinFlavour): RowSource {
   if (!flavour.nullable || !right.origin) {
@@ -142,15 +107,7 @@ function MapperSource(right: Relation, flavour: JoinFlavour): RowSource {
 
 /**
  * Brings a second query into the pipeline as a `JOIN`, with the mapper's result as the projection.
- *
- * One handler serves `join` and `joinInner`, which the contract records as the same stage under
- * `options.innerOnly`. The shape is decided before anything is decoded (ground rule 1): a handler
- * that decoded a lambda and then changed its mind about the join it wanted would have bound a `$n`
- * no fragment references.
- *
- * The mapper's result is always the new projection, so a join always leaves row mode and drops the
- * origin — which is what makes a write after one refused by `RequireOrigin` rather than by a check
- * this module has to remember to make.
+ * The shape is decided before anything is decoded, and leaving row mode drops the origin.
  */
 const JoinStage: PipelineStage = (relation, stage, context) => {
   const flavour = FlavourOf(stage);
@@ -171,22 +128,7 @@ const JoinStage: PipelineStage = (relation, stage, context) => {
 
 /**
  * What has already reshaped the rows blocks a lookup, and a row bound deliberately does not.
- *
- * `projection` blocks for the reason every stage reading a field through the relation's source
- * blocks it: the local key is resolved against that source, and a source over a pending projection
- * would inline it into the new one. `distinct` and `aggregated` block because the lateral's
- * correlation reads a row of the relation, which neither of them still has.
- *
- * **`limit` and `offset` are absent, which is where this list is genuinely shorter than
- * {@link JOIN_BLOCKERS}.** A lateral bounded to one row cannot change how many rows there are, so a
- * bound that was already decided still selects exactly the rows it selected. Adding them would cost
- * a subselect level on every `slice(…).lookup(…)` and answer the same question.
- *
- * **That the lateral answers exactly one row is this module's obligation, not `relation.ts`'s.**
- * Nothing about a join clause bounds what it joins; {@link OneRowLateral}'s `LIMIT` and
- * {@link CollectedLateral}'s aggregate are the whole of what makes this list safe to be shorter. A
- * lateral that stopped being one-for-one would multiply a `slice`'s rows *after* the bound that
- * chose them, and nothing here would fail.
+ * That is safe only while the lateral answers exactly one row, which is this module's obligation.
  */
 const LOOKUP_BLOCKERS: readonly RelationFlag[] = [
   "projection",
@@ -198,10 +140,7 @@ const LATERAL_KIND: JoinKind = "LEFT JOIN LATERAL";
 
 /**
  * The whole `ON` of the lateral, which carries no condition of its own.
- *
- * The correlation lives inside the subselect, where it can reach the left's alias and be pushed
- * onto the right's own `WHERE`. Invariant 5 is about fragments that are later composed and an `ON`
- * is composed with nothing, so `"(true)"` would be cargo — see `JoinClause` in `relation.ts`.
+ * The correlation lives inside the subselect, pushed onto the right's own {@link Relation.where}.
  */
 const UNCONDITIONAL = "true";
 
@@ -229,29 +168,7 @@ type Replacement = (value: SqlType) => SqlType;
 
 /**
  * The two shapes a lookup takes, chosen from the *declared* type of the local key.
- *
- * A key declared as an array points at a list of rows and a key declared as anything else points at
- * one, and that is a fact about the schema rather than about a value — reading it off a value would
- * make the same query compile to different SQL row by row, which it cannot do.
- *
- * **A key with no declared type is refused rather than assumed scalar**, which is the one place this
- * static choice can destroy data. An undeclared key is bottom-typed and so is never `"array"`, so a
- * stored array took the scalar form, correlated against nothing, and {@link Replaced} merged
- * `{"key": null}` over the document — the caller's array gone from the answer with no error
- * anywhere. Both siblings dispatch on the value at run time and have no schema to read; we do, and
- * the honest reading of a schema that does not describe the key is that the question has no answer.
- * The alternative priced against this was leaving the key untouched on that branch, which stops the
- * destruction but makes a lookup the caller asked for silently not happen. **What it costs:** an
- * undeclared *scalar* key looks up correctly today and is now refused; declaring the field is the
- * remedy and buys the index besides.
- *
- * Chosen by a ternary over two named constants for the reason {@link JoinFlavour} is: the rule that
- * bans `switch` dispatches an open set of *names*, and this is a `boolean` with no room for a third
- * state once the undeclared case is gone.
- *
- * `lateral` renders the relation it is handed and may **bound** it first — {@link OneRowLateral}
- * sets its `LIMIT` where {@link CollectedLateral} must not — so each form owns the arity of the
- * lateral it builds, which is the obligation {@link LOOKUP_BLOCKERS} relies on being kept.
+ * A key with no declared type is refused rather than assumed scalar, which would drop a stored array.
  */
 interface LookupForm {
   correlate: Correlation;
@@ -261,11 +178,7 @@ interface LookupForm {
 
 /**
  * Bounds the lateral to one row, which is what makes a lookup's arity structural.
- *
- * A `LEFT JOIN LATERAL` over an unbounded subselect multiplies the left by however many rows the
- * other key matched, and a lookup replaces a foreign key with *a* document. Without the bound the
- * arity would be a property of the data — every conformance case's key happens to be unique, so
- * nothing there would ever show it.
+ * Unbounded, it would multiply the left by whatever the other key matched — a property of the data.
  */
 function OneRowLateral(right: Relation): string {
   right.limit = SINGLE_ROW;
@@ -274,11 +187,7 @@ function OneRowLateral(right: Relation): string {
 
 /**
  * Collects every matching row into one jsonb array, empty rather than NULL.
- *
- * The array form's answer is a list, so the lateral still yields exactly one row and the arity stays
- * structural for {@link OneRowLateral}'s reason. `jsonb_agg` yields NULL over zero rows, which would
- * make a key that matched nothing read as `null` where the contract's own return type promises an
- * array.
+ * The lateral still yields one row, and `jsonb_agg` over zero rows would answer `null`, not `[]`.
  */
 function CollectedLateral(right: Relation, context: DecodingContext): string {
   const alias = context.nextAlias();
@@ -313,10 +222,7 @@ function FormOf(local: Compiled, key: string): LookupForm {
 
 /**
  * Compiles the query the key points at, from its own root, and opens it to one more predicate.
- *
- * The argument is read off the stage directly for {@link JoinedRelation}'s reason. It is prepared
- * against {@link WHERE_BLOCKERS} rather than nested, so the correlation absorbs into the right's own
- * `WHERE` and the whole lateral stays one `SELECT` with its `_instance` scope beside it.
+ * Prepared rather than nested, so the correlation absorbs and the lateral stays one `SELECT`.
  */
 function LookedUp(stage: QueryStage, context: DecodingContext): Relation {
   const other = stage.args[FIRST_OPERAND];
@@ -329,18 +235,7 @@ function LookedUp(stage: QueryStage, context: DecodingContext): Relation {
 
 /**
  * Pushes the correlation onto the looked-up relation, comparing two declared columns.
- *
- * Both sides go through {@link UnifyOperands}, which is the coercion `eq` itself applies: a bare
- * `=` between a declared `text` column and a jsonb-sourced local key is refused at plan time, so the
- * statement never reads a row (invariant 13). Two columns of one declared kind meet at that kind and
- * take no cast at all, which is what leaves the comparison reachable by a btree index.
- *
- * **A scalar key against a column declared as an array is the mirror of the array form and takes
- * the mirrored operator**, not `=`: unifying an array with a scalar meets at the bottom type, and
- * `<jsonb array> = <jsonb scalar>` is false on every row of every dataset. Containment is also the
- * only comparison a `jsonb_ops` GIN index serves, and it is emitted bare for that reason — a guard
- * around it is one opaque expression no index can be pushed into (invariant 14). The form itself
- * still comes from the *local* key, which is a scalar and therefore still names one row.
+ * Two columns of one kind take no cast; a scalar key against an array column takes containment.
  */
 function Correlate(
   right: Relation,
@@ -359,25 +254,7 @@ function Correlate(
 
 /**
  * The left document with one key overwritten, which is what a lookup answers.
- *
- * `||` overwrites rather than appends, and the document is spelled as a whole rather than rebuilt
- * member by member because a rebuild would need the left's full key list, which a value-mode left
- * does not have. `||` is **total** — `'{"a":1}' || '"x"'` is `[{"a":1},"x"]`, and no combination of
- * scalar, object, array and null raises — so it is emitted bare, with nothing defending it.
- *
- * **The left is always shaped here, and {@link FormOf} is what makes that true.** A document with no
- * shape can only be a value source over an opaque value, every field of which is opaque too, so its
- * local key is refused before this runs. The container guard this used to carry on the shapeless
- * branch — a `HeldOnce` over a `jsonb_typeof` test, at the execution cost that function's own doc
- * measures — went with that refusal, along with the reasoning about what "replace this key" means
- * over a value with no keys. It has no reachable input.
- *
- * **A shape is a test of provenance and not a proof about the value.** A jsonb column declared with
- * members carries a shape while the caller controls what is stored in it, so
- * `map(d => d.key("metadata")).lookup(…)` is shaped over a value that may be a scalar at run time,
- * and answers the two-element array `[scalar, {looked}]` rather than NULL. That is the *surprising
- * answer* invariant 14 declines to defend against, and it cannot fail — the shape does not claim
- * otherwise.
+ * `||` overwrites and is total over every json type, so it is emitted bare with nothing defending it.
  */
 function Replaced(document: Compiled, key: string, value: Compiled): Compiled {
   const member = `jsonb_build_object(${QuoteLiteral(key)}, ${value.sql})`;
@@ -389,17 +266,7 @@ function Replaced(document: Compiled, key: string, value: Compiled): Compiled {
 
 /**
  * Replaces one key of each row with the row it points at, through a `LEFT JOIN LATERAL`.
- *
- * One handler serves `table.lookup(…)` and `table.get(k).lookup(…)`, which the contract records as
- * the same stage from two builders. The shape is decided before anything is decoded (ground rule 1):
- * the array-ness of the local key is read off its declared type, so a handler that compiled the
- * correlation and then changed its mind about the operator would have bound a `$n` no fragment
- * references.
- *
- * **`single` and the value beside it survive because nothing here touches them**, and that is a
- * property of this shape rather than a line of code: the relation is neither re-seeded nor wrapped
- * on the common path, which is what lets `get(k).lookup(…)` still answer one document rather than a
- * list of one. A refactor that re-seeded through `ValueRelation` would lose it silently.
+ * `single` survives because the relation is neither re-seeded nor wrapped on the common path.
  */
 const LookupStage: PipelineStage = (relation, stage, context) => {
   const keys = KeysOf(stage);

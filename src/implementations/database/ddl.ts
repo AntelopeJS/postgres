@@ -97,7 +97,7 @@ const SIGNATURE_PREFIX = `${SIGNATURE_VENDOR}:${SIGNATURE_VERSION}`;
  *
  * Exported because a write's `ON CONFLICT` has to name a unique constraint *identically* to reach
  * it — a different order or a different pair is `42P10 there is no unique or exclusion constraint
- * matching the ON CONFLICT specification`, at execution and only on the upsert path (invariant 17).
+ * matching the ON CONFLICT specification`, at execution and only on the upsert path.
  */
 export const PRIMARY_KEY_COLUMNS: readonly string[] = [
   INSTANCE_COLUMN,
@@ -330,23 +330,7 @@ function DropIndexSql(schemaName: string, name: string): string {
 
 /**
  * Moves a newly declared field out of the overflow document and into its own column.
- *
- * Adding a field to a schema is ordinary evolution, and without this it left every existing row
- * permanently self-inconsistent: `DecodeRow` merges the overflow document *last*, so the row went on
- * displaying `x: v` from the copy that was written before the column existed, while
- * `filter(d => d.key("x").eq(v))` and `getAll` read the new column and matched nothing. One row,
- * two answers, and no error on either side.
- *
- * **Lossless, which is the whole reason it can run unattended.** The value moves only where the
- * column can hold it — the projection is the reading every other path gives that key, so a stored
- * value of the wrong json type reads as NULL, fails the guard, and stays in the overflow document
- * where it can still be read. A stored json null reads as absent for {@link WrittenAs}'s reason and
- * stays put too. `col IS NULL` means a row that somehow has both keeps the column, which is the half
- * every query path already agrees about.
- *
- * The projection is spelled twice, in the assignment and in the guard. Binding it once would mean a
- * lateral, and this runs once per column per schema evolution against a table nobody is querying
- * yet.
+ * Lossless: a value the column cannot hold reads as NULL and stays in the overflow document.
  */
 function BackfillSql(
   target: string,
@@ -366,17 +350,7 @@ function BackfillSql(
 
 /**
  * Adds a column, and moves into it whatever the overflow document was holding for it.
- *
- * The backfill is **DML inside the region {@link RetryOnDuplicateObject} replays**, which that
- * function's own rule otherwise forbids, and it belongs there anyway: in the same transaction as the
- * `ADD COLUMN` no query can observe the row between the two states, and there is no window in which
- * a crash leaves a column added and never filled — a separate transaction has one, and nothing would
- * plan the backfill again afterwards, since the column by then exists.
- *
- * The rule it bends is satisfied rather than broken. A replay of this statement is a replay of a
- * rolled-back transaction, so the column is absent again and the same backfill runs against the same
- * rows; a genuine constraint violation therefore fails every attempt and is raised by the last one
- * rather than swallowed by an earlier success.
+ * The backfill is the one DML in the retried region: a replay follows a rollback, so it is safe.
  */
 function PlanAddedColumn(
   target: string,

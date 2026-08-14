@@ -17,21 +17,7 @@ import type { QueryStage } from "./utils";
 
 /**
  * What has already decided *which* rows there are blocks the aggregate from absorbing.
- *
- * Shorter than `stages-aggregate.ts`'s list by `projection`, and that difference is the point: the
- * projection is exactly what this aggregate collects, so blocking on it would wrap every nested
- * query that ever named a field.
- *
- * **`aggregated` is here because `group` broke the argument for leaving it out.** That argument was
- * that a relation which has aggregated answers one row and so takes the single-row branch instead
- * of this one, which held while `stages-aggregate.ts:SetAggregate` was the only writer of the flag
- * — it sets `single` alongside it. `stages-group.ts` sets `aggregated` and deliberately leaves
- * `single` false, because a group answers one row *per group*. So a grouped query used as a value
- * reaches this branch, and without the flag here the `jsonb_agg` absorbs into a relation that
- * already carries a `GROUP BY` and an aggregate in its projection: `42803 aggregate function calls
- * cannot be nested`, at execution, losing the whole statement. Wrapping first is the same answer
- * the other seven blocker lists give, and it makes the group's rows the FROM item this aggregate
- * collects.
+ * Shorter than the stream list by `projection`, which is exactly what this aggregate collects.
  */
 const SUBQUERY_BLOCKERS: readonly RelationFlag[] = [
   "limit",
@@ -42,27 +28,7 @@ const SUBQUERY_BLOCKERS: readonly RelationFlag[] = [
 
 /**
  * Collects every row of a nested query into one jsonb array, in the order the query asked for.
- *
- * The aggregate is **absorbed into the relation** rather than wrapped around a rendering of it, the
- * way `stages-aggregate.ts:SetAggregate` absorbs a stream aggregate: only from inside can
- * `jsonb_agg` name the relation's own order terms, and PostgreSQL does not promise a subquery's
- * `ORDER BY` survives into an outer aggregate at all — it is observed today and is a plan change
- * away from not being. Both sibling backends preserve it. It also removes a select level rather
- * than adding one.
- *
- * The terms leave through {@link AbsorbOrder}, which is the same door the stream aggregate takes
- * and which asserts invariant 19 for both. Here they are re-emitted rather than discarded, so a
- * term holding a `$n` would not break *this* bind — the assertion belongs to the door, not to the
- * caller, and one of its two callers genuinely throws the text away.
- *
- * The projected column is read as jsonb first. `jsonb_agg` takes `anyelement` and so would accept
- * a declared scalar column as it is, but then each element would be spelled by that type's own
- * output function rather than by `to_jsonb`, which is what every other jsonb-valued fragment this
- * compiler builds goes through — one spelling for the elements of an array is worth the cast.
- *
- * The element type is read off the projection **before** {@link AsJson}, not after it: a cast to
- * the bottom type answers a bottom-typed value, so `ArrayOf` over the cast would widen a stream of
- * timestamps to raw json and lose the revival the decoder does from the type descriptor alone.
+ * Absorbed into the relation rather than wrapped, so `jsonb_agg` can name its own order terms.
  */
 function Aggregated(relation: Relation, context: DecodingContext): Compiled {
   const prepared = Prepare(relation, SUBQUERY_BLOCKERS, context);

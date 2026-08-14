@@ -173,7 +173,7 @@ describe("an aggregate that names no field", () => {
     expect(DOCUMENT).to.contain("jsonb_build_object");
   });
 
-  it("spells that document twice, which is the guard cost decision 10 defers", () => {
+  it("spells that document twice, which is the guard cost this shape accepts", () => {
     expect(Occurrences(Sql(Root().avg()), DOCUMENT)).to.equal(DOCUMENT_COPIES);
   });
 });

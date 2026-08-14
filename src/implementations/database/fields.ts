@@ -44,7 +44,7 @@ export interface TableShape {
  *
  * The one owner of that expansion: the select list a row-mode relation reads back and the column
  * list a write names have to agree on both the set and the order, and `FieldSpec.column` is not
- * the field name whenever `PgIdentifier` truncated it (invariant 8), so a second spelling would
+ * the field name whenever `PgIdentifier` truncated it, so a second spelling would
  * write one column and read another with nothing failing.
  */
 export function DeclaredColumns(shape: TableShape): string[] {
@@ -55,8 +55,8 @@ export function DeclaredColumns(shape: TableShape): string[] {
  * The keys a row's document has of its own, in declaration order, which is not the column list.
  *
  * `_id` is prepended because the parser refuses it as a field and it is a document key all the
- * same (invariant 3), and the names are logical rather than physical for the reason
- * {@link DeclaredColumns} is the opposite (invariant 8). The one owner of that expansion: the
+ * same, and the names are logical rather than physical for the reason
+ * {@link DeclaredColumns} is the opposite. The one owner of that expansion: the
  * document a row materializes into and the keys a write subtracts from an overflow document have
  * to be the same set, or a key is both stored in its column and left behind in `_extra`, where
  * the stale copy is the one every later read answers with.
@@ -68,7 +68,7 @@ export function DocumentKeys(shape: TableShape): string[] {
 /**
  * The physical column order a row is stored in, given whatever the caller has for each part.
  *
- * The one owner of `[_id, _instance, …declared, _extra]` (invariant 17): the column definitions
+ * The one owner of `[_id, _instance, …declared, _extra]`: the column definitions
  * the table is created with, the qualified references a row-mode select list reads back, and the
  * column list an insert names above tuples built from *different material* all have to agree on
  * both the set and the order. A second spelling is how a tuple writes each value into the column

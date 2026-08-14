@@ -14,12 +14,7 @@ import type { Compiled } from "./sql";
 
 /**
  * An aggregate reads whichever rows the relation has already selected.
- *
- * A limit, an offset, a `DISTINCT` and an earlier aggregate each decide *which* rows there are,
- * so absorbing past one would aggregate a different set than the caller wrote; a pending
- * projection blocks it for the same reason it blocks every stage that resolves a field.
- * `ordered` is deliberately absent — an ordering cannot change an aggregate, so the terms are
- * cleared rather than wrapped around.
+ * `ordered` is deliberately absent: an ordering cannot change an aggregate, so the terms clear.
  */
 const AGGREGATE_BLOCKERS: readonly RelationFlag[] = [
   "projection",
@@ -31,11 +26,7 @@ const AGGREGATE_BLOCKERS: readonly RelationFlag[] = [
 
 /**
  * Everything that blocks an aggregate, plus an existing ordering.
- *
- * The extra entry is the one that is not about choosing rows: `SELECT DISTINCT <value> … ORDER BY
- * <other>` raises `42P10 for SELECT DISTINCT, ORDER BY expressions must appear in select list`.
- * Wrapping moves the sort inside, where it is legal and inert, so a distinct discards the
- * ordering ahead of it.
+ * `SELECT DISTINCT … ORDER BY <other>` raises, so wrapping moves the sort inside.
  */
 const DISTINCT_BLOCKERS: readonly RelationFlag[] = [
   ...AGGREGATE_BLOCKERS,
@@ -58,7 +49,7 @@ const DEDUPED = "DISTINCT ";
  *
  * The dedup channel is what a group's sub-stream spends a pending `distinct` through, and it is a
  * channel rather than a string the caller assembles so that {@link Applied} stays the one owner of
- * an aggregate call's `DISTINCT ` prefix (invariant 17). `min` and `max` take it harmlessly — a
+ * an aggregate call's `DISTINCT ` prefix. `min` and `max` take it harmlessly — a
  * dedup cannot move an extremum — which is what lets the fold pass it uniformly rather than per
  * aggregate.
  */
@@ -73,7 +64,7 @@ export type Aggregation = (operand: Compiled, distinct?: boolean) => Compiled;
  * different question than the caller asked: `count(<not a name>)` would become `count(*)`.
  *
  * A `group`'s sub-stream fold reads the same option off the same stages and must refuse the same
- * shapes with the same words, so it reads them through here (invariant 17).
+ * shapes with the same words, so it reads them through here.
  */
 export function NamedField(stage: QueryStage): string | undefined {
   const field = stage.options?.field;
@@ -89,8 +80,7 @@ export function NamedField(stage: QueryStage): string | undefined {
 
 /**
  * What an aggregate reads: the named field resolved through the relation's own source, so
- * `sum("price")` is `sum("t0"."price")` rather than a member of a document built to be thrown
- * away, and a declared column stays reachable by its own index.
+ * `sum("price")` is `sum("t0"."price")` and the column stays reachable by its own index.
  */
 function NamedOperand(
   relation: Relation,
@@ -144,7 +134,7 @@ function Extremum(func: string): Aggregation {
  * result whenever it is not a number, and `min(<timestamp>)::double precision` is refused at
  * *plan* time with `42846`, which means it could never read a row on any dataset at all. Casting
  * exactly where the result is a number is what keeps a numeric one from reaching the driver as an
- * unparsed string (invariant 1) without breaking the other two readings.
+ * unparsed string without breaking the other two readings.
  */
 export const Minimum: Aggregation = Extremum(MINIMUM);
 
@@ -167,21 +157,8 @@ export function Tally(operand?: Compiled): Compiled {
 }
 
 /**
- * Moves the relation into value mode over the one row an aggregate yields.
- *
- * The order terms go with it: `SELECT sum(x) … ORDER BY y` with no `GROUP BY` raises
- * `42803 column "y" must appear in the GROUP BY clause`, and since no ordering can change an
- * aggregate, clearing them is correct rather than merely convenient. `aggregated` is what blocks
- * the next stage that would filter or reorder the result, and it survives exactly one stage —
- * a wrap drops it, which is what leaves `count().default(0)` free to read the aggregate.
- *
- * Dropping the terms is the one place this pipeline discards compiled text, which is legal only
- * because an order term never carries a `$n`: they are built from `source.field(name)` with no
- * default, so nothing in them was decoded. {@link AbsorbOrder} is where that is asserted rather
- * than assumed, and it is the same door a subquery's aggregate takes to *keep* the terms — an
- * `orderBy` that ever decoded an argument would have to render its terms into a subselect here
- * instead, or the statement binds a parameter no fragment references and the driver rejects the
- * whole query (invariant 12, one layer up).
+ * Moves the relation into value mode over the one row an aggregate yields, clearing the order.
+ * The terms are discarded through {@link AbsorbOrder}, which asserts that none carries a `$n`.
  */
 function SetAggregate(relation: Relation, value: Compiled): Relation {
   const aggregate = SetProjection(relation, value);
@@ -206,11 +183,7 @@ const CountStage: PipelineStage = (relation, stage, context) => {
 
 /**
  * Dedups the relation, on one named field or on whole rows.
- *
- * A named field also becomes the projection, so `distinct("isElectric")` yields a stream of
- * booleans; without one the relation keeps whatever it was already yielding and `SELECT DISTINCT`
- * compares that. Either way it stays a stream — unlike the five aggregates, this one reduces the
- * rows without reducing them to a single value.
+ * A named field also becomes the projection; either way the relation stays a stream.
  */
 const DistinctStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, DISTINCT_BLOCKERS, context);
@@ -227,7 +200,7 @@ const DistinctStage: PipelineStage = (relation, stage, context) => {
  *
  * The spellings themselves — {@link Total}, {@link Mean}, {@link Minimum}, {@link Maximum} and
  * {@link Tally} — are exported, because a `group`'s sub-stream fold reduces a group's rows with
- * the same five aggregates and has to reduce them the same way (invariant 17). A second table of
+ * the same five aggregates and has to reduce them the same way. A second table of
  * them there would be free to answer `sum` one way outside a group and another way inside it with
  * nothing failing, and it would land on {@link Minimum}'s "cast only where the result is numeric"
  * rule first, because that is the one a reimplementation would simplify away. They are exported

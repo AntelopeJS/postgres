@@ -140,8 +140,8 @@ describe("DecodeResult in value mode", () => {
 /**
  * The two decoders over the relation that separates them, asserted side by side.
  *
- * A cursor over a `get` must be immediately done where a `get` answers its absent value, so the
- * pair is the whole of decision 5 and neither half says it alone.
+ * A cursor over a `get` must be immediately done where a `get` answers its absent value, and
+ * neither half says that alone.
  */
 describe("DecodeRows over a relation that yields at most one row", () => {
   it("yields the row as one element where DecodeResult yields the row", () => {
@@ -189,8 +189,8 @@ const NEVER_REFUSED = "the compilation was expected to be refused";
 /**
  * A `reqId` the interface's own counter can never allocate, in a range no sibling spec claims.
  *
- * `nextReqId` is a process-global counting up from 0, so the specs count down (invariant 15) — and
- * `cursors.spec.ts` counts down from `-1` through the *same* registry (invariant 7), pinning the
+ * `nextReqId` is a process-global counting up from 0, so the specs count down — and
+ * `cursors.spec.ts` counts down from `-1` through the *same* registry, pinning the
  * first eviction the process makes. Nothing here is ever registered, so the two runs cannot meet,
  * and this id stays far below the other's reach in case that ever stops being true.
  */
@@ -224,8 +224,8 @@ function CursorContext(log: OpenLog): DecodingContext {
  *
  * It is driven directly rather than through `ReadCursorRow`, which would register a `reqId` and
  * retire it — and the endings a refusal leaves behind are evicted before `pipeline-cursors`' own,
- * which pins the process's first eviction to bound its forgotten range (invariant 7, across two
- * spec files rather than within one).
+ * which pins the process's first eviction to bound its forgotten range (a shared process, across
+ * two spec files rather than within one).
  *
  * So these specs pin what the *compiler* does and nothing about what the registry does with it.
  * That a refused open takes no client is structural — a request that is never built is never
@@ -297,7 +297,7 @@ describe("the statement a cursor declares", () => {
   /**
    * A gate that rejects proves the ordering where a gate that resolves cannot.
    *
-   * Compilation is synchronous and reads shapes a registration has not converged yet (invariant 6),
+   * Compilation is synchronous and reads shapes a registration has not converged yet,
    * so the gate has to be awaited first. The stubbed registry answers any table, so a root built
    * before the gate would compile happily and the failure would surface nowhere.
    */

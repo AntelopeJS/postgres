@@ -105,11 +105,7 @@ export function ApplyStages(
 
 /**
  * Refuses a nested query that ends in a write, naming the stage rather than the value.
- *
- * A stage array is data by the time it reaches this module, so nothing about the contract's types
- * keeps a write out of a `union`'s argument or out of a document literal — and without this the
- * write reaches {@link ApplyStages} and is declined as `Unsupported query stage 'insert'`, which
- * names the wrong problem: the stage is fully supported and merely cannot be nested.
+ * Otherwise it reaches {@link ApplyStages} and is declined as unsupported, naming the wrong problem.
  */
 function RefuseNestedWrite(write: QueryStage): never {
   throw new Error(
@@ -130,7 +126,7 @@ function RefuseNestedWrite(write: QueryStage): never {
  * **`RunQuery` does not use it and must not.** It splits a terminal write off *between* the two
  * steps and then compiles it, where this refuses it; and the write target it builds needs
  * `root.instance` — the very fragment the root's predicate bound, which `insert` reuses rather
- * than binding a second parameter for (invariant 25). Folding the two calls together there hides
+ * than binding a second parameter for. Folding the two calls together there hides
  * `root` and breaks `insert`'s bind.
  */
 export function CompileRelation(

@@ -66,7 +66,7 @@ export class DecodingContext {
    * optional and exists only so a spec can compile against a stub registry — `selection.ts` can
    * import `schema.ts`, so production never sets it and falls back to `RegisteredOrigin`. Readonly
    * and supplied once because a reassignment mid-compilation would resolve a union's two sides
-   * against different registries, with no failing type (invariant 21).
+   * against different registries, with no failing type.
    */
   public constructor(
     private readonly compilers: Compilers,

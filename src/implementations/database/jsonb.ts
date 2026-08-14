@@ -69,7 +69,7 @@ export const ORDINAL_COLUMN = "ord";
  * `jsonb_agg` yields NULL over an empty input, which would turn an empty container into a null for
  * every stage downstream — and the same is true of a nested query that read no row. Both callers
  * coalesce onto this literal, and a second spelling would be free to drift from this one with
- * nothing failing (invariant 17).
+ * nothing failing.
  */
 export const EMPTY_ARRAY = "'[]'::jsonb";
 const ORDINALITY = "WITH ORDINALITY";
@@ -87,7 +87,7 @@ export function WalkColumn(alias: string, name: string): string {
  * which would turn an empty container into a null for every stage downstream.
  *
  * The order is a fragment rather than an alias so that the one spelling of `jsonb_agg(… ORDER BY
- * …)` serves both (invariant 17): a second one would be free to drop the `ORDER BY`, or the
+ * …)` serves both: a second one would be free to drop the `ORDER BY`, or the
  * `COALESCE`, with nothing failing. It is absent only where there is nothing to order by — a
  * nested query the caller never ordered — and never where a walk decided one.
  *

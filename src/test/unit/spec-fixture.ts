@@ -41,7 +41,7 @@ function CurrentOptions(): Options | undefined {
  * Every generated name goes through `SchemaName`, which reads the process-wide schema prefix, and
  * these specs share their process with a live, constructed adapter: `pnpm test` runs them
  * alongside the conformance suites. Both the set and the restore therefore happen inside one
- * synchronous call, so no registration in flight can observe either (invariant 7).
+ * synchronous call, so no registration in flight can observe either.
  */
 export function WithOptions<T>(options: Options, read: () => T): T {
   const saved = CurrentOptions();
@@ -62,7 +62,7 @@ export function WithOptions<T>(options: Options, read: () => T): T {
  *
  * {@link WithOptions} cannot serve a body that awaits: it restores synchronously, so a continuation
  * resuming in a later turn reads whatever replaced its set. Holding a set across an await is
- * invariant 7's hazard exactly when there is something to disturb, and here there is nothing —
+ * a hazard exactly when a concurrent registration could observe it, and here there is nothing —
  * under `pnpm test` the live adapter configured this process before the specs ran and this changes
  * nothing at all, and under a standalone unit run there is no registration to observe the set.
  *
@@ -104,7 +104,7 @@ function Ascending(left: number, right: number): number {
  * Every compiled fragment appends to the one collector, so a branch that was compiled and then
  * discarded — or a relation rendered twice — makes these two lists differ. PostgreSQL reports it
  * as `bind message supplies N parameters, but prepared statement requires M`, naming nothing about
- * the query, so the specs compare them directly rather than pinning one count (invariant 16).
+ * the query, so the specs compare them directly rather than pinning one count.
  *
  * It lives here rather than beside either caller because a second scan of the same markers would
  * let one spec family keep passing a check the other had already found wrong.

@@ -16,12 +16,8 @@ import type { QueryStage } from "./utils";
 import { WRITE_STAGES } from "./writes";
 
 /**
- * The alias each side's one row is read through.
- *
- * Fixed rather than taken from the context, and that is what lets one compilation serve both
- * sides: each side is rendered into its own lateral subselect, so the name is scoped to that
- * subselect and cannot collide with anything outside it. A nested `lookup` still takes its aliases
- * from the context, which never produces this one.
+ * The alias each side's one row is read through, fixed rather than taken from the context.
+ * Each side renders into its own lateral subselect, so the name cannot collide outside it.
  */
 const SIDE_ALIAS = "s";
 const ROW_COLUMN = QuoteIdentifier("r");
@@ -34,21 +30,8 @@ export const DOC_KEY = "doc";
 export const MATCHED_KEY = "matched";
 
 /**
- * The stages a feed accepts before `changes()`.
- *
- * Decided by *meaning* rather than by what happens to compile. The selection stages are here
- * because they name **fields**, not indexes: whether a stage reaches a btree is an optimization a
- * caller should never have to think about, and making someone rewrite `get(k).changes()` as
- * `filter(d => d.key("_id").eq(k)).changes()` would fracture an otherwise uniform syntax for an
- * internal reason. On a feed they are predicates over the event document like any other.
- *
- * One divergence to state rather than leave to be discovered: `get` on the read path bounds a
- * `CROSS_INSTANCE` query to one row, lowest `_instance` first. That is a bound on a *relation* and
- * means nothing on a stream of independent events, so on a feed `get(k)` is the predicate alone —
- * which is what it compiles to here, since a feed's relation is never cross-instance.
- *
- * `lookup` resolves **as of delivery**, not as of the event. The joined row's state at event time
- * is not recoverable from the log, and the alternative is refusing something useful.
+ * The stages a feed accepts before `changes()`, chosen by meaning rather than by what compiles.
+ * `get` is the predicate alone here, and a `lookup` resolves as of delivery, not as of the event.
  */
 const FEED_STAGES: readonly string[] = [
   "filter",
@@ -71,8 +54,8 @@ const ACCEPTED = new Set(FEED_STAGES);
  * The two sides differ in exactly one substring — which column of the log row they read — so the
  * relation is compiled **once** and rendered twice against two `from` expressions. Compiling twice
  * would be two chances to diverge, and a divergence would be invisible until an event whose two
- * sides disagree; rendering twice is pure and binds no parameter, which is the half of invariant 16
- * that may be repeated.
+ * sides disagree; rendering twice is pure and binds no parameter, so it is the rendering rather
+ * than the compilation that may be repeated.
  */
 export interface FeedPlan {
   readonly oldSide: string;
@@ -82,12 +65,8 @@ export interface FeedPlan {
 }
 
 /**
- * Refuses a stage a feed cannot answer, **naming the position as well as the stage**.
- *
- * Every stage refused here is legal on the query one level out, so a message naming only the stage
- * tells a caller their code is wrong somewhere they cannot see: `count()` before a `changes()` is
- * not "count is unsupported". A stage nothing at all knows about keeps the fold's own wording,
- * since that one is a typo rather than a misplacement.
+ * Refuses a stage a feed cannot answer, naming the position as well as the stage.
+ * Every stage refused here is legal one level out, so naming only the stage would mislead.
  */
 function RefuseStage(stage: QueryStage): never {
   const known =
@@ -120,15 +99,8 @@ function SideFrom(column: string): string {
 }
 
 /**
- * One side's select list: the document it projects beside whether it matched.
- *
- * They travel as one jsonb value rather than as two columns because a relation projects exactly
- * one, and splitting them would mean rendering the same relation twice per side — which is where a
- * `lookup`'s join would be executed twice for an answer that is already to hand.
- *
- * The `where` list is read as a **boolean** here and emptied from the relation, which is the whole
- * of decision 1: the stages absorbed their predicates in the ordinary way, and this is the only
- * place that reads them as a value. `filter` itself is untouched.
+ * One side's select list: the document it projects beside whether it matched, as one jsonb value.
+ * The `where` list is read as a boolean here and emptied from the relation.
  */
 function Side(folded: Relation): Relation {
   const document = CurrentValue(folded);
@@ -143,12 +115,8 @@ function Side(folded: Relation): Relation {
 }
 
 /**
- * Compiles the stages against one side's row.
- *
- * The `from` is real from the start rather than filled in at render time, and that is not a detail:
- * a stage that *wraps* — a `filter` after a projection is the ordinary case — renders the relation
- * it wrapped into its own `from`, so a placeholder would be baked into the middle of the statement
- * where no later substitution reaches it.
+ * Compiles the stages against one side's row, with the `from` real from the start.
+ * A stage that wraps renders its input into its own `from`, where no later substitution reaches.
  */
 function CompileSide(
   stages: QueryStage[],

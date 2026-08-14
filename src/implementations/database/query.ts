@@ -57,16 +57,8 @@ const LIFECYCLE_HANDLERS: Record<string, LifecycleHandler> = {
 };
 
 /**
- * Dispatches a schema-rooted instance lifecycle query, or declines it.
- *
- * The stage name is whatever the caller put on the wire, so the handler map is
- * probed with `Object.hasOwn` rather than indexed: a stage named after an
- * inherited `Object.prototype` member would otherwise resolve to a function and
- * be called with a schema id.
- *
- * The gate is awaited here rather than in {@link RunQuery} so the path that
- * declines stays synchronous; the tables the handlers read and write are
- * created by the very registration the gate waits on.
+ * Dispatches a schema-rooted instance lifecycle query, or declines it synchronously.
+ * The map is probed with `Object.hasOwn`, and the gate is awaited here rather than in `RunQuery`.
  */
 function Lifecycle(stages: QueryStage[]): Promise<unknown> | undefined {
   if (
@@ -90,7 +82,7 @@ function Lifecycle(stages: QueryStage[]): Promise<unknown> | undefined {
  *
  * Dispatches on the same `projection` discriminator the select list was built from, so the two
  * output modes cannot drift apart, and reads `_id` through `DecodeRow` rather than by enumerating
- * fields, which never carry it (invariant 3).
+ * fields, which never carry it.
  *
  * **A cursor decodes through this and never through {@link DecodeResult}**, which is one letter
  * apart in spirit and means something else: the result decoder applies the relation's
@@ -135,11 +127,7 @@ async function RunRead(
 
 /**
  * Executes a terminal write and answers what its stage promised.
- *
- * `insert` knows its keys before the statement runs and answers them in input order; everything
- * else answers the number of rows the statement matched. A compiler that produced no statement had
- * nothing to do, and the answer it already carries is returned without a round trip — asking
- * instead whether that answer is empty would make one compiler's rule the runner's.
+ * `insert` answers its keys in input order; everything else answers the rows it matched.
  */
 async function RunWrite(
   target: WriteTarget,
@@ -210,7 +198,7 @@ function RefuseCursorWrite(write: QueryStage): never {
  *
  * The same root → split → fold `RunQuery` runs, for the same reason it is three steps there: the
  * terminal write is separated *between* the first two, so folding them into `CompileRelation`
- * would hide the root a write target is built from (invariant 25).
+ * would hide the root a write target is built from.
  *
  * **A terminal write is refused by name rather than executed.** The write path compiles a
  * *statement* and never renders a relation, so there is nothing for `DECLARE` to hold — and
@@ -222,7 +210,7 @@ function RefuseCursorWrite(write: QueryStage): never {
  *
  * The context is a parameter rather than built here because the caller decides its lifetime: it
  * carries the parameter ledger the `DECLARE` binds against, and the statement is rendered once and
- * re-used for the whole iteration (invariant 16).
+ * re-used for the whole iteration.
  */
 export async function CompileCursor(
   stages: QueryStage[],

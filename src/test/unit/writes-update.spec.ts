@@ -351,7 +351,7 @@ describe("the count an update answers", () => {
     expect(Occurrences(Sql(written), "$3")).to.equal(RESPELLED);
   });
 
-  /** Invariant 8: the two differ wherever `PgIdentifier` truncated the name apart. */
+  /** The two differ wherever `PgIdentifier` truncated the name apart. */
   it("names the column rather than the field it was declared under", () => {
     const written = Write(
       NotesRoot().update({ summary: "s" } as unknown as DeepPartial<Note>),

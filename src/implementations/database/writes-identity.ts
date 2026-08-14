@@ -56,21 +56,7 @@ function KeyTuple(alias: string): string {
 
 /**
  * The `WHERE` predicate addressing exactly the rows the read pipeline found, by their identity.
- *
- * The relation is **wrapped** rather than re-projected: a row-value `IN` requires its subquery's
- * arity to match the left side exactly, and a row-mode relation renders its whole physical column
- * list, so asking that list for two columns is a hard `42601 subquery has too many columns`.
- * Selecting the key out of a subselect over the rendered relation makes the arities agree without
- * a second renderer that could drift from `Render`, and needs nothing added to the select list —
- * the row-mode column list carries `_instance` for precisely this.
- *
- * Both sides come from `PRIMARY_KEY_COLUMNS` rather than being spelled out, because a row-value
- * comparison is positional and both columns are `text`: two lists ordered differently compare
- * `_instance` against `_id`, raise nothing, and match no row.
- *
- * The relation is rendered here and nowhere else on the write path (invariant 16). `Render` binds
- * no parameters, so a compiler that calls this twice does not break the bind — it spells a
- * relation that is already several subselects deep a second time into one statement.
+ * Wrapped so the arities agree, and keyed off `PRIMARY_KEY_COLUMNS` since the comparison is positional.
  */
 function IdentityTarget(target: WriteTarget, context: DecodingContext): string {
   const source = context.nextAlias();
@@ -86,13 +72,7 @@ interface WrittenColumn {
 
 /**
  * One payload's `SET` list, and the row identity that payload asserted if it named one.
- *
- * The three travel together because they come out of one split and are spelled into opposite halves
- * of the same statement, and because the `update` path that returns them — a mapper's document
- * body — has no second chance to hand back what it left behind.
- *
- * `modified` is absent for the one `SET` list that states no column-by-column values — see
- * {@link MultiAssignment} — and that write answers the rows it matched.
+ * `modified` is absent for the one `SET` list stating no column-by-column values.
  */
 interface ChangedColumns {
   assignments: string;
@@ -107,19 +87,7 @@ function Assignments(written: WrittenColumn[]): string {
 
 /**
  * The rows this write would actually change, which is the count the contract says it answers.
- *
- * The driver reports rows *matched*, so setting a column to the value it already holds would
- * otherwise be counted — where the contract types every `update` and `replace` as a number of
- * modified documents. Asking the question in the statement is what makes the driver's count the
- * right one, and it costs no round trip and no parameter: the values are the fragments the `SET`
- * list already compiled, re-spelled rather than re-decoded (invariant 16).
- *
- * A row comparison rather than a conjunction of them, and `IS DISTINCT FROM` rather than `<>`,
- * because a NULL on either side is an ordinary value here: a column being cleared, or one being set
- * from NULL, is a change and `<>` would answer NULL and drop the row.
- *
- * The rows that fail it are not written at all, so an update that changes nothing also leaves no
- * dead tuples behind.
+ * `IS DISTINCT FROM` over a row value, since a NULL on either side is an ordinary value here.
  */
 function ModifiedRows(written: WrittenColumn[]): string {
   const columns = written.map((one) =>
@@ -142,17 +110,8 @@ function ChangedFrom(
 }
 
 /**
- * The rows the statement changes: the ones the read pipeline found, narrowed by the payload's own
- * `_id` where it supplied one, and tested for whether the assignment changes anything.
- *
- * The assertion is a predicate and never an assignment. Supplying the `_id` the row already has
- * matches it and changes nothing about the write; supplying another row's matches nothing, and the
- * write answers 0 — the count the contract already types the answer as, rather than an error. It
- * reaches here only over a selection that answers one row, which {@link RequireAddressedRow}
- * refuses everything else at.
- *
- * Parenthesised here rather than trusted to arrive that way (invariant 5): the conjuncts are joined
- * with `AND`, where anything composed would otherwise rebind across the identity target.
+ * The rows the statement changes: those the pipeline found, narrowed by any asserted `_id`.
+ * The assertion is a predicate and never an assignment, so a foreign key answers 0 rather than raising.
  */
 function TargetedRows(
   target: WriteTarget,
@@ -172,11 +131,7 @@ function TargetedRows(
 
 /**
  * Refuses a payload that asserts a key over a selection the write did not address by one.
- *
- * The assertion exists for the round trip a document makes — `get(k).replace(doc)` writes the `_id`
- * it read back — and over a selection of many rows it is a mistake rather than a narrowing: one
- * document written over the rows a filter found would silently reach at most one of them. Nothing
- * is compiled here that a passing write does not compile too, so the refusal costs a boolean.
+ * Over many rows the key is a mistake rather than a narrowing, and would reach at most one of them.
  */
 function RequireAddressedRow(
   target: WriteTarget,
@@ -191,11 +146,7 @@ function RequireAddressedRow(
 
 /**
  * The statement `update` and `replace` compile to, given the columns each built for itself.
- *
- * The assignments arrive already compiled because the two writes that share this skeleton
- * disagree about nothing else, and compiling them first is what leaves the aliases in reading
- * order: the identity target claims one, so a `SET` list holding a derived table of its own would
- * otherwise be numbered behind the wrap it appears in front of.
+ * The assignments arrive already compiled, which is what leaves the aliases in reading order.
  */
 function UpdateStatement(
   target: WriteTarget,
@@ -233,14 +184,7 @@ function ChangedPayload(
 
 /**
  * What the overflow column becomes, composed from whichever halves the payload asked for.
- *
- * The concatenation comes before the subtraction, so a payload that both writes and removes keys
- * removes them from the merged document rather than from the row's previous one — the other order
- * would resurrect a key the same payload had just removed. Absent when the payload touched no
- * undeclared key at all, which is what keeps the column out of the `SET` list entirely.
- *
- * `update`'s alone, and not `replace`'s: a statement that assigns the column outright has nothing
- * to merge into and nothing to subtract from.
+ * The concatenation precedes the subtraction, so a removed key is not resurrected by the same payload.
  */
 function UpdatedExtra(split: PayloadSplit): string | undefined {
   if (!split.extra && split.removed.length === 0) {
@@ -255,20 +199,7 @@ function UpdatedExtra(split: PayloadSplit): string | undefined {
 
 /**
  * The assignments one `update` payload makes, and the refusal of a payload that makes none.
- *
- * An `UPDATE` with an empty `SET` list is a syntax error, and answering `0` without running one
- * would need a second statement to count the rows it did not change — so an empty payload is
- * refused by name.
- *
- * The refusal is `update`'s alone. `replace({})` names every column it did not name, so it is a
- * well-formed statement that empties the row rather than one with nothing to say.
- *
- * A payload whose only key is `_id` is refused here too, and rightly: that key states which row is
- * written and never what to write into it, so `update({ _id })` still has nothing to say. It is
- * also the one payload reaching this refusal that has already decoded a value, so the reassuring
- * reading — no assignments means no keys means nothing bound — is not the reason it is safe.
- * Invariant 16 is unhurt because the throw abandons the whole compilation: the hazard is a
- * statement that runs while binding a `$n` its text never names, and no statement survives here.
+ * An empty `SET` list is a syntax error, so an empty payload — `_id` alone included — is refused.
  */
 function UpdatedColumns(
   split: PayloadSplit,
@@ -302,15 +233,7 @@ function ChangedColumnsOf(
 
 /**
  * The assignments one `replace` payload makes, which are every column the table has.
- *
- * A column the payload is silent about is set to NULL rather than left alone, and the overflow
- * document is assigned rather than merged — that is what "the row becomes exactly this document"
- * means, and it is the whole difference from `update`. The silence a `PayloadSplit` records is
- * only the keys a caller explicitly set to `undefined`, so the columns are enumerated from the
- * declared shape instead: a payload cannot represent a key it never mentioned.
- *
- * An undeclared key the payload named as `undefined` is dropped for the same reason `insert` drops
- * one — the document it would have been removed from is the one being written, and it is not in it.
+ * A column the payload is silent about is set to NULL, and the overflow document is assigned outright.
  */
 function ReplacedColumns(
   split: PayloadSplit,
@@ -337,12 +260,7 @@ function MappedShape(shape: TableShape): SqlShape {
 
 /**
  * The mapper's document with everything that has a column of its own taken out of it.
- *
- * Guarded on the document being an object, and defaulted to an empty one: `jsonb - text[]` raises
- * `22023 cannot delete from scalar` and yields NULL for a NULL document, and the column is
- * `NOT NULL`, so a mapper that returned something other than a document would otherwise lose the
- * whole statement to `22023` or to `23502`. The operand spelled twice here is the derived table's
- * column rather than the mapper's body, which is the reason that table exists.
+ * Guarded on the document being an object and defaulted to an empty one, since the column is `NOT NULL`.
  */
 function MappedExtra(mapped: Compiled, shape: TableShape): string {
   const kept = `(${mapped.sql} - ${TextArray(DocumentKeys(shape))})`;
@@ -351,11 +269,7 @@ function MappedExtra(mapped: Compiled, shape: TableShape): string {
 
 /**
  * A parenthesised target list, or the bare column name when there is only one of it.
- *
- * A table declaring no fields assigns nothing but the overflow column, and that one assignment is
- * spelled plainly. PostgreSQL 16 — this adapter's minimum — does accept `SET ("c") = (SELECT …)`,
- * measured against a live server, so this is the ordinary spelling of one assignment rather than a
- * workaround for a form the server refuses.
+ * The single-column form is the ordinary spelling rather than a workaround; the server takes both.
  */
 function MappedTarget(columns: string[]): string {
   const named = columns.map((column) => QuoteIdentifier(column));
@@ -367,18 +281,7 @@ function MappedTarget(columns: string[]): string {
 
 /**
  * Assigns every column at once from one evaluation of a mapper whose keys are not statically known.
- *
- * `(a, b, "_extra") = (SELECT …)` is the multi-assignment form: the sub-`SELECT` is evaluated once
- * per target row and may reference that row's columns, which is what lets the mapper's body read
- * the row it is rewriting. The body is spelled exactly once, as the single column of a derived
- * table every read then projects out of — the alternative is emitting it once per column, which
- * grows the statement by the whole expression per declared field.
- *
- * The targets and the reads come from one walk of the declared fields, because they are addressed
- * differently and must still line up positionally: the assignment names `spec.column` while the
- * document is keyed by the field name, and the two differ whenever `PgIdentifier` truncated it
- * (invariant 8). Each read is the guarded jsonb projection every other layer uses, so a member
- * whose value does not fit its column is NULL rather than a `22P02` that loses the statement.
+ * The body is spelled once as a derived table, and targets and reads come from one positional walk.
  */
 function MultiAssignment(
   origin: TableOrigin,
@@ -402,26 +305,8 @@ function MultiAssignment(
 }
 
 /**
- * The assignments a mapper makes, which take one of two shapes depending on what it returned.
- *
- * An object body is the document path exactly: its keys are static and its values are recorded
- * expressions, which is a payload the splitter already handles. Decoding it as a *value* instead
- * would build one `jsonb_build_object` and lose every column, so the binding spans the split
- * rather than a decode. Anything else is a value whose top-level keys are unknowable at compile
- * time, and becomes {@link MultiAssignment}.
- *
- * Both halves bind the lambda parameter to the row being written and not to the one that was read
- * — see {@link WriteRowSource} for why the read relation's alias cannot appear here.
- *
- * Only the object body can assert an identity, and it does so for free by being the document path:
- * an expression body is one value whose top-level keys are not known until it runs, so there is no
- * `_id` in it to read as a claim about the row.
- *
- * It is also the one path that answers the rows it *matched* rather than the rows it changed. The
- * body is a derived table inside the `SET` list, so {@link ModifiedRows} would have to spell that
- * table a second time into the `WHERE` — measured at 1.6× to 1.8× the whole statement, and a second
- * evaluation of the caller's mapper on every candidate row. Every other write path states its
- * columns one by one and pays neither.
+ * The assignments a mapper makes: an object body is the document path, anything else multi-assigns.
+ * Only the object body can assert an identity, and only the expression body answers rows *matched*.
  */
 function MappedColumns(
   target: WriteTarget,

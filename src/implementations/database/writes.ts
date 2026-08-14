@@ -35,7 +35,7 @@ export interface WriteSplit {
  *
  * A plain constant rather than a function: the fragments a write family shares live in
  * `writes-shared.ts`, so nothing a family imports leads back here and the two directions of
- * invariant 20's require cycle cannot form. A write is terminal — the contract gives
+ * a require cycle cannot form in either direction. A write is terminal — the contract gives
  * `Query` no chain methods — so no compiler can ever need the dispatch that called it, which is
  * what makes that cut available at all.
  */
@@ -56,12 +56,8 @@ function RefuseWrites(stages: QueryStage[]): void {
 }
 
 /**
- * Refuses a write that would silently drop the pipeline it follows.
- *
- * A write that never reads the relation ignores every stage before it, so
- * `table.filter(…).insert(doc)` would otherwise insert the document and discard the filter with
- * nothing failing. Every discarded stage is named rather than one of them, because which stage the
- * caller considers the mistake is not something this can know.
+ * Refuses a write that would silently drop the pipeline it follows, naming every discarded stage.
+ * A write that never reads the relation would otherwise ignore every stage before it.
  */
 function RefuseDiscardedStages(
   write: QueryStage,

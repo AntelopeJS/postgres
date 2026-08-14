@@ -17,17 +17,7 @@ const UNARMED = 0;
 
 /**
  * How many finished cursors keep the reason they finished before the oldest is forgotten.
- *
- * An ending has to outlive the cursor it describes: a read that arrives after teardown asks why the
- * cursor stopped, and only a remembered ending can answer. It cannot outlive it forever either —
- * `reqId` is a counter that never repeats, so a registry that only grows leaks one small record per
- * cursor the process ever opened.
- *
- * Reaching this bound is ordinary rather than exotic, and the reaper is what reaches it: a consumer
- * that stops reading long enough to be reclaimed is precisely a consumer that paused, and a busy
- * process retires far more than a thousand cursors during a 60-second idle window. So the bound
- * cannot be the thing that decides what a read past it is told. `ForgottenRange` decides that, and a
- * `reqId` whose ending has been dropped is refused rather than opened.
+ * Reaching the bound is ordinary, so {@link ForgottenRange} decides what a read past it is told.
  */
 const REMEMBERED_ENDINGS = 1024;
 
@@ -40,7 +30,7 @@ export type ClientSource = () => Promise<PoolClient>;
 /**
  * Everything a cursor needs to open, as the caller that compiled it already holds it.
  *
- * The statement is rendered **once** and re-used for the lifetime of the iteration (invariant 16),
+ * The statement is rendered **once** and re-used for the lifetime of the iteration,
  * and `params` binds against it through the extended protocol — `DECLARE … CURSOR FOR <query with
  * $n>` was measured to bind them. The batch count is the one number that cannot join them:
  * `FETCH FORWARD $1` is `42601`, so it reaches the statement as text, which is why `config.ts`
@@ -74,55 +64,7 @@ export type CursorOpener = () => Promise<CursorRequest>;
 
 /**
  * Why a cursor stopped, and therefore what a read arriving after it is told.
- *
- * Exhaustion, an explicit close, a failed fetch, the reaper and the disconnect sweep are five paths
- * into one teardown — clear the timer, `CLOSE`, `ROLLBACK`, release — and all five land in
- * `Teardown`, which leaves the state registered carrying the reason it ended. `CLOSE` and
- * `ROLLBACK` failures are swallowed there: the client is being discarded either way, and a throw
- * would turn a leak into a leak plus an unhandled rejection.
- *
- * **Ending exactly once is also what keeps the client from being handed back twice.** `Retire`
- * answers whether *this* call is the one that ended the state, and only that call runs the
- * sequence — the state now keeps its client reachable for the whole of the teardown, so without
- * that answer a second teardown would `release()` a client the pool has already taken back.
- *
- * **Dropping a registration is not the same as ending a cursor, and the second cannot be
- * re-derived from the first.** A state that is merely absent from the registry re-opens on the next
- * read, which acquires a second client, runs the query again and answers row 1 after `done` — the
- * first client then being reachable from nothing but its own reaper. So a state ends exactly once,
- * records why, and never opens again.
- *
- * **Ending a cursor is not the same as giving its client back either, and that is a second pair of
- * facts rather than a restatement of the first.** Teardown is two server round trips after the state
- * is marked, and `pool.end()` was measured not to resolve while a client is checked out. A sweep
- * that waited on *live* states alone would see nothing to do for the whole of that window, resolve,
- * and end the pool with a client still out. So a state keeps its client reachable until `release()`
- * has returned, the disconnect sweep waits on that fact rather than on liveness, and it is that same
- * fact `CountOpenCursors` reports — the number the specs' own leak check is built on.
- *
- * Three of the endings answer `{ done: true }`. An exhausted async iterator stays exhausted, an
- * explicitly closed one is over by request, and a failed one already raised its error to the read
- * that hit it — the same shape a generator takes, which is finished once it has thrown.
- *
- * `failed` is the weakest of the three and is recorded honestly rather than defended.
- * `IterableCursor.next()` builds a **fresh** promise with its own `resolve`/`reject` on every call,
- * so the caller that hit the failure is the caller that sees the rejection, and a `for await` never
- * re-enters after one. What remains exposed is a consumer that catches a rejected `next()` and calls
- * it again: it is answered a clean `done` over a query that errored. `done` is still the better
- * default — the error was raised once already, and re-opening would re-run the query — but the trade
- * is real, so it is written down here instead of being claimed away.
- *
- * **A reclaimed cursor throws instead**, and that asymmetry is the point. Reaping is not
- * exhaustion: answering `done` silently truncates a slow consumer's result set, and re-opening
- * silently serves it rows it has already seen, while an error naming the idle timeout is both
- * honest and the one outcome a caller can act on — the whole query is still there to be retried.
- * The abandoned consumer the reaper actually exists for never reads again and cannot tell the
- * difference.
- *
- * **A forgotten cursor throws for the same reason.** Once `REMEMBERED_ENDINGS` has dropped an
- * ending, the state that ended cannot say whether it was exhausted or reclaimed, and answering
- * `done` for what may have been a reap is exactly the silent truncation above. `ForgottenRange` is
- * what makes the distinction available at all — without it the `reqId` looks unseen and re-opens.
+ * `exhausted`, `closed` and `failed` answer `done`; `reaped` and `forgotten` throw instead.
  */
 type EndReason = "exhausted" | "closed" | "reaped" | "failed" | "forgotten";
 
@@ -150,25 +92,7 @@ interface CursorState {
 
 /**
  * The lowest and highest `reqId` whose ending `REMEMBERED_ENDINGS` has actually dropped.
- *
- * The endings map is bounded, so an ending is eventually forgotten while its `reqId` can still come
- * back — and a `reqId` the registry has never heard of is otherwise indistinguishable from one whose
- * ending it dropped, which is the whole of the re-open hole a bound opens. This range tells them
- * apart without remembering anything per cursor: a `reqId` inside it was registered, ended, and had
- * its ending evicted, so it is refused; a `reqId` outside it at either end is genuinely new.
- *
- * **The range spans the evicted `reqId`s rather than every `reqId` ever seen**, and the difference
- * is load-bearing rather than a detail. A `reqId` is allocated when a cursor is *constructed* and
- * arrives here when it is first *read*, and nothing orders those two: constructing cursors `a` and
- * `b` and iterating `b` first makes `a`'s id interior to everything seen while `a` has never ended
- * at all. Interior to the *evicted* range, that same id would have to belong to a cursor built more
- * than a thousand endings ago and read for the first time only now — the case decision 7b already
- * accepts, rather than an ordinary pair of cursors read out of order.
- *
- * **Both ends, because the two allocators run in opposite directions.** The interface's own
- * `nextReqId` counts up from 0, and the unit specs count down from -1 precisely so that counter can
- * never reach one of their ids (invariant 15). A high-water mark alone would refuse every spec
- * cursor allocated after the first eviction.
+ * It spans the evicted ids at both ends, so an id inside it is refused rather than re-opened.
  */
 interface ForgottenRange {
   readonly lowest: number;
@@ -270,7 +194,10 @@ function Forget(reqId: number) {
   }
 }
 
-/** Ends the state once and for all, answering whether this call is the one that ended it. */
+/**
+ * Ends the state once and for all, answering whether this call is the one that ended it.
+ * Five paths reach {@link Teardown}, and only the caller that gets `true` may release the client.
+ */
 function Retire(reqId: number, state: CursorState, reason: EndReason): boolean {
   if (!IsLive(state)) {
     return false;
@@ -500,7 +427,7 @@ async function Advance(
  * is the only thing between this adapter and one leaked pool client per iteration.
  *
  * The options are read here, synchronously, rather than inside the machinery, so that a spec can
- * drive a cursor through a temporary configuration without the set outliving the call (invariant 7).
+ * drive a cursor through a temporary configuration without the set outliving the call.
  */
 export function ReadCursorRow(
   reqId: number,
@@ -527,9 +454,9 @@ export function ReadCursorRow(
  * Nothing orders a close against a first read — `IterableCursor.return()` on a cursor that was
  * built and never iterated arrives here first — and a `reqId` left unregistered still looks new to
  * the next read, which opens it: a client acquired, the query declared and row 0 served *after* the
- * consumer closed the iterator. It is decision 7b's shape one step earlier, an ending that has to
- * be remembered because the `reqId` can come back, and it costs one entry in the endings map and no
- * client at all.
+ * consumer closed the iterator. So it is an ending that has to be remembered because the `reqId` can
+ * come back, exactly as a forgotten one is, and it costs one entry in the endings map and no client
+ * at all.
  */
 export function CloseOneCursor(reqId: number): Promise<void> {
   const state = Registered(reqId);
@@ -543,7 +470,7 @@ export function CloseOneCursor(reqId: number): Promise<void> {
  *
  * `pool.end()` was measured not to resolve while a client is checked out, so a cursor left open
  * hangs `destroy()` and the `Disconnect()` inside `Connect()` alike. It acquires nothing — every
- * entry it walks already holds its client, or is about to give it back (invariant 9).
+ * entry it walks already holds its client, or is about to give it back.
  *
  * A snapshot of the registry is not enough on its own: a read arriving while the sweep runs would
  * register after the snapshot was taken and open a client that nothing then closes, which is

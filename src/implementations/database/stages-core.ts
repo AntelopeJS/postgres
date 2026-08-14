@@ -49,27 +49,15 @@ const ConstantStage: StageHandler = (_state, stage, context) => ({
 
 /**
  * The fallback a value takes when it is null, at whatever type the two of them meet.
- *
- * **Deliberately *not* {@link Defaulted}**, which reads a default as the type it stands in for. The
- * two are not the same promise, and the contract's own suite is what says so:
- * `row.key("status").eq("completed").default("pending")` substitutes a *string* for a boolean, so
- * this default is an alternative value rather than a value of the column's type, and unifying to the
- * bottom type is the reading that makes it work. A `key(name, def)` default names a declared column
- * and has an index and a `Date` revival to lose, which is what makes reading it worth the narrowing
- * there and wrong here.
+ * Not {@link Defaulted}: this default is an alternative value, not one of the column's type.
  */
 const DefaultStage = Lift((value, args) =>
   WithDefault(value, args[FIRST_OPERAND]),
 );
 
 /**
- * Negates a condition the way JavaScript's `!` does, where the operand may be neither true nor
- * false.
- *
- * `NOT NULL` is NULL, so a plain negation of a missing or wrong-typed key answers null and the row
- * is dropped from the `WHERE` that reads it — while `!undefined` is `true`. `IS NOT TRUE` is the
- * total spelling: it answers true for both null and false, and is the same answer as `NOT` wherever
- * the operand is known.
+ * Negates a condition the way JavaScript's `!` does, where the operand may be neither true nor false.
+ * `NOT NULL` is NULL and would drop the row, so `IS NOT TRUE` is the total spelling.
  */
 const NotStage = Lift((value) => ({
   sql: `(${Predicate(value).sql} IS NOT TRUE)`,
@@ -104,15 +92,8 @@ function Comparison(
 const Identical: Equality = (value, other) => Comparison(value, other, EQUAL);
 
 /**
- * Operands for an inequality, which is the one comparison that has to answer for a value it cannot
- * read.
- *
- * {@link UnifyOperands} pulls a bottom-typed side toward the concrete one, and the projection that
- * does it is guarded: a stored value of some other type reads as NULL, and the inequality then
- * answers null rather than *unequal*. Where exactly one side is bottom-typed the comparison
- * therefore happens in jsonb instead, which compares the two values as they are stored and has no
- * type for the guard to reject. Both sides already agreeing — two bottom types or two concrete ones
- * — leaves nothing to guard, so those keep the unified reading.
+ * Operands for an inequality, the one comparison that must answer for a value it cannot read.
+ * Exactly one bottom-typed side compares in jsonb, where no type guard can reject the other.
  */
 function Distinguishable(value: Compiled, other: Compiled): CompiledPair {
   if (IsOpaque(value.type) === IsOpaque(other.type)) {
@@ -123,13 +104,7 @@ function Distinguishable(value: Compiled, other: Compiled): CompiledPair {
 
 /**
  * Compares two values for inequality, keeping a row whose operand is null or absent.
- *
- * `<>` is NULL whenever either side is, so a row with no such key is dropped from the `WHERE` that
- * reads it — while the contract, and both sibling backends, count a value that is not there as
- * unequal to one that is. `IS DISTINCT FROM` is the total spelling.
- *
- * The only cost is btree reachability, and it is theoretical: `ne` on an indexed column selects
- * most of the table, so no planner reaches for an index to answer it.
+ * `<>` is NULL whenever either side is, so `IS DISTINCT FROM` is the total spelling.
  */
 const Distinct: Equality = (value, other) => {
   const pair = Distinguishable(value, other);

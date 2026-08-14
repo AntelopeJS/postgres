@@ -228,7 +228,7 @@ const BitRshiftStage = BinaryStage((left, right, stage) => {
  * **`div` and `mod` read a zero divisor as absent**, through `NULLIF`, so the row answers NULL. A
  * bare `/` and a bare `mod()` both raise `22012 division by zero`, which loses the whole statement
  * and every other row with it — the same failure the int32 chain guards `22003` against one
- * paragraph above, and the reason invariant 14's rule is *guard against failure*. It is not an
+ * paragraph above, and the reason the rule is *guard against failure*. It is not an
  * attempt to reproduce JavaScript, where `1/0` is `Infinity` and `1%0` is `NaN`: neither is
  * representable in `double precision` here, and NULL is what every other unreadable operand in
  * this compiler already answers. The guard is on the divisor alone, so it cannot cost an index —

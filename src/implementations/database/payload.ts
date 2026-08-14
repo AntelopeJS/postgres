@@ -11,9 +11,9 @@ import { NULL_VALUE } from "./writes-shared";
 /**
  * One column a payload writes, named by its column rather than by its field.
  *
- * The two differ whenever `PgIdentifier` truncated the field name (invariant 8), and a member is
+ * The two differ whenever `PgIdentifier` truncated the field name, and a member is
  * not always a declared field: `_id` is a member too when the stage is keyed by it, and `_id` is
- * never in `TableShape.fields` (invariant 3).
+ * never in `TableShape.fields`.
  */
 export interface PayloadMember {
   column: string;
@@ -47,7 +47,7 @@ export interface PayloadSplit {
  * The projection the writes that fill a **fixed** column list need — `replace` names every declared
  * column and `insert` names the batch's union — where the split itself is ordered by what the
  * caller wrote. Shared so the two spell the key the same way: a member is keyed by `column` and
- * never by the field name it was declared under (invariant 8).
+ * never by the field name it was declared under.
  */
 export function MembersByColumn(split: PayloadSplit): Map<string, Compiled> {
   return new Map(split.members.map((member) => [member.column, member.value]));
@@ -112,10 +112,7 @@ function Decoded(walk: PayloadWalk, value: unknown): Compiled {
 
 /**
  * Records an undeclared key on the object the overflow document is built from.
- *
- * A plain assignment lets the key choose what it does: a payload carrying an own `__proto__`
- * member — which `JSON.parse` produces and no object literal can — would replace the
- * accumulator's prototype and be dropped from the write with nothing failing (invariant 2).
+ * Defined rather than assigned, so an own `__proto__` member is stored instead of being dropped.
  */
 function Collect(walk: PayloadWalk, name: string, value: unknown): void {
   Object.defineProperty(walk.added, name, {
@@ -129,7 +126,7 @@ function Collect(walk: PayloadWalk, name: string, value: unknown): void {
 /**
  * Whether a payload supplied no `_id`, which `null` means exactly as `undefined` does.
  *
- * The rule has one owner because both stages have to read a key the same way (invariant 17): one
+ * The rule has one owner because both stages have to read a key the same way: one
  * that generated a key on the way in but asserted a null on the way back would answer 0 for the
  * document it had just written.
  */
@@ -144,18 +141,7 @@ function KeySubject(name: string): string {
 
 /**
  * Routes the one reserved column a payload may name, and refuses the two it may not.
- *
- * The key is read *as* `TEXT` through {@link WrittenAs} rather than cast to it, which is the same
- * reading `get` gives the key it selects on (invariant 13): the two have to agree, or a key that
- * addressed a row on the way in fails to address it on the way back.
- *
- * A `_id` named with no value asserts nothing and keys nothing, exactly as every other key named
- * that way writes nothing — there is no identity to remove and none to state. "No value" is
- * `null` as well as `undefined`, which is the one place the two converge: `_id` is `NOT NULL`, so
- * an asserted null matches no row on any dataset and could never be a claim a caller meant, while
- * a key that is null is not a key. Honouring it would answer 0 for a payload mistake, which is
- * indistinguishable from "no such row". The value is read off the raw payload before anything is
- * decoded, so a dropped key burns no `$n` (invariant 16).
+ * The key is read as `TEXT` the way `get` reads it, and no value at all asserts nothing.
  */
 function TakeReserved(walk: PayloadWalk, name: string, value: unknown): void {
   if (name !== ID_COLUMN) {
@@ -172,23 +158,7 @@ function TakeReserved(walk: PayloadWalk, name: string, value: unknown): void {
 
 /**
  * Writes one declared field into its own typed column, read as that column's type.
- *
- * **A null is SQL NULL in the column and never a stored json null**, which the three scalar columns
- * already were — the projection out of `'null'::jsonb` is SQL NULL — and only a jsonb-backed column
- * was not, since both sides being jsonb makes the reading an identity that stores the literal. That
- * one column then answered the same stored value three ways inside one document: `DecodeRow` drops
- * it, because node-postgres decodes `'null'::jsonb` into the same JS `null` an absent column decodes
- * to and nothing downstream can tell them apart; `pluck` returns the key holding null; and
- * `hasfields` reads the materialized document, where `?&` counts a null member as a key and answers
- * **true** for a key the returned document does not have. In a typed column SQL NULL is how absence
- * is spelled, so this is what makes the three agree. An *undeclared* key keeps its stored null,
- * which is the one place the two halves of a document still differ and the only one where the
- * difference is representable at all.
- *
- * It stays a *member* rather than joining `cleared`, which would also reach SQL NULL: a cleared
- * column is absent from the batch's column union, so under `conflict: "update"` it would preserve
- * the stored value the caller asked to null. The null is read off the raw payload for the reason
- * `undefined` is — it burns no `$n` (invariant 16).
+ * A null is SQL NULL and never a stored json null, so the read, `pluck` and `hasfields` agree.
  */
 function TakeDeclared(
   walk: PayloadWalk,
@@ -251,7 +221,7 @@ function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
  *
  * Nothing is decoded that the returned split does not carry: every `DecodeValue` appends to the
  * shared parameter collector, so a value compiled and then dropped binds a `$n` the statement
- * never names (invariant 16).
+ * never names.
  */
 export function SplitPayload(
   document: Record<string, unknown>,

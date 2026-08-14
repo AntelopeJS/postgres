@@ -16,13 +16,7 @@ import { DecodeFunction, DecodeValue } from "./value";
 
 /**
  * Every projection stage is blocked by a pending projection and by nothing else.
- *
- * A projection reads its input through the relation's source, which for a shaped member is a
- * guarded expression emitting its operand twice, so inlining one projection into the next would
- * square the text at every step. Wrapping keeps each projection emitted exactly once, in its own
- * subselect level, where the next one reads a plain column. Nothing else blocks these stages:
- * they reshape what a row yields without selecting which rows there are, so a limit, an offset,
- * an ordering or an aggregate ahead of them stays valid and absorbs no further.
+ * Inlining one into the next would square the text; these reshape rows without selecting them.
  */
 const PROJECTION_BLOCKERS: readonly RelationFlag[] = ["projection"];
 
@@ -48,9 +42,7 @@ const DefaultStage: PipelineStage = (relation, stage, context) => {
 
 /**
  * Applies the mapper to each row, binding the relation's own source as its parameter.
- *
- * Binding the source rather than a materialized document is what lets `map((doc) =>
- * doc.key("name"))` compile to the bare column while the relation is still row-shaped.
+ * Binding the source rather than a document is what keeps `map(d => d.key("name"))` a bare column.
  */
 const MapStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, PROJECTION_BLOCKERS, context);
@@ -61,12 +53,8 @@ const MapStage: PipelineStage = (relation, stage, context) => {
 };
 
 /**
- * Builds a document from the named fields alone.
- *
- * It goes through the shared document builder rather than a second `jsonb_build_object` loop
- * precisely so a plucked jsonb-backed field keeps the nulls the caller stored inside it:
- * `jsonb_strip_nulls` recurses, so a member it covers loses them silently. `_id` is a field like
- * any other here — present only if it was asked for, which is what both sibling backends do.
+ * Builds a document from the named fields alone, through the shared document builder.
+ * `_id` is a field like any other here, present only if it was asked for.
  */
 const PluckStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, PROJECTION_BLOCKERS, context);
@@ -89,17 +77,7 @@ function RemainingType(type: SqlType, removed: readonly string[]): SqlType {
 
 /**
  * Removes the named keys from whatever the relation currently yields.
- *
- * The container test guards against *failure*, not against a merely surprising answer. Over a
- * jsonb array `-` deletes every element equal to one of the named strings — `'["a","b"]'` minus
- * `array['a']` is `["b"]` — which is not what removing a key means, but it cannot raise, so
- * invariant 14 leaves it to pass rather than paying a `CASE` for it. Over a jsonb scalar, a json
- * null included, it raises `22023 cannot delete from scalar` and loses the whole statement, and
- * that is the one reading the test excludes.
- *
- * The guard reads the value it protects, so it goes through {@link HeldOnce}: a row-mode `without`
- * subtracts from the whole materialized document, and spelling that document a second time inside
- * a `CASE` is the duplication this pipeline's wrap rule exists to avoid.
+ * A scalar would raise, so the guard excludes it and answers NULL; it reads its operand once.
  */
 function Remaining(
   value: Compiled,

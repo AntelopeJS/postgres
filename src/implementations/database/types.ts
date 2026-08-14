@@ -75,7 +75,7 @@ export function IsJsonBacked(type: SqlType): type is ArrayType | JsonType {
 /**
  * Whether a declared type holds a *list* of values rather than one.
  *
- * The one test three stages ask (invariant 17): `getAll` and `lookup` both compare a scalar key
+ * The one test three stages ask: `getAll` and `lookup` both compare a scalar key
  * against a column that may hold a list, where `=` is false on every row of every dataset and `@>`
  * is the comparison a `multi` GIN index serves, and `between` refuses such a column outright. A
  * second spelling would be free to stop agreeing with the DDL that chose the index method.
@@ -92,7 +92,7 @@ export function ShapeOf(type: SqlType): SqlShape | undefined {
 /**
  * What concatenating two json documents leaves declared, with the right side winning a shared key.
  *
- * The one owner of that answer (invariant 17), for `obj_merge` and for the key a `lookup` replaces
+ * The one owner of that answer, for `obj_merge` and for the key a `lookup` replaces
  * — which is the same question asked of a one-member right side. Either side whose members are
  * unknown makes the whole result unknown, because `||` may then contribute a key nothing declared
  * and a shape that keeps only the left's members would claim otherwise. Only the *type* half is

@@ -34,9 +34,9 @@ gets one owner, and every other site references it instead of restating it. A nu
 four places is four places to update and three chances to be wrong, which is the same failure DRY
 exists to prevent in code.
 
-- A **private** function gets at most one line of TSDoc.
+- A **private** function gets at most two lines of TSDoc.
 - Anything longer goes on the module's **exported map or type**, which is where a reader looking for
-  the family's reasoning arrives, or into the implementation log.
+  the family's reasoning arrives.
 - An **exported** function documents its own contract, since its callers cannot see the module essay.
 
 ### Flow Management

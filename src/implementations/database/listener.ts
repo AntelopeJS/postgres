@@ -95,7 +95,7 @@ async function Establish(): Promise<void> {
  * Opens the one `LISTEN` connection this process shares between every feed, once.
  *
  * **Not a pooled client.** It is held for the lifetime of the process, and a pooled client that is
- * never returned makes `pool.end()` hang rather than fail — measured under sub-plan 8. It carries
+ * never returned makes `pool.end()` hang rather than fail, as a held cursor client does. It carries
  * its own `error` handler for the same reason every borrowed client does: an `error` event on an
  * `EventEmitter` with no listener ends the host process, and a dropped connection is exactly the
  * event this one exists to survive.
