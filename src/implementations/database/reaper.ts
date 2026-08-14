@@ -14,12 +14,8 @@ import {
 import { CHANGE_LOG_TABLE, REGISTRY_SCHEMA } from "./utils";
 
 /**
- * The advisory lock every reaping process contends for.
- *
- * An arbitrary constant, and a literal rather than a digest of a name so that a `pg_locks` row is
- * greppable back to this line when someone is looking at a live server. `pg_try_advisory_lock`
- * counts within a session — a second call in one session also succeeds, measured — so a pass takes
- * it once and gives it back once, and a pass that cannot take it does nothing rather than waiting.
+ * The advisory lock every reaping process contends for, a literal so `pg_locks` greps back here.
+ * It counts within a session, so a pass takes it once, gives it back once, and never waits.
  */
 const REAP_LOCK_KEY = "7623941058273641";
 
@@ -41,24 +37,7 @@ const RELEASE_LOCK = `SELECT pg_advisory_unlock(${LOCK_PARAM})`;
 
 /**
  * One pass: delete everything past its retention, and record the highest `seq` that went.
- *
- * The high-water is recorded rather than inferred, and that is the whole of what turns *did I lose
- * anything* from a guess into a read. A log holding only rows above a feed's watermark is the
- * **normal** state of a quiet table, and it is also exactly what a reaped log looks like, so
- * `min(seq)` cannot tell the two apart.
- *
- * **The epoch column is what keeps the high-water comparable to the log beside it.** The log is
- * `UNLOGGED`, so an unclean shutdown empties it and restarts `seq` at 1 while this permanent row
- * keeps a high-water from the previous life of the sequence — measured: a `SIGKILL`ed server came
- * back with an empty log counting from 1 and a stored high-water of 8, which would put every feed
- * opened afterwards permanently below it and reject them all with a gap that never happened. So a
- * pass raises the high-water only within one `pg_postmaster_start_time()`, and starts a new epoch's
- * high-water from what that pass itself deleted. A *clean* restart preserves both the table and the
- * sequence — also measured, and the reason this is an epoch check rather than an emptiness check —
- * but resetting is right there too: the events the old high-water described are ones no surviving
- * feed is still entitled to, since a feed that spans a restart is ended by its own guard.
- *
- * One statement, so a pass that dies between the delete and the record is impossible.
+ * A high-water is only comparable within one sequence epoch, and one statement makes the pass atomic.
  */
 const REAP = `WITH "reaped" AS (
   DELETE FROM ${LOG}
@@ -74,7 +53,10 @@ ON CONFLICT (${SINGLETON_COLUMN}) DO UPDATE SET
     ELSE EXCLUDED.${HIGH_WATER_COLUMN} END,
   ${EPOCH_COLUMN} = EXCLUDED.${EPOCH_COLUMN}`;
 
-const REAP_FAILED = "the PostgreSQL change log could not be reaped";
+const REAP_FAILED =
+  "the PostgreSQL change log could not be reaped and will grow until it can be; every table that was ever watched logs a row per write, and the log is UNLOGGED so only a restart empties it";
+
+const REAP_RECOVERED = "the PostgreSQL change log is being reaped again";
 
 interface PresentRow {
   present: boolean;
@@ -86,6 +68,7 @@ interface LockRow {
 
 let timer: NodeJS.Timeout | undefined;
 let isReaping = false;
+let isFailing = false;
 
 /**
  * Deletes everything past its retention, under the advisory lock, giving the lock back on every
@@ -99,40 +82,64 @@ let isReaping = false;
  * A missing log is not a failure — a process that has registered no schema has never run the
  * bootstrap, so there is nothing to reap and nothing to report. Checking costs one round trip on a
  * timer measured in minutes.
+ *
+ * Answers whether the delete actually ran, which the two early returns make a different question
+ * from "did this throw": another process holding the lock is the ordinary case on every deployment
+ * of more than one, and reading it as a reap would let it stand in for one that failed.
  */
 export async function ReapOnce(
   client: ClientBase,
   retentionMs: number,
-): Promise<void> {
+): Promise<boolean> {
   const present = await client.query<PresentRow>(PRESENT, [LOG_REGCLASS]);
   if (!present.rows[0]?.present) {
-    return;
+    return false;
   }
   const lock = await client.query<LockRow>(TAKE_LOCK, [REAP_LOCK_KEY]);
   if (!lock.rows[0]?.took) {
-    return;
+    return false;
   }
   try {
     await client.query(REAP, [retentionMs]);
   } finally {
     await client.query(RELEASE_LOCK, [REAP_LOCK_KEY]);
   }
+  return true;
 }
 
-async function Borrowed(retentionMs: number): Promise<void> {
+async function Borrowed(retentionMs: number): Promise<boolean> {
   const client = await AcquireClient();
   try {
-    await ReapOnce(client, retentionMs);
+    return await ReapOnce(client, retentionMs);
   } finally {
     client.release();
   }
 }
 
 /**
- * One tick: never two at once, and never loud — a failed pass is a warning and another tick.
- *
- * The retention is read here, synchronously, rather than inside the pass, so a spec can drive one
- * through a temporary configuration without the set outliving the call (invariant 7).
+ * Reports the *start* of a run of failures and nothing after it, since a reaper that cannot reap
+ * fails every tick. A pass that cannot run leaves the log growing, so it is an error, not a warning.
+ */
+function ReportFailure(err: unknown): void {
+  if (isFailing) {
+    return;
+  }
+  isFailing = true;
+  Logger.Error(REAP_FAILED, err);
+}
+
+/** Reports the end of such a run, and only a delete that actually ran ends one. */
+function ReportReaped(): void {
+  if (!isFailing) {
+    return;
+  }
+  isFailing = false;
+  Logger.Info(REAP_RECOVERED);
+}
+
+/**
+ * One tick: never two at once, and never loud — a failing pass is reported once and tried again.
+ * The retention is read here synchronously rather than inside the pass.
  */
 async function Tick(): Promise<void> {
   if (isReaping) {
@@ -140,9 +147,11 @@ async function Tick(): Promise<void> {
   }
   isReaping = true;
   try {
-    await Borrowed(GetOptions().changeRetentionMs);
+    if (await Borrowed(GetOptions().changeRetentionMs)) {
+      ReportReaped();
+    }
   } catch (err) {
-    Logger.Warn(REAP_FAILED, err);
+    ReportFailure(err);
   } finally {
     isReaping = false;
   }
@@ -165,9 +174,18 @@ export function ReapInterval(retentionMs: number): number {
  *
  * The timer is `unref`'d for the same reason the cursor reaper's is — a timer that keeps the event
  * loop alive turns a clean exit into a hang, and the conformance runner exits on its own.
+ *
+ * **Both flags reset here, and the re-entrancy one is the load-bearing half.** `pool.end()` abandons
+ * an acquisition still queued behind a busy pool rather than rejecting it, so a tick caught inside
+ * `AcquireClient` at disconnect never settles and its `finally` never runs. Left set, `isReaping`
+ * would turn every later tick into an immediate return — a process that reaps nothing again, for
+ * the rest of its life, reporting nothing. Whatever that tick was doing belongs to a pool that no
+ * longer exists.
  */
 export function StartReaper(): void {
   StopReaper();
+  isFailing = false;
+  isReaping = false;
   const started = setInterval(() => {
     void Tick();
   }, ReapInterval(GetOptions().changeRetentionMs));

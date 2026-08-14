@@ -32,10 +32,7 @@ const ABORTED_TRANSACTION = new Error(
 
 /**
  * Everything `__antelope` holds, applied as one transaction the first time a pool needs any of it.
- *
- * The instance registry and the change log share this one memoized bootstrap rather than each
- * carrying its own: a second memoized path would run a second transaction for objects in the same
- * schema, and every schema registration in the process goes through this one.
+ * The registry and the change log share one memoized bootstrap rather than each carrying its own.
  */
 const BOOTSTRAP_STATEMENTS: readonly string[] = [
   ...REGISTRY_STATEMENTS,
@@ -44,6 +41,8 @@ const BOOTSTRAP_STATEMENTS: readonly string[] = [
 
 /** Joins a schema and a table into one memo key, taking a character neither caller-supplied half can hold. */
 const MEMO_SEPARATOR = "\u0000";
+
+const NOTHING_TO_CONVERGE = 0;
 
 const warned = new Set<string>();
 let registryReady: Promise<void> | undefined;
@@ -58,23 +57,8 @@ function IsDuplicateObject(err: unknown): boolean {
 }
 
 /**
- * Runs a convergence again when the catalog beat it to an object it creates.
- *
- * There is deliberately no backoff. A duplicate-object failure means another
- * process won the race, so the loser's next attempt re-introspects, sees the
- * winner's object and plans a no-op — waiting first would only delay a
- * convergence that is already guaranteed rather than avoid a second collision.
- *
- * `23505` is in the set because two concurrent `CREATE … IF NOT EXISTS` surface
- * as a unique-key violation on a *catalog* index rather than as `42P06`/`42P07`.
- * That is a data-level code, so the retried region admits DML only where a
- * replay cannot swallow a genuine violation: a duplicate-row failure from an
- * `INSERT` must reach the caller rather than be retried into silence. The one
- * statement admitted under that rule is `ddl.ts`'s backfill, which runs in the
- * same transaction as the `ADD COLUMN` it fills and therefore replays against
- * the same rows every time — so a real violation fails every attempt and is
- * raised by the last, while an unconditional `INSERT` might succeed on a later
- * one and hide the first failure.
+ * Runs a convergence again when the catalog beat it to an object it creates, with no backoff.
+ * `23505` is in the set, so the region admits DML only where a replay cannot swallow a violation.
  */
 async function RetryOnDuplicateObject<T>(work: () => Promise<T>): Promise<T> {
   for (let remaining = CONVERGENCE_RETRIES; remaining > 0; remaining--) {
@@ -130,13 +114,7 @@ async function Rollback(client: PoolClient): Promise<boolean> {
 
 /**
  * Runs the statements as one transaction on one client, held for its duration.
- *
- * Nothing between the acquire and the release may touch the pool: every schema
- * of a process converges concurrently against a pool that is typically smaller
- * than their number, so a wait nested inside a held client deadlocks all of
- * them. A client whose `ROLLBACK` did not land is destroyed rather than
- * recycled, since the pool would otherwise hand the next borrower a session
- * still inside an aborted transaction.
+ * Nothing in between may touch the pool, and a client whose `ROLLBACK` missed is destroyed.
  */
 async function Apply(
   schemaName: string,
@@ -234,13 +212,18 @@ function WarnOnce(warnings: readonly string[]): void {
   }
 }
 
+/** What a plan holds before any table is read: the baseline a convergence is measured against. */
+function SeedStatements(schemaName: string): string[] {
+  return [CreateSchemaSql(schemaName)];
+}
+
 async function PlanSchema(
   schemaName: string,
   plans: readonly TablePlan[],
   mode: MigrationMode,
 ): Promise<ConvergencePlan> {
   const merged: ConvergencePlan = {
-    statements: [CreateSchemaSql(schemaName)],
+    statements: SeedStatements(schemaName),
     warnings: [],
   };
   for (const plan of plans) {
@@ -252,12 +235,26 @@ async function PlanSchema(
   return merged;
 }
 
+/**
+ * Announces a convergence that changed something, counting only the DDL beyond the plan's own seed.
+ * The seed is measured rather than assumed, so a second baseline statement cannot make every
+ * steady-state registration announce itself.
+ */
+function ReportConvergence(schemaName: string, changed: number): void {
+  if (changed <= NOTHING_TO_CONVERGE) {
+    return;
+  }
+  Logger.Info(`converged schema '${schemaName}' in ${changed} statements`);
+}
+
 async function Converge(
   schemaName: string,
   plans: readonly TablePlan[],
 ): Promise<void> {
+  const baseline = SeedStatements(schemaName).length;
   const merged = await PlanSchema(schemaName, plans, GetOptions().migrations);
   await Apply(schemaName, merged.statements);
+  ReportConvergence(schemaName, merged.statements.length - baseline);
   WarnOnce(merged.warnings);
 }
 

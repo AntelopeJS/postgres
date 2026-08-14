@@ -21,7 +21,25 @@ const HELD_CLIENT_FAILED =
 const IDLE_CLIENT_FAILED =
   "the connection under an idle pooled PostgreSQL client failed";
 
+const CONNECTED = "connected to PostgreSQL";
+
+const DISCONNECTED = "disconnected from PostgreSQL";
+
+const SLOW_ACQUIRE_MS = 10_000;
+
+/**
+ * Says what a caller that is merely blocked cannot say for itself, since the wait has no deadline.
+ *
+ * It names the symptom and stops there. `pg-pool` queues only once the pool is full and otherwise
+ * opens a new connection, so this same wait covers both a pool held by cursors still being iterated
+ * and a server that is simply not answering — and nothing here can tell those apart. Naming one
+ * would send an operator after the wrong thing, and this is the only line the adapter emits for
+ * either.
+ */
+const SLOW_ACQUIRE = `no PostgreSQL client has become available in ${SLOW_ACQUIRE_MS} ms: either every pooled connection is checked out — a cursor holds one for as long as it is iterated — or a new connection is not being answered. Raise pool.max, or set pool.connectionTimeoutMillis to fail rather than wait`;
+
 let pool: Pool | undefined;
+let isWaiting = false;
 
 export type BeforeDisconnect = () => unknown;
 
@@ -61,7 +79,7 @@ function ReportIdleClientError(err: unknown) {
  * because the pool outlives every client it lends and is discarded whole by {@link Disconnect}.
  *
  * Exported so a spec can drive it with a bare `EventEmitter`, exactly as the held-client guard is
- * driven — `Connect` builds a real pool and cannot be reached without a server (invariant 21).
+ * driven — `Connect` builds a real pool and cannot be reached without a server.
  */
 export function GuardPool(created: Pool): Pool {
   created.on(CLIENT_ERROR, ReportIdleClientError);
@@ -110,6 +128,7 @@ export async function Connect(options?: Options) {
     throw err;
   }
   pool = created;
+  Logger.Info(CONNECTED);
 }
 
 /**
@@ -142,7 +161,7 @@ export function RegisterBeforeDisconnect(callback: BeforeDisconnect) {
  *
  * `Disconnect` is its only production caller. It is a seam because a spec cannot drive
  * `Disconnect` itself: that replaces the `pool` singleton a live adapter in the same process is
- * still querying through (invariant 7), while this takes the teardown as an argument and touches
+ * still querying through, while this takes the teardown as an argument and touches
  * no module state.
  */
 export async function SettleBeforeDisconnect(endPool: PoolTeardown) {
@@ -156,6 +175,7 @@ async function EndPool() {
   ClearOptions();
   if (current) {
     await current.end();
+    Logger.Info(DISCONNECTED);
   }
 }
 
@@ -184,6 +204,15 @@ export function Query<T extends QueryResultRow = QueryResultRow>(
 
 function ReportHeldClientError(err: unknown) {
   Logger.Warn(HELD_CLIENT_FAILED, err);
+}
+
+/** Warns once per episode of waiting, however many callers are queued behind the same one. */
+function WarnSlowAcquire() {
+  if (isWaiting) {
+    return;
+  }
+  isWaiting = true;
+  Logger.Warn(SLOW_ACQUIRE);
 }
 
 /**
@@ -233,9 +262,30 @@ export function GuardHeldClient(client: PoolClient): PoolClient {
  *
  * Every borrowed client is handed back guarded — see `GuardHeldClient`, which owns why a client
  * held outside a query has to carry an `error` listener of its own.
+ *
+ * A cursor holds its client for as long as it is iterated, so `pool.max` concurrent iterations
+ * leave the next acquisition waiting — with `pg`'s own `connectionTimeoutMillis` of 0, waiting
+ * without a deadline. That wait is legitimate and usually ends when a cursor finishes or is
+ * reclaimed, so it is not shortened here; but a caller blocked inside it can say nothing about
+ * why, which is what {@link SLOW_ACQUIRE} is for. The timer is `unref`'d so it cannot hold the
+ * event loop open, and cleared however the acquisition settles.
+ *
+ * **One line per episode, not per caller.** A saturated pool blocks every acquisition behind it, so
+ * a per-call warning answers a single stuck cursor with one line per waiting reader and another for
+ * every read that arrives while it lasts. The flag latches on the first warning and clears on the
+ * next acquisition to settle, which is the same edge the reaper reports its failures on.
  */
 export function AcquireClient(): Promise<PoolClient> {
-  return GetPool().connect().then(GuardHeldClient);
+  const current = GetPool();
+  const slow = setTimeout(WarnSlowAcquire, SLOW_ACQUIRE_MS);
+  slow.unref();
+  return current
+    .connect()
+    .then(GuardHeldClient)
+    .finally(() => {
+      clearTimeout(slow);
+      isWaiting = false;
+    });
 }
 
 export function GetSchemaPrefix() {
