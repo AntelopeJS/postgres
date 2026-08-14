@@ -17,6 +17,23 @@ The refused stages are `orderBy`, `slice`, `nth`, `count`, `sum`, `avg`, `min`, 
 `group`, `union` and `join`. Each is legal on the query one level out, which is why the message
 names the position as well as the stage.
 
+The four writes — `insert`, `update`, `replace` and `delete` — are refused before `changes()` too,
+and share that message. Its reasoning is written for the stages above: a write is refused because it
+writes and a feed reads, not for want of a total order.
+
+## Iterating a cursor
+
+| What you did | Message |
+| --- | --- |
+| Read a cursor that had been idle past `cursorIdleTimeoutMs` | `cursor {reqId} was reclaimed after {ms} ms idle (cursorIdleTimeoutMs) and cannot be resumed; re-run the query` |
+| Read a cursor whose ending is no longer remembered | `cursor {reqId} has already ended and how it ended is no longer remembered, more than 1024 cursors having ended since; re-run the query` |
+
+A cursor holds a pooled connection for as long as it is open, so one that stops being read is
+reclaimed rather than left holding it. Both of these **raise** where an exhausted or explicitly
+closed cursor simply reports that it is done: answering `done` for a reclaimed cursor would
+silently truncate your results, and re-opening it would silently serve rows you had already seen.
+Raising leaves the whole query there to be run again.
+
 ## Declaring a schema
 
 | What you did | Message |
@@ -59,6 +76,7 @@ overwrite an array with a single miss.
 | `insert` or `replace` under `CROSS_INSTANCE` | `The '{stage}' stage cannot write under CROSS_INSTANCE: name the instance the rows belong to, or omit the instance id for the default one` |
 | A write nested inside another query | `The '{stage}' stage writes, so it cannot be nested inside another query` |
 | A write read through a cursor | `The '{stage}' stage writes, so it cannot be read through a cursor` |
+| An inserted document whose `_id` is not a string | `An inserted document's '_id' must be a string, received {type}` |
 
 `replace({})` is *not* refused: it names every column it did not name, so it is a well-formed
 statement that empties the row. `update({})` writes nothing at all.
@@ -82,3 +100,9 @@ A group's callback accepts `map`, `distinct`, `count`, `sum`, `avg`, `min` and `
 | Passed `CROSS_INSTANCE` to `createInstance` / `destroyInstance` | `{operation} does not accept CROSS_INSTANCE: pass a string id or omit it for the default instance` |
 | Passed a non-string instance id | `{operation} expects a string instance id, received {type}` |
 | A `cursorBatchSize`, `cursorIdleTimeoutMs`, `changeRetentionMs`, `changeBatchSize` or `changePollIntervalMs` that is not a positive safe integer | `{option} must be a positive safe integer, received {value}` |
+| Queried with no configuration set | `PostgreSQL adapter is not configured: construct() has not run yet` |
+| Queried with no pool open | `PostgreSQL adapter is not connected: construct() has not run yet` |
+
+Both suffixes name the common cause rather than the only one. `construct()` clears the
+configuration and leaves no pool when it fails to reach the server, so these are also what a query
+answers after a *failed* startup, and what one answers after `destroy()`.

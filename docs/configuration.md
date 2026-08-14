@@ -13,19 +13,24 @@ Every option `construct` accepts, and what each one does.
     changeRetentionMs: 300000,          // How long a change event stays readable — a contract
     changeBatchSize: 256,               // Change events read per round trip
     changePollIntervalMs: 5000,         // Fallback poll; NOTIFY is the primary wakeup
-    pool: {                             // Optional pg.Pool options, merged over the URL
-        max: 10,
-        connectionTimeoutMillis: 30000,
-        idleTimeoutMillis: 30000
-    }
+    pool: {}                            // Optional pg.Pool options, merged over the URL
 }
 ```
+
+Every value above is the module's own default. `pool` is the exception: it defaults to `{}` and
+whatever you leave out of it keeps **`pg`'s** default rather than one of ours — `max: 10`,
+`idleTimeoutMillis: 10000`, and, worth knowing, `connectionTimeoutMillis: 0`, which waits forever.
 
 ## Details
 
 The module uses the `pg` driver and delegates pooling to `pg.Pool`:
 
 - `url` is passed as `connectionString`; anything in `pool` is merged over it
+- **A cursor holds a pooled connection for as long as it is open**, so `pool.max` is also the number
+  of cursors that can be iterated at once. Past that, a read waits for one to finish or to be
+  reclaimed — and with `pg`'s own `connectionTimeoutMillis: 0` it waits without a deadline. Set
+  `pool.max` above your expected concurrent iterations, and set `connectionTimeoutMillis` if you
+  would rather a read fail than block
 - The pool is opened and verified during `construct`, so a bad configuration fails at startup
   rather than on the first query
 - Every pooled connection is pinned to `TimeZone = 'UTC'` and `DateStyle = 'ISO, MDY'`, so that a

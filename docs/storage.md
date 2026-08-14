@@ -100,7 +100,13 @@ the first read. Dropping an index loses no data, which is why the index rows nee
 
 **A newly added column is backfilled out of `_extra` in the same transaction.** Adding a field to a
 schema that already has rows moves the existing values from the overflow document into the new
-column, so a row does not go on displaying a value that `filter` can no longer find.
+column, so a row does not go on displaying a value that `filter` can no longer find. The move is
+lossless: a stored value the new column cannot hold — the wrong JSON type for the declared one —
+stays in `_extra`, where it can still be read, rather than being dropped or coerced.
 
 Each schema converges in one transaction, and adapter-owned indexes are recognised by a signature
 stored as the index comment rather than by parsing the index definition back.
+
+**Several processes may converge the same schema at once.** Whichever loses the race to create an
+object sees the catalog's duplicate-object error, re-reads what is now there, and plans the no-op
+that is left; there is no lock to take and no ordering to arrange between deployments.
