@@ -71,7 +71,11 @@ describe("ColumnRowSource", () => {
     expect(out.sql).to.contain("jsonb_strip_nulls(jsonb_build_object(");
     expect(out.sql).to.contain(`'_id', "t"."_id"`);
     expect(out.sql).to.contain(`|| COALESCE("t"."_extra", '{}'::jsonb)`);
-    expect(out.sql).to.not.contain("_instance");
+  });
+
+  it("carries the instance a row came from, the default one as no key at all", () => {
+    const out = new ColumnRowSource(AliasedColumns("t"), vehicles).toJson();
+    expect(out.sql).to.contain(`'_instance', NULLIF("t"."_instance", '')`);
   });
 
   it("tolerates a NULL _extra rather than nulling the whole document", () => {
@@ -83,7 +87,7 @@ describe("ColumnRowSource", () => {
   it("keeps declared jsonb columns out of jsonb_strip_nulls", () => {
     const out = new ColumnRowSource(AliasedColumns("t"), catalog).toJson();
     expect(out.sql).to.contain(
-      `jsonb_strip_nulls(jsonb_build_object('_id', "t"."_id", 'car', "t"."car"))`,
+      `jsonb_strip_nulls(jsonb_build_object('_id', "t"."_id", '_instance', NULLIF("t"."_instance", ''), 'car', "t"."car"))`,
     );
     expect(out.sql).to.contain(
       `(CASE WHEN "t"."metadata" IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('metadata', "t"."metadata") END)`,
@@ -93,11 +97,12 @@ describe("ColumnRowSource", () => {
     );
   });
 
-  it("exposes a shape including the primary key", () => {
+  it("exposes a shape including the primary key and the instance", () => {
     expect(
       new ColumnRowSource(AliasedColumns("t"), vehicles).shape(),
     ).to.deep.equal({
       _id: TEXT,
+      _instance: TEXT,
       car: TEXT,
       price: FLOAT,
       manufactured: TIMESTAMP,

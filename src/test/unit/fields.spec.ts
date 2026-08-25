@@ -1,6 +1,7 @@
 import type { FieldType } from "@antelopejs/interface-database/schema";
 import { expect } from "chai";
 import {
+  DocumentKeys,
   ParseFieldType,
   ParseTable,
 } from "../../implementations/database/fields";
@@ -86,10 +87,33 @@ describe("ParseFieldType", () => {
 });
 
 describe("ParseTable", () => {
-  it("rejects reserved column names", () => {
+  it("rejects the reserved columns a schema may not declare", () => {
     expect(() =>
-      ParseTable({ fields: { _id: "string" }, indexes: {} }, "shop.orders"),
-    ).to.throw(/_id/);
+      ParseTable(
+        { fields: { _instance: "string" }, indexes: {} },
+        "shop.orders",
+      ),
+    ).to.throw(/_instance/);
+    expect(() =>
+      ParseTable({ fields: { _extra: "string" }, indexes: {} }, "shop.orders"),
+    ).to.throw(/_extra/);
+  });
+
+  it("accepts a declared key column, which restates it rather than adding one", () => {
+    const shape = ParseTable(
+      { fields: { _id: "string", price: "number" }, indexes: {} },
+      "shop.orders",
+    );
+    expect(Object.keys(shape.fields)).to.deep.equal(["price"]);
+    expect(DocumentKeys(shape)).to.deep.equal(["_id", "_instance", "price"]);
+  });
+
+  it("refuses a declared key column the key could not be", () => {
+    expect(() =>
+      ParseTable({ fields: { _id: "number" }, indexes: {} }, "shop.orders"),
+    ).to.throw(
+      "Field '_id' on 'shop.orders' restates the adapter's key column and must be declared 'string'",
+    );
   });
 
   it("fits an oversized field name into a column name", () => {

@@ -12,7 +12,7 @@ import { BuildDocument, type DocumentMember } from "./row-source";
 import { type Compiled, QuoteLiteral } from "./sql";
 import { FIRST_OPERAND, FieldNames, FieldOf, RequireOperand } from "./stage";
 import { JsonOf, OPAQUE, ShapeOf, type SqlType } from "./types";
-import { DecodeFunction, DecodeValue } from "./value";
+import { DecodeFunction, DecodeValue, NULL_JSON } from "./value";
 
 /**
  * Every projection stage is blocked by a pending projection and by nothing else.
@@ -32,11 +32,7 @@ const KeyStage: PipelineStage = (relation, stage, context) => {
 
 const DefaultStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, PROJECTION_BLOCKERS, context);
-  const def = RequireOperand(
-    DecodeValue(stage.args[FIRST_OPERAND], context),
-    stage,
-    FIRST_OPERAND,
-  );
+  const def = DecodeValue(stage.args[FIRST_OPERAND], context) ?? NULL_JSON;
   return SetProjection(prepared, WithDefault(CurrentValue(prepared), def));
 };
 

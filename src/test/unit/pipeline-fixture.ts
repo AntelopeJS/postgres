@@ -164,6 +164,7 @@ const PROFILES: TableShape = {
 export function PeopleDocument(alias: string): string {
   return (
     `(jsonb_strip_nulls(jsonb_build_object('_id', "${alias}"."_id",` +
+    ` '_instance', NULLIF("${alias}"."_instance", ''),` +
     ` 'name', "${alias}"."name", 'age', "${alias}"."age",` +
     ` 'isActive', "${alias}"."isActive", 'joined', "${alias}"."joined"))` +
     ` || (CASE WHEN "${alias}"."meta" IS NULL THEN '{}'::jsonb` +
@@ -200,6 +201,7 @@ export const ROW_COLUMNS = PeopleColumns(ROOT_ALIAS);
 export function ProductDocument(alias: string): string {
   return (
     `(jsonb_strip_nulls(jsonb_build_object('_id', "${alias}"."_id",` +
+    ` '_instance', NULLIF("${alias}"."_instance", ''),` +
     ` 'name', "${alias}"."name", 'price', "${alias}"."price"))` +
     ` || COALESCE("${alias}"."_extra", '{}'::jsonb))`
   );

@@ -52,6 +52,7 @@ const ONE_ROW = "LIMIT ((1)::bigint)";
 function ProfileDocument(alias: string): string {
   return (
     `(jsonb_strip_nulls(jsonb_build_object('_id', "${alias}"."_id",` +
+    ` '_instance', NULLIF("${alias}"."_instance", ''),` +
     ` 'name', "${alias}"."name"))` +
     ` || (CASE WHEN "${alias}"."skills" IS NULL THEN '{}'::jsonb` +
     ` ELSE jsonb_build_object('skills', "${alias}"."skills") END)` +

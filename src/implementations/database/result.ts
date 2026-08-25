@@ -1,6 +1,11 @@
 import type { TableShape } from "./fields";
 import type { ArrayType, JsonType, SqlShape, SqlType } from "./types";
-import { EXTRA_COLUMN, ID_COLUMN } from "./utils";
+import {
+  DEFAULT_INSTANCE_ID,
+  EXTRA_COLUMN,
+  ID_COLUMN,
+  INSTANCE_COLUMN,
+} from "./utils";
 
 type Reviver = (value: unknown, type: SqlType) => unknown;
 
@@ -59,6 +64,14 @@ export function DecodeRow(
   if (id !== null && id !== undefined) {
     document[ID_COLUMN] = id;
   }
+  const instance = row[INSTANCE_COLUMN];
+  if (
+    instance !== null &&
+    instance !== undefined &&
+    instance !== DEFAULT_INSTANCE_ID
+  ) {
+    document[INSTANCE_COLUMN] = instance;
+  }
   for (const [name, spec] of Object.entries(table.fields)) {
     const value = row[spec.column];
     if (value === null || value === undefined) {
@@ -70,5 +83,6 @@ export function DecodeRow(
     ...((row[EXTRA_COLUMN] as Record<string, unknown> | null) ?? {}),
   };
   delete extra[ID_COLUMN];
+  delete extra[INSTANCE_COLUMN];
   return { ...document, ...extra };
 }

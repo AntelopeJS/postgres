@@ -275,6 +275,7 @@ const TIMESTAMP_UNION =
 
 const WIDENED_KEYS = [
   "_id",
+  "_instance",
   "age",
   "isActive",
   "joined",

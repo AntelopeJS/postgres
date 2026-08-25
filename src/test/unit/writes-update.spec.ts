@@ -108,7 +108,7 @@ function MappedExtra(alias: string): string {
   const document = `"${alias}"."doc"`;
   return (
     `COALESCE((CASE WHEN jsonb_typeof(${document}) = 'object' THEN (${document} -` +
-    " array['_id', 'name', 'age', 'isActive', 'joined', 'meta']::text[]) END), '{}'::jsonb)"
+    " array['_id', '_instance', 'name', 'age', 'isActive', 'joined', 'meta']::text[]) END), '{}'::jsonb)"
   );
 }
 
@@ -386,9 +386,9 @@ describe("the update statement's refusals", () => {
     );
   });
 
-  it("refuses the instance column, naming it", () => {
+  it("drops the instance column, leaving a payload with nothing else to write", () => {
     expect(() => Update({ _instance: "x" })).to.throw(
-      "Payload key '_instance' is a column this adapter owns and no payload may write it",
+      "The 'update' stage was given a payload with nothing to write",
     );
   });
 
@@ -474,9 +474,9 @@ describe("the update statement's mapper, whose body is a document", () => {
 
   it("refuses a reserved key the body names, exactly as a document payload does", () => {
     expect(() =>
-      Write(Root().update((doc) => ({ _instance: doc.key("name") }))),
+      Write(Root().update((doc) => ({ _extra: doc.key("name") }))),
     ).to.throw(
-      "Payload key '_instance' is a column this adapter owns and no payload may write it",
+      "Payload key '_extra' is a column this adapter owns and no payload may write it",
     );
   });
 });

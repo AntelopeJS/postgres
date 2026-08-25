@@ -112,6 +112,35 @@ describe("DecodeRow", () => {
     expect(DecodeRow({ car: "X" }, vehicles)).to.deep.equal({ car: "X" });
   });
 
+  it("carries the instance a named-instance row came from", () => {
+    const row = { _id: "a", _instance: "tenant-7", car: "Peugeot" };
+    expect(DecodeRow(row, vehicles)).to.deep.equal({
+      _id: "a",
+      _instance: "tenant-7",
+      car: "Peugeot",
+    });
+  });
+
+  it("carries no instance for the default one, which is stored as the empty string", () => {
+    const row = { _id: "a", _instance: "", car: "Peugeot" };
+    expect(DecodeRow(row, vehicles)).to.deep.equal({
+      _id: "a",
+      car: "Peugeot",
+    });
+  });
+
+  it("does not let a stale _extra._instance shadow the instance column", () => {
+    const row = {
+      _id: "a",
+      _instance: "tenant-7",
+      _extra: { _instance: "stale" },
+    };
+    expect(DecodeRow(row, vehicles)).to.deep.equal({
+      _id: "a",
+      _instance: "tenant-7",
+    });
+  });
+
   it("does not let a stale _extra._id shadow the primary key", () => {
     const row = { _id: "real", _extra: { _id: "stale", productIds: ["p1"] } };
     expect(DecodeRow(row, vehicles)).to.deep.equal({

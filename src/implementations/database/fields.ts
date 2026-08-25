@@ -16,7 +16,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "./types";
-import { ID_COLUMN, RESERVED_COLUMNS } from "./utils";
+import { ID_COLUMN, INSTANCE_COLUMN, UNDECLARABLE_COLUMNS } from "./utils";
 
 export interface IoTsCodec {
   is(value: unknown): boolean;
@@ -54,15 +54,20 @@ export function DeclaredColumns(shape: TableShape): string[] {
 /**
  * The keys a row's document has of its own, in declaration order, which is not the column list.
  *
- * `_id` is prepended because the parser refuses it as a field and it is a document key all the
- * same, and the names are logical rather than physical for the reason
- * {@link DeclaredColumns} is the opposite. The one owner of that expansion: the
- * document a row materializes into and the keys a write subtracts from an overflow document have
- * to be the same set, or a key is both stored in its column and left behind in `_extra`, where
- * the stale copy is the one every later read answers with.
+ * `_id` and `_instance` are prepended because neither is in `shape.fields` — the parser drops a
+ * declaration of the first and refuses the second — and both are keys of the document all the
+ * same. The names are logical rather than physical for the reason {@link DeclaredColumns} is the
+ * opposite. The one owner of that expansion: the document a row materializes into and the keys a
+ * write subtracts from an overflow document have to be the same set, or a key is both stored in
+ * its column and left behind in `_extra`, where the stale copy is the one every later read
+ * answers with.
+ *
+ * `_instance` is a key a read *answers with* and never one a write assigns: it is what tells a
+ * caller reading across instances which one each row came from, and the default instance answers
+ * no key at all rather than the empty string it is stored as.
  */
 export function DocumentKeys(shape: TableShape): string[] {
-  return [ID_COLUMN, ...Object.keys(shape.fields)];
+  return [ID_COLUMN, INSTANCE_COLUMN, ...Object.keys(shape.fields)];
 }
 
 /**
@@ -162,13 +167,38 @@ export function ParseFieldType(field: FieldType, path: string): ParsedField {
   };
 }
 
+/**
+ * Accepts a declared `_id`, which restates the key column rather than asking for a column.
+ *
+ * `_id` is reserved in the sense that the adapter owns the column, but unlike `_instance` and
+ * `_extra` it is part of the document every read answers with and every write may key by. A
+ * schema that declares it is stating what the adapter already stores, so it is dropped from the
+ * shape and the key column continues to serve it; {@link DocumentKeys} is what puts it back.
+ *
+ * Only as the `text` the column is, though. A declaration of any other type is a claim the
+ * adapter cannot honour — the column would still hold text — and passing it over would answer
+ * every read with a value of the wrong declared type.
+ */
+function AssertKeyRestated(declared: FieldType, path: string): void {
+  const parsed = ParseFieldType(declared, `${path}.${ID_COLUMN}`);
+  if (parsed.type.kind !== TEXT.kind || parsed.codec) {
+    throw new Error(
+      `Field '${ID_COLUMN}' on '${path}' restates the adapter's key column and must be declared 'string'`,
+    );
+  }
+}
+
 export function ParseTable(table: TableDefinition, path: string): TableShape {
   const fields: Record<string, FieldSpec> = {};
   const owners = new Map<string, string>();
   for (const [name, declared] of Object.entries(table.fields ?? {})) {
-    if (RESERVED_COLUMNS.includes(name)) {
+    if (name === ID_COLUMN) {
+      AssertKeyRestated(declared, path);
+      continue;
+    }
+    if (UNDECLARABLE_COLUMNS.includes(name)) {
       throw new Error(
-        `Field '${name}' on '${path}' uses a reserved column name (${RESERVED_COLUMNS.join(", ")})`,
+        `Field '${name}' on '${path}' uses a reserved column name (${UNDECLARABLE_COLUMNS.join(", ")})`,
       );
     }
     const column = PgIdentifier(name);

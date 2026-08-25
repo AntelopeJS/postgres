@@ -6,9 +6,21 @@ export const ID_COLUMN = "_id";
 export const INSTANCE_COLUMN = "_instance";
 export const EXTRA_COLUMN = "_extra";
 
-/** Columns the adapter owns; a schema definition may not declare them. */
+/** Columns the adapter owns; no declared field and no overflow key may land in one. */
 export const RESERVED_COLUMNS: readonly string[] = [
   ID_COLUMN,
+  INSTANCE_COLUMN,
+  EXTRA_COLUMN,
+];
+
+/**
+ * The reserved columns a schema definition may not name, which is not all of them.
+ *
+ * `_id` is absent because a schema declaring it restates the key column the adapter already
+ * stores rather than asking for a column of its own; the other two are bookkeeping a caller has
+ * no way to mean.
+ */
+export const UNDECLARABLE_COLUMNS: readonly string[] = [
   INSTANCE_COLUMN,
   EXTRA_COLUMN,
 ];

@@ -100,10 +100,9 @@ describe("the default stage", () => {
     ).to.deep.equal(FLOAT);
   });
 
-  it("requires a value to default to", () => {
-    expect(() => Apply(Root().default(undefined))).to.throw(
-      "Stage 'default' requires an operand at position 0",
-    );
+  it("reads an absent value to default to as a null one, which defaults nothing", () => {
+    const projection = Apply(Root().default(undefined)).relation.projection;
+    expect(projection?.sql).to.contain("'null'::jsonb");
   });
 });
 
@@ -268,6 +267,7 @@ describe("the without stage", () => {
       kind: "json",
       shape: {
         _id: TEXT,
+        _instance: TEXT,
         name: TEXT,
         isActive: BOOL,
         joined: TIMESTAMP,

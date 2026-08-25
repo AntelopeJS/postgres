@@ -38,7 +38,8 @@ Raising leaves the whole query there to be run again.
 
 | What you did | Message |
 | --- | --- |
-| Declared `_id`, `_instance` or `_extra` as a field | `Field '{name}' on '{table}' uses a reserved column name (_id, _instance, _extra)` |
+| Declared `_instance` or `_extra` as a field | `Field '{name}' on '{table}' uses a reserved column name (_instance, _extra)` |
+| Declared `_id` as anything but `string` | `Field '_id' on '{table}' restates the adapter's key column and must be declared 'string'` |
 | Used an unrecognised type token | `Unsupported field type '{token}' for '{path}'. Supported: string, number, boolean, date, object, any, optionally suffixed with [], a nested record, or an io-ts codec` |
 | Declared an array with more than one element type | `Field '{path}' must declare exactly one element type, received {n}` |
 | Two fields that truncate to the same column name | `Fields '{a}' and '{b}' on '{table}' both map to column '{column}'; rename one` |
@@ -68,7 +69,7 @@ overwrite an array with a single miss.
 | --- | --- |
 | `insert` after any pipeline stage | `The 'insert' stage does not read the rows it is applied to, so every stage before it would be discarded: {stages}` |
 | A write after a reshaping stage, e.g. `table.map(…).delete()` | `A row-mode relation must carry the origin of its table` |
-| Named `_instance` or `_extra` in a payload | `Payload key '{name}' is a column this adapter owns and no payload may write it` |
+| Named `_extra` in a payload | `Payload key '{name}' is a column this adapter owns and no payload may write it` |
 | `update({})` | `The '{stage}' stage was given a payload with nothing to write: name a field to set, or set one to undefined to remove it` |
 | Named `_id` in a payload over many rows | `The '{stage}' stage was given a payload naming '_id' over a selection of many rows: address the row with get(_id) first, or leave '_id' out of the payload` |
 | A mapper that returned nothing | `The '{stage}' stage was given a mapper that returned nothing: return the document the rows become` |

@@ -4,7 +4,7 @@ import type { FieldSpec, TableShape } from "./fields";
 import { WrittenAs } from "./readings";
 import type { Compiled } from "./sql";
 import { IsJsonBacked, TEXT } from "./types";
-import { ID_COLUMN, RESERVED_COLUMNS } from "./utils";
+import { ID_COLUMN, INSTANCE_COLUMN, RESERVED_COLUMNS } from "./utils";
 import { DecodeValue } from "./value";
 import { NULL_VALUE } from "./writes-shared";
 
@@ -82,8 +82,9 @@ export const ID_AS_ASSERTION: IdDisposition = (split, value) => {
 /**
  * What the stage doing the writing does with the reserved columns.
  *
- * `_instance` and `_extra` are the adapter's own and are refused under every stage; `_id` is the
- * one a read document carries, and `id` says what this stage makes of it.
+ * `_extra` is the adapter's own and is refused under every stage. `_id` and `_instance` are the
+ * two a read document carries: `id` says what this stage makes of the first, and the second is
+ * dropped under all of them for the reason {@link TakeReserved} gives.
  */
 export interface PayloadOptions {
   id: IdDisposition;
@@ -140,10 +141,20 @@ function KeySubject(name: string): string {
 }
 
 /**
- * Routes the one reserved column a payload may name, and refuses the two it may not.
+ * Routes the two reserved columns a payload may name, and refuses the one it may not.
  * The key is read as `TEXT` the way `get` reads it, and no value at all asserts nothing.
+ *
+ * `_instance` is read and dropped rather than refused, because it is a key every read document
+ * carries and writing one straight back has to be the no-op the same round trip through `_id` is.
+ * Dropping it is not passing over a claim the caller made: a scoped write is already pinned to one
+ * instance, and a cross-instance one addresses its rows by an identity tuple that names each row's
+ * instance, so no reachable write would target different rows for having honoured it. It is never
+ * an assignment either — a write does not move a row between instances.
  */
 function TakeReserved(walk: PayloadWalk, name: string, value: unknown): void {
+  if (name === INSTANCE_COLUMN) {
+    return;
+  }
   if (name !== ID_COLUMN) {
     throw Refusal(name);
   }

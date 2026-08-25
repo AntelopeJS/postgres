@@ -267,10 +267,11 @@ describe("SplitPayload over undeclared keys", () => {
 });
 
 describe("SplitPayload over the reserved columns", () => {
-  it("refuses the instance column by name", () => {
-    expect(() => Split({ _instance: "x" })).to.throw(
-      "Payload key '_instance' is a column this adapter owns and no payload may write it",
-    );
+  it("drops the instance column, which restates where the row already is", () => {
+    const applied = Split({ _instance: "x", price: 1 });
+    expect(Columns(applied)).to.deep.equal(["price"]);
+    expect(applied.split.identity).to.equal(undefined);
+    expect(applied.context.params.all()).to.deep.equal([1]);
   });
 
   it("refuses the overflow column by name", () => {
@@ -306,11 +307,14 @@ describe("SplitPayload over the reserved columns", () => {
     expect(applied.context.params.all()).to.deep.equal([1]);
   });
 
-  it("refuses a reserved column the payload only names", () => {
+  it("refuses the overflow column the payload only names", () => {
     expect(() => Split({ _extra: undefined })).to.throw("Payload key '_extra'");
-    expect(() => Split({ _instance: undefined })).to.throw(
-      "Payload key '_instance'",
-    );
+  });
+
+  it("drops the instance column the payload only names", () => {
+    const applied = Split({ _instance: undefined });
+    expect(applied.split.members).to.deep.equal([]);
+    expect(applied.split.removed).to.deep.equal([]);
   });
 
   it("takes the key column as a member when the stage is keyed by it", () => {
@@ -320,10 +324,16 @@ describe("SplitPayload over the reserved columns", () => {
     expect(applied.context.params.all()).to.deep.equal(["k", 1]);
   });
 
-  it("still refuses the adapter's own columns when the stage is keyed", () => {
-    expect(() => Split({ _instance: "x" }, INSERTED)).to.throw(
-      "Payload key '_instance'",
+  it("still refuses the overflow column when the stage is keyed", () => {
+    expect(() => Split({ _extra: {} }, INSERTED)).to.throw(
+      "Payload key '_extra'",
     );
+  });
+
+  it("drops the instance column under the keyed stage too", () => {
+    const applied = Split({ _instance: "x" }, INSERTED);
+    expect(applied.split.members).to.deep.equal([]);
+    expect(applied.context.params.all()).to.deep.equal([]);
   });
 
   it("takes no key from a payload that only names it", () => {

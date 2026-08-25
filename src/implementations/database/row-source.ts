@@ -17,7 +17,12 @@ import {
   type SqlType,
   TEXT,
 } from "./types";
-import { EXTRA_COLUMN, ID_COLUMN } from "./utils";
+import {
+  DEFAULT_INSTANCE_ID,
+  EXTRA_COLUMN,
+  ID_COLUMN,
+  INSTANCE_COLUMN,
+} from "./utils";
 
 /**
  * Field access over a row, so the same expression compiler works against native typed columns
@@ -33,6 +38,8 @@ export interface RowSource {
 export interface DocumentMember extends Compiled {
   name: string;
 }
+
+const DEFAULT_INSTANCE_SQL = QuoteLiteral(DEFAULT_INSTANCE_ID);
 
 function MemberShape(members: DocumentMember[]): SqlShape {
   const shape: Record<string, SqlType> = {};
@@ -140,6 +147,9 @@ export class ColumnRowSource implements RowSource {
     if (name === ID_COLUMN) {
       return Defaulted(this.address(ID_COLUMN, TEXT), def, KeySubject(name));
     }
+    if (name === INSTANCE_COLUMN) {
+      return Defaulted(this.instance(), def, KeySubject(name));
+    }
     if (Object.hasOwn(this.table.fields, name)) {
       const spec = this.table.fields[name];
       return Defaulted(
@@ -152,6 +162,22 @@ export class ColumnRowSource implements RowSource {
       { sql: JsonKey(this.overflow(), name), type: OPAQUE },
       def,
     );
+  }
+
+  /**
+   * The instance a row is in, as the caller sees it rather than as it is stored.
+   *
+   * The default instance is stored as the empty string so it compares like any other, and is
+   * answered here as SQL NULL so that it materializes as no key at all — a document carries the
+   * instance it came from only when there is a named one to carry. Reading the raw column instead
+   * would answer `""` for the default, which a caller would then have to know to read as absence.
+   */
+  private instance(): Compiled {
+    const stored = this.address(INSTANCE_COLUMN, TEXT);
+    return {
+      sql: `NULLIF(${stored.sql}, ${DEFAULT_INSTANCE_SQL})`,
+      type: TEXT,
+    };
   }
 
   private overflow(): string {

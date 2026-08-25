@@ -6,6 +6,7 @@ Things that answer rather than throw, where the answer may not be the one you ex
 
 | Behaviour | Detail |
 | --- | --- |
+| `default(undefined)` defaults to nothing rather than being refused | A `default` naming no value at all is a null one, so the stage is a no-op instead of an error. It is how a caller writes "answer nothing if it is not there", and both other backends read it that way |
 | A `default` supplies an *alternative value*, not a value of the field's type | `key("status").eq("completed").default("pending")` substitutes a string for a boolean and is legal. A `key(name, def)` default is the other thing: it is read as the declared column's type, which is what keeps its index and its `Date` revival |
 | Truthiness follows JavaScript, so `[]`, `{}` and the string `"false"` are all **true** | Only `null`, `false`, `0` and `""` are false. `NaN` and `undefined` have no JSON spelling to store |
 | `not()` on a key that is absent or of the wrong type answers **true** | It matches `!undefined`. A plain SQL `NOT NULL` is NULL and would drop the row from the filter that reads it |
@@ -19,6 +20,7 @@ Things that answer rather than throw, where the answer may not be the one you ex
 | A `null` key is a value, not an open bound | The interface has no spelling for an open-ended `between`, and reading `null` as one would answer a different question. On an *undeclared* key it matches a stored JSON null; on a **declared** field it becomes SQL NULL and so matches nothing at all, including rows whose value is null — for the reason a declared null is stored as absence at all |
 | `getAll` on a field declared as an array matches by *containment* | The key is looked for among the elements of the stored list rather than compared against the list itself. See [storage](./storage.md) for the index that serves it |
 | `orderBy`, `getAll` and `between` on an *undeclared* field use jsonb's type-first ordering | There is no declared type to compare by, and no index to serve it |
+| Every document carries the instance it came from under `_instance` | Which is what lets a `CROSS_INSTANCE` read tell its rows apart. The default instance carries no key at all, matching the MongoDB backend, where a default-instance document stores a null one |
 | `get(k)` under `CROSS_INSTANCE` picks the lowest `_instance` holding the key | `_id` is unique *per instance*, so reading every instance at once makes one key name one row per instance. The same row is chosen on every call, and it is the row a subsequent delete removes |
 
 ## Shaping a stream
@@ -57,6 +59,7 @@ Things that answer rather than throw, where the answer may not be the one you ex
 | An `insert` argument that is an array is always a **batch**, never one document | This is the reading every write shares. A nested array would otherwise be stored as a document keyed by its indices |
 | One `insert` call caps at roughly two to four thousand documents | The wire protocol caps a bind at 65535 parameters and the bind list is O(documents × columns). The driver's message names nothing useful. Batch in the caller |
 | A duplicate `_id` **within one batch** raises | PostgreSQL will not let one statement write the same row twice; picking a winner would be inventing a rule the interface does not state |
+| A payload `_instance` is *dropped*, not written and not refused | It restates where the row already is, and no write moves a row between instances. Dropping it is what lets a document be read, changed and written straight back |
 | A payload `_id` is an *assertion*, so naming a different row's key answers `0` | It states which row you believe you addressed, and never what to write. Over a selection of many rows it is refused instead |
 | `update(fn)` with an *expression* body answers rows matched, where every other write answers rows modified | The modified test cannot be spelled for that one shape without evaluating the mapper twice per row |
 
@@ -75,3 +78,4 @@ Things that answer rather than throw, where the answer may not be the one you ex
 | `nth` past the end | `null`, which is what the interface declares. RethinkDB raises and MongoDB answers `undefined` |
 | `hasfields` on a present non-object | `false`. Both other backends raise |
 | `filter(…).slice(0, 5).delete()` | Deletes five rows. The MongoDB backend discards the sort and limit and deletes every match |
+| A schema declaring `_id` as a field | Accepted, as `string` and no other type. It adds no column: the key column already stores it, and the declaration is dropped from the shape. Schemas written against the document-store backends commonly declare it |

@@ -30,12 +30,23 @@ CREATE TABLE "test-lookup-operations".orders (
   makes `insert` able to return the keys it created without reading anything back.
 - **`_instance` is the instance discriminator**, defaulting to `''` for the unnamed instance, and it
   is the *leading* column of the primary key — so `WHERE _instance = $1` is served by the primary
-  key with no extra index, and `CROSS_INSTANCE` is simply the absence of that predicate.
+  key with no extra index, and `CROSS_INSTANCE` is simply the absence of that predicate. Every
+  document a read answers carries the instance it came from under `_instance`, which is how a
+  `CROSS_INSTANCE` read tells its rows apart; the default instance carries no key at all rather
+  than the empty string it is stored as.
 - **`_extra jsonb` absorbs undeclared fields.** Writing a field your schema does not declare is
   allowed and round-trips; it just lives in `_extra` rather than in a column of its own, with the
   consequences listed under [Behaviour worth knowing](./behaviour.md).
-- **`_id`, `_instance` and `_extra` are reserved.** Declaring any of them as a field is an error at
-  registration, and naming `_instance` or `_extra` in a write payload is an error at query time.
+- **`_id`, `_instance` and `_extra` are reserved**, in the sense that the adapter owns the columns
+  and no declared field may land in one. They are not equally undeclarable: declaring `_instance` or
+  `_extra` is an error at registration, while declaring `_id` restates the key column the adapter
+  already stores and is accepted — as `string` and no other type, since the column is `text`
+  whatever a schema says. It adds no column and the field is dropped from the shape.
+- **A write payload may name `_id` and `_instance`, but not `_extra`.** A payload's `_id` is an
+  assertion about which row is being written rather than an assignment, and its `_instance` is
+  dropped: it restates where the row already is, and no write moves a row between instances. Both
+  are what make writing a document straight back a no-op rather than an error. Naming `_extra` is an
+  error at query time.
 - **Instances are tracked in a `__antelope` schema**, in
   `instances(schema_id, instance_id, created_at)`. `destroyInstance` deletes rows and never drops a
   schema or a table, as a single statement so a partial destroy cannot leave an instance half-wiped.

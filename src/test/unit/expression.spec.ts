@@ -133,6 +133,7 @@ describe("arg", () => {
     expect(out.type).to.deep.equal(
       JsonOf({
         _id: TEXT,
+        _instance: TEXT,
         age: FLOAT,
         name: TEXT,
         createdAt: TIMESTAMP,
