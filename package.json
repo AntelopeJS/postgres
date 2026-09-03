@@ -45,7 +45,7 @@
     "test": "src/test/antelope.test.ts"
   },
   "dependencies": {
-    "@antelopejs/interface-core": "^0.0.3",
+    "@antelopejs/interface-core": "^0.0.12",
     "@antelopejs/interface-database": "^0.1.4",
     "pg": "^8.22.0"
   },
