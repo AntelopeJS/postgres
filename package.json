@@ -18,7 +18,8 @@
     "dist"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.6.5",
@@ -44,7 +45,7 @@
     "test": "src/test/antelope.test.ts"
   },
   "dependencies": {
-    "@antelopejs/interface-core": "^0.0.3",
+    "@antelopejs/interface-core": "^0.0.12",
     "@antelopejs/interface-database": "^0.1.4",
     "pg": "^8.22.0"
   },
