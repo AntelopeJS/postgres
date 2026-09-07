@@ -1,18 +1,19 @@
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { expect } from "chai";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { SingleSelection, Table } from "@antelopejs/interface-database";
 import {
   QueryStage,
   type StagedObject,
 } from "@antelopejs/interface-database/common";
-import { expect } from "chai";
+
+import { WRITE_STAGES } from "../../implementations/database/writes";
 import {
   DEFERRED_STAGES,
   PIPELINE_STAGES,
   REJECTED_STAGES,
 } from "../../implementations/database/pipeline";
-import { WRITE_STAGES } from "../../implementations/database/writes";
 
 const VOCABULARY: readonly string[] = [
   "avg",

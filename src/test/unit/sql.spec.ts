@@ -1,11 +1,12 @@
 import { expect } from "chai";
+
+import { FLOAT, OPAQUE } from "../../implementations/database/types";
 import {
   Param,
   ParamCollector,
   QuoteIdentifier,
   QuoteLiteral,
 } from "../../implementations/database/sql";
-import { FLOAT, OPAQUE } from "../../implementations/database/types";
 
 describe("sql", () => {
   it("numbers parameters sequentially", () => {

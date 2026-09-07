@@ -1,10 +1,11 @@
+import { expect } from "chai";
+import { Query } from "@antelopejs/interface-database/query";
+import { QueryStage } from "@antelopejs/interface-database/common";
 import type {
   DeepPartial,
   StagedObject,
 } from "@antelopejs/interface-database/common";
-import { QueryStage } from "@antelopejs/interface-database/common";
-import { Query } from "@antelopejs/interface-database/query";
-import { expect } from "chai";
+
 import {
   AssertedIdentity,
   CrossInstanceRoot,

@@ -1,3 +1,4 @@
+import { expect } from "chai";
 import assert from "node:assert";
 import { SchemaInstance } from "@antelopejs/interface-database";
 import {
@@ -8,40 +9,27 @@ import {
   CROSS_INSTANCE,
   type InstanceId,
 } from "@antelopejs/interface-database/schema";
-import { expect } from "chai";
-import {
-  type Compilers,
-  DecodingContext,
-  type SubqueryCompiler,
-} from "../../implementations/database/context";
-import { CompileExpression } from "../../implementations/database/expression";
+
 import type { TableShape } from "../../implementations/database/fields";
+import { CompileSubquery } from "../../implementations/database/subquery";
+import { CompileExpression } from "../../implementations/database/expression";
+import {
+  CompileWrite,
+  SplitWrite,
+} from "../../implementations/database/writes";
 import {
   ApplyStages,
   CompileRelation,
 } from "../../implementations/database/pipeline";
 import {
+  BuildRoot,
+  type OriginResolver,
+} from "../../implementations/database/selection";
+import {
   type Relation,
   Render,
   TableRelation,
 } from "../../implementations/database/relation";
-import {
-  BuildRoot,
-  type OriginResolver,
-} from "../../implementations/database/selection";
-import { CompileSubquery } from "../../implementations/database/subquery";
-import {
-  ArrayOf,
-  BOOL,
-  FLOAT,
-  OPAQUE,
-  TEXT,
-  TIMESTAMP,
-} from "../../implementations/database/types";
-import {
-  CompileWrite,
-  SplitWrite,
-} from "../../implementations/database/writes";
 import {
   type WriteStatement,
   WriteTargetOf,
@@ -52,6 +40,19 @@ import {
   RefusingCompilers,
   WithOptions,
 } from "./spec-fixture";
+import {
+  ArrayOf,
+  BOOL,
+  FLOAT,
+  OPAQUE,
+  TEXT,
+  TIMESTAMP,
+} from "../../implementations/database/types";
+import {
+  type Compilers,
+  DecodingContext,
+  type SubqueryCompiler,
+} from "../../implementations/database/context";
 
 export type { ParamLedger } from "./spec-fixture";
 export { Occurrences } from "./spec-fixture";
@@ -73,7 +74,7 @@ export interface Note {
   summary: string;
 }
 
-export interface Profile {
+interface Profile {
   name: string;
   skills: string[];
 }
@@ -445,10 +446,10 @@ export function WrittenSql(written: Written): string {
 }
 
 /** The alias a write statement gives the table it targets, which is the compiler's own. */
-export const WRITE_ALIAS = "w0";
+const WRITE_ALIAS = "w0";
 
 /** The alias the identity target's wrap claims when the pipeline spent none before it. */
-export const WRAP_ALIAS = "t1";
+const WRAP_ALIAS = "t1";
 
 /**
  * The `WHERE` predicate every write that targets by identity compiles to, over one rendering.
@@ -559,7 +560,7 @@ export function ExpectBalancedLedger(written: Written[]): void {
 }
 
 /** The bind ledger of a compiled write — see {@link ParamLedgerOf} for what it catches. */
-export function ReadStatementLedger(written: Written): ParamLedger {
+function ReadStatementLedger(written: Written): ParamLedger {
   return ParamLedgerOf(
     written.statement.sql,
     written.context.params.all().length,

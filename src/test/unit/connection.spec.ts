@@ -1,6 +1,7 @@
-import { EventEmitter } from "node:events";
 import { expect } from "chai";
+import { EventEmitter } from "node:events";
 import type { Pool, PoolClient } from "pg";
+
 import {
   type BeforeDisconnect,
   GuardHeldClient,

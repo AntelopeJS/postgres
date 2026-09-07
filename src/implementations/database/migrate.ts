@@ -1,8 +1,14 @@
-import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
 import { DatabaseError, type Pool, type PoolClient } from "pg";
-import { GetOptions, type MigrationMode } from "../../config";
-import { AcquireClient, GetPool } from "../../connection";
+import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
+
 import { Logger } from "../../logger";
+import { ReadTable } from "./introspect";
+import { SchemaName } from "./identifier";
+import { REGISTRY_SCHEMA } from "./utils";
+import type { SchemaShape } from "./fields";
+import { REGISTRY_STATEMENTS } from "./instances";
+import { AcquireClient, GetPool } from "../../connection";
+import { GetOptions, type MigrationMode } from "../../config";
 import { CHANGE_LOG_STATEMENTS, TriggerStatements } from "./changes";
 import {
   BuildSchemaPlan,
@@ -11,11 +17,6 @@ import {
   PlanTable,
   type TablePlan,
 } from "./ddl";
-import type { SchemaShape } from "./fields";
-import { SchemaName } from "./identifier";
-import { REGISTRY_STATEMENTS } from "./instances";
-import { ReadTable } from "./introspect";
-import { REGISTRY_SCHEMA } from "./utils";
 
 const DUPLICATE_OBJECT_CODES = new Set(["23505", "42P06", "42P07", "42710"]);
 const CONVERGENCE_RETRIES = 2;

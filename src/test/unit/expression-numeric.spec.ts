@@ -1,18 +1,20 @@
+import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
 import { QueryStage } from "@antelopejs/interface-database/common";
-import { expect } from "chai";
+
+import { RefusingCompilers } from "./spec-fixture";
+import { AsValue } from "../../implementations/database/stage";
+import type { Compiled } from "../../implementations/database/sql";
+import type { TableShape } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import {
   CompileExpression,
   STAGES,
 } from "../../implementations/database/expression";
-import type { TableShape } from "../../implementations/database/fields";
 import {
   AliasedColumns,
   ColumnRowSource,
 } from "../../implementations/database/row-source";
-import type { Compiled } from "../../implementations/database/sql";
-import { AsValue } from "../../implementations/database/stage";
 import {
   ArrayOf,
   BOOL,
@@ -21,7 +23,6 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
-import { RefusingCompilers } from "./spec-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;

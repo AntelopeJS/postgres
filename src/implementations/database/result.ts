@@ -80,7 +80,7 @@ export function DecodeRow(
     document[name] = ReviveValue(value, spec.type);
   }
   const extra = {
-    ...((row[EXTRA_COLUMN] as Record<string, unknown> | null) ?? {}),
+    ...(row[EXTRA_COLUMN] as Record<string, unknown> | null),
   };
   delete extra[ID_COLUMN];
   delete extra[INSTANCE_COLUMN];

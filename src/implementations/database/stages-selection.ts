@@ -1,7 +1,13 @@
 import assert from "node:assert";
-import type { DecodingContext } from "./context";
-import type { PipelineStage, PipelineStageMap } from "./pipeline";
+
+import { IsArray } from "./types";
 import { StoredAs } from "./readings";
+import { DecodeValue } from "./value";
+import type { DecodingContext } from "./context";
+import { type Compiled, QualifiedColumn } from "./sql";
+import type { PipelineStage, PipelineStageMap } from "./pipeline";
+import { ID_COLUMN, INSTANCE_COLUMN, type QueryStage } from "./utils";
+import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import {
   IndexColumns,
   Prepare,
@@ -10,11 +16,6 @@ import {
   SINGLE_ROW,
   WHERE_BLOCKERS,
 } from "./relation";
-import { type Compiled, QualifiedColumn } from "./sql";
-import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
-import { IsArray } from "./types";
-import { ID_COLUMN, INSTANCE_COLUMN, type QueryStage } from "./utils";
-import { DecodeValue } from "./value";
 
 const NO_KEYS = "FALSE";
 const SINGLE_FIELD = 1;

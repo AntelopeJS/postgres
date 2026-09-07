@@ -1,13 +1,7 @@
-import { ValueProxy } from "@antelopejs/interface-database";
 import { expect } from "chai";
+import { ValueProxy } from "@antelopejs/interface-database";
+
 import { Render } from "../../implementations/database/relation";
-import {
-  BOOL,
-  FLOAT,
-  OPAQUE,
-  TEXT,
-  TIMESTAMP,
-} from "../../implementations/database/types";
 import {
   Apply,
   DOCUMENT,
@@ -16,6 +10,13 @@ import {
   Root,
   Sql,
 } from "./pipeline-fixture";
+import {
+  BOOL,
+  FLOAT,
+  OPAQUE,
+  TEXT,
+  TIMESTAMP,
+} from "../../implementations/database/types";
 
 const AGE_FROM_JSON =
   `(CASE WHEN jsonb_typeof(to_jsonb("t1"."value")) = 'number'` +

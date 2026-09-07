@@ -4,8 +4,9 @@ import type {
   SchemaDefinition,
   TableDefinition,
 } from "@antelopejs/interface-database/schema";
-import { ParseSchema, type SchemaShape, type TableShape } from "./fields";
+
 import { SyncSchema } from "./migrate";
+import { ParseSchema, type SchemaShape, type TableShape } from "./fields";
 
 const definitions: Record<string, SchemaDefinition> = {};
 const shapes: Record<string, SchemaShape> = {};

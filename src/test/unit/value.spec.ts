@@ -1,15 +1,22 @@
-import { Datum, Query, ValueProxy } from "@antelopejs/interface-database";
-import { QueryStage } from "@antelopejs/interface-database/common";
 import { expect } from "chai";
+import { QueryStage } from "@antelopejs/interface-database/common";
+import { Datum, Query, ValueProxy } from "@antelopejs/interface-database";
+
+import { RefusingCompilers } from "./spec-fixture";
+import type { Compiled } from "../../implementations/database/sql";
+import {
+  AliasedColumns,
+  ColumnRowSource,
+} from "../../implementations/database/row-source";
 import {
   type ArgumentBinding,
   DecodingContext,
 } from "../../implementations/database/context";
 import {
-  AliasedColumns,
-  ColumnRowSource,
-} from "../../implementations/database/row-source";
-import type { Compiled } from "../../implementations/database/sql";
+  DecodeFunction,
+  DecodeValue,
+  WithBoundArguments,
+} from "../../implementations/database/value";
 import {
   ArrayOf,
   FLOAT,
@@ -18,12 +25,6 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
-import {
-  DecodeFunction,
-  DecodeValue,
-  WithBoundArguments,
-} from "../../implementations/database/value";
-import { RefusingCompilers } from "./spec-fixture";
 
 const STUB_EXPRESSION: Compiled = { sql: "EXPR", type: OPAQUE };
 const STUB_SUBQUERY: Compiled = { sql: "SUB", type: OPAQUE };

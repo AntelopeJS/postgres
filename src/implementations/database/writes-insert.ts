@@ -1,8 +1,19 @@
 import assert from "node:assert";
 import { randomUUID } from "node:crypto";
-import type { DecodingContext } from "./context";
+
+import { TEXT } from "./types";
+import { FIRST_OPERAND } from "./stage";
 import { PRIMARY_KEY_LIST } from "./ddl";
+import type { TableOrigin } from "./relation";
+import type { DecodingContext } from "./context";
+import { type Compiled, Param, QuoteIdentifier } from "./sql";
 import { DeclaredColumns, PhysicalOrder, type TableShape } from "./fields";
+import {
+  EXTRA_COLUMN,
+  ID_COLUMN,
+  INSTANCE_COLUMN,
+  type QueryStage,
+} from "./utils";
 import {
   ID_AS_KEY,
   MembersByColumn,
@@ -10,16 +21,6 @@ import {
   type PayloadOptions,
   SplitPayload,
 } from "./payload";
-import type { TableOrigin } from "./relation";
-import { type Compiled, Param, QuoteIdentifier } from "./sql";
-import { FIRST_OPERAND } from "./stage";
-import { TEXT } from "./types";
-import {
-  EXTRA_COLUMN,
-  ID_COLUMN,
-  INSTANCE_COLUMN,
-  type QueryStage,
-} from "./utils";
 import {
   AsDocument,
   Assignment,

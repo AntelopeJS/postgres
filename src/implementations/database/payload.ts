@@ -1,12 +1,13 @@
 import assert from "node:assert";
+
+import type { Compiled } from "./sql";
+import { DecodeValue } from "./value";
+import { WrittenAs } from "./readings";
+import { IsJsonBacked, TEXT } from "./types";
+import { NULL_VALUE } from "./writes-shared";
 import type { DecodingContext } from "./context";
 import type { FieldSpec, TableShape } from "./fields";
-import { WrittenAs } from "./readings";
-import type { Compiled } from "./sql";
-import { IsJsonBacked, TEXT } from "./types";
 import { ID_COLUMN, INSTANCE_COLUMN, RESERVED_COLUMNS } from "./utils";
-import { DecodeValue } from "./value";
-import { NULL_VALUE } from "./writes-shared";
 
 /**
  * One column a payload writes, named by its column rather than by its field.
@@ -15,7 +16,7 @@ import { NULL_VALUE } from "./writes-shared";
  * not always a declared field: `_id` is a member too when the stage is keyed by it, and `_id` is
  * never in `TableShape.fields`.
  */
-export interface PayloadMember {
+interface PayloadMember {
   column: string;
   value: Compiled;
 }

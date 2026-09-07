@@ -1,6 +1,10 @@
 import type { QueryStage } from "@antelopejs/interface-database/common";
+
 import { Cast } from "./coerce";
+import type { Compiled } from "./sql";
+import { DecodeFunction } from "./value";
 import type { DecodingContext } from "./context";
+import { ArrayOf, BOOL, FLOAT, OPAQUE, type SqlType } from "./types";
 import {
   ARRAY_TYPEOF,
   Collected,
@@ -20,7 +24,6 @@ import {
   ORDERED_KINDS,
   Predicate,
 } from "./readings";
-import type { Compiled } from "./sql";
 import {
   BuildStages,
   FIRST_OPERAND,
@@ -31,8 +34,6 @@ import {
   type StageHandler,
   type StageMap,
 } from "./stage";
-import { ArrayOf, BOOL, FLOAT, OPAQUE, type SqlType } from "./types";
-import { DecodeFunction } from "./value";
 
 const ELEMENTS_FUNCTION = "jsonb_array_elements";
 const LENGTH_FUNCTION = "jsonb_array_length";

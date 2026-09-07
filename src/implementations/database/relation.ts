@@ -1,5 +1,9 @@
 import assert from "node:assert";
+
+import type { SqlType } from "./types";
 import type { DecodingContext } from "./context";
+import { EXTRA_COLUMN, ID_COLUMN, INSTANCE_COLUMN } from "./utils";
+import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import { DeclaredColumns, PhysicalOrder, type TableShape } from "./fields";
 import {
   AliasedColumns,
@@ -9,14 +13,11 @@ import {
   LoggedColumns,
   type RowSource,
 } from "./row-source";
-import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
-import type { SqlType } from "./types";
-import { EXTRA_COLUMN, ID_COLUMN, INSTANCE_COLUMN } from "./utils";
 
 /** The single column a value-mode relation projects, and the key its rows are decoded from. */
 export const OUTPUT_COLUMN = "value";
 
-export type IndexResolver = (name: string) => string[];
+type IndexResolver = (name: string) => string[];
 
 /**
  * What the relation still knows about the table it reads.
@@ -43,7 +44,7 @@ export interface OrderTerm {
  * not there. It is a value the relation carries rather than an optional field holding the answer,
  * because an optional field set to `undefined` cannot be told apart from one that was never set.
  */
-export type AbsentValue = null | undefined;
+type AbsentValue = null | undefined;
 
 /**
  * The join keywords {@link RenderJoin}'s template can spell, which is what makes it total.

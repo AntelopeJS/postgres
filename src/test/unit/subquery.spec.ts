@@ -1,4 +1,5 @@
 import { expect } from "chai";
+
 import { ArrayOf, TEXT } from "../../implementations/database/types";
 import {
   ApplySubqueries,

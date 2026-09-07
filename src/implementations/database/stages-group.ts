@@ -1,24 +1,20 @@
 import assert from "node:assert";
-import type { DecodingContext, SubqueryProvider } from "./context";
+
+import { ArrayOf } from "./types";
 import { Collected } from "./jsonb";
-import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { AsJson } from "./readings";
-import {
-  CurrentValue,
-  IndexColumns,
-  Prepare,
-  type Relation,
-  type RelationFlag,
-  SetProjection,
-} from "./relation";
+import type { Compiled } from "./sql";
+import { DecodeFunction } from "./value";
+import type { QueryStage } from "./utils";
+import { FIRST_OPERAND, RequireOperand } from "./stage";
+import type { PipelineStage, PipelineStageMap } from "./pipeline";
+import type { DecodingContext, SubqueryProvider } from "./context";
 import {
   BuildDocument,
   type DocumentMember,
   JsonRowSource,
   type RowSource,
 } from "./row-source";
-import type { Compiled } from "./sql";
-import { FIRST_OPERAND, RequireOperand } from "./stage";
 import {
   type Aggregation,
   Maximum,
@@ -28,9 +24,14 @@ import {
   Tally,
   Total,
 } from "./stages-aggregate";
-import { ArrayOf } from "./types";
-import type { QueryStage } from "./utils";
-import { DecodeFunction } from "./value";
+import {
+  CurrentValue,
+  IndexColumns,
+  Prepare,
+  type Relation,
+  type RelationFlag,
+  SetProjection,
+} from "./relation";
 
 /**
  * What a sub-stream has reduced a group's rows to so far.
@@ -46,7 +47,7 @@ import { DecodeFunction } from "./value";
  * only the terminal that follows it can spell the `DISTINCT`, and which spelling that is differs
  * per terminal.
  */
-export interface SubStream {
+interface SubStream {
   source: RowSource;
   value: Compiled;
   distinct: boolean;
@@ -55,13 +56,13 @@ export interface SubStream {
 /**
  * One step of a sub-stream fold: a state means it continues, a {@link Compiled} means it ended.
  */
-export type SubStreamStage = (
+type SubStreamStage = (
   state: SubStream,
   stage: QueryStage,
   context: DecodingContext,
 ) => SubStream | Compiled;
 
-export type SubStreamStageMap = Record<string, SubStreamStage>;
+type SubStreamStageMap = Record<string, SubStreamStage>;
 
 const MAP = "map";
 const DISTINCT = "distinct";
@@ -146,7 +147,7 @@ function AggregateSubStream(aggregate: Aggregation): SubStreamStage {
  * says it is the sub-stream position that cannot take it, because the same stage is perfectly
  * legal on the query one level out.
  */
-export const SUB_STREAM_STAGES: SubStreamStageMap = {
+const SUB_STREAM_STAGES: SubStreamStageMap = {
   [MAP]: MapSubStream,
   [DISTINCT]: DistinctSubStream,
   [COUNT]: CountSubStream,

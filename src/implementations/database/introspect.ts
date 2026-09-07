@@ -1,4 +1,5 @@
 import type { QueryResultRow } from "pg";
+
 import { Query } from "../../connection";
 import type { ActualColumn, ActualIndex, ActualTable } from "./ddl";
 

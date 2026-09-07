@@ -1,5 +1,6 @@
 import { Query, ValueProxy } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
+
 import { Cast, UnifyAll } from "./coerce";
 import type { ArgumentBinding, DecodingContext } from "./context";
 import { type Compiled, JSON_NULL, Param, QuoteLiteral } from "./sql";

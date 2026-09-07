@@ -4,7 +4,9 @@ import type {
   StringFieldType,
   TableDefinition,
 } from "@antelopejs/interface-database/schema";
+
 import { PgIdentifier } from "./identifier";
+import { ID_COLUMN, INSTANCE_COLUMN, UNDECLARABLE_COLUMNS } from "./utils";
 import {
   ArrayOf,
   BOOL,
@@ -16,9 +18,8 @@ import {
   TEXT,
   TIMESTAMP,
 } from "./types";
-import { ID_COLUMN, INSTANCE_COLUMN, UNDECLARABLE_COLUMNS } from "./utils";
 
-export interface IoTsCodec {
+interface IoTsCodec {
   is(value: unknown): boolean;
   encode(value: never): unknown;
   decode(value: unknown): unknown;

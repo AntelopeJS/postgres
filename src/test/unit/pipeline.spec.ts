@@ -1,18 +1,19 @@
-import { QueryStage } from "@antelopejs/interface-database/common";
 import { expect } from "chai";
-import { DecodingContext } from "../../implementations/database/context";
+import { QueryStage } from "@antelopejs/interface-database/common";
+
+import { RefusingCompilers } from "./spec-fixture";
+import { TEXT } from "../../implementations/database/types";
 import type { TableShape } from "../../implementations/database/fields";
+import { DecodingContext } from "../../implementations/database/context";
+import {
+  type Relation,
+  TableRelation,
+} from "../../implementations/database/relation";
 import {
   ApplyStages,
   DEFERRED_STAGES,
   REJECTED_STAGES,
 } from "../../implementations/database/pipeline";
-import {
-  type Relation,
-  TableRelation,
-} from "../../implementations/database/relation";
-import { TEXT } from "../../implementations/database/types";
-import { RefusingCompilers } from "./spec-fixture";
 
 const VEHICLES: TableShape = {
   fields: {

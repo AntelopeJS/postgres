@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import type { QueryStage } from "@antelopejs/interface-database/common";
+
 import type { Relation } from "./relation";
 import type { RowSource } from "./row-source";
 import type { OriginResolver } from "./selection";
@@ -9,7 +10,7 @@ export type SubqueryProvider = (stages: QueryStage[]) => Compiled;
 
 export type ArgumentBinding = RowSource | SubqueryProvider | Compiled;
 
-export type ExpressionCompiler = (
+type ExpressionCompiler = (
   stages: QueryStage[],
   context: DecodingContext,
   source?: RowSource,
@@ -20,7 +21,7 @@ export type SubqueryCompiler = (
   context: DecodingContext,
 ) => Compiled;
 
-export type RelationCompiler = (
+type RelationCompiler = (
   stages: QueryStage[],
   context: DecodingContext,
 ) => Relation;

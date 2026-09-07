@@ -1,5 +1,5 @@
-import { Cast, ParsesAs, WithDefault } from "./coerce";
 import { type Compiled, QuoteLiteral } from "./sql";
+import { Cast, ParsesAs, WithDefault } from "./coerce";
 import {
   type ArrayType,
   BOOL,

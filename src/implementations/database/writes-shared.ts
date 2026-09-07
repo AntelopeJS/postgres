@@ -1,12 +1,13 @@
 import assert from "node:assert";
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
-import type { DecodingContext } from "./context";
+
 import { TableReference } from "./identifier";
-import { type Relation, RequireOrigin, type TableOrigin } from "./relation";
-import { AliasedColumns, ColumnRowSource, type RowSource } from "./row-source";
+import type { DecodingContext } from "./context";
+import { EXTRA_COLUMN, type QueryStage } from "./utils";
 import type { InstanceScope, RootSelection } from "./selection";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
-import { EXTRA_COLUMN, type QueryStage } from "./utils";
+import { type Relation, RequireOrigin, type TableOrigin } from "./relation";
+import { AliasedColumns, ColumnRowSource, type RowSource } from "./row-source";
 
 /**
  * The rows a write changes, and everything it may know about them.

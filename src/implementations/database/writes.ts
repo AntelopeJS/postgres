@@ -1,8 +1,9 @@
 import assert from "node:assert";
-import type { DecodingContext } from "./context";
+
 import type { QueryStage } from "./utils";
-import { DeleteWrite, ReplaceWrite, UpdateWrite } from "./writes-identity";
 import { InsertWrite } from "./writes-insert";
+import type { DecodingContext } from "./context";
+import { DeleteWrite, ReplaceWrite, UpdateWrite } from "./writes-identity";
 import type {
   WriteCompiler,
   WriteStatement,
@@ -17,7 +18,7 @@ import type {
  * names kept elsewhere is a second place to register a write, and the one that decides whether a
  * pipeline is discarded is not the one a new write is added to.
  */
-export interface WriteSpec {
+interface WriteSpec {
   compile: WriteCompiler;
   readsRelation: boolean;
 }

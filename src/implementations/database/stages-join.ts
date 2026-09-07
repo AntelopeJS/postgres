@@ -1,11 +1,29 @@
 import assert from "node:assert";
 import { Query } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
-import { UnifyOperands } from "./coerce";
-import type { DecodingContext } from "./context";
+
 import { EMPTY_ARRAY } from "./jsonb";
-import type { PipelineStage, PipelineStageMap } from "./pipeline";
+import { UnifyOperands } from "./coerce";
+import { DecodeFunction } from "./value";
 import { AsJson, Predicate } from "./readings";
+import type { DecodingContext } from "./context";
+import { NullableRowSource, type RowSource } from "./row-source";
+import type { PipelineStage, PipelineStageMap } from "./pipeline";
+import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
+import {
+  type Compiled,
+  QualifiedColumn,
+  QuoteIdentifier,
+  QuoteLiteral,
+} from "./sql";
+import {
+  ArrayOf,
+  IsArray,
+  IsOpaque,
+  JsonOf,
+  MergeShapes,
+  type SqlType,
+} from "./types";
 import {
   CurrentValue,
   type JoinKind,
@@ -19,23 +37,6 @@ import {
   SINGLE_ROW,
   WHERE_BLOCKERS,
 } from "./relation";
-import { NullableRowSource, type RowSource } from "./row-source";
-import {
-  type Compiled,
-  QualifiedColumn,
-  QuoteIdentifier,
-  QuoteLiteral,
-} from "./sql";
-import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
-import {
-  ArrayOf,
-  IsArray,
-  IsOpaque,
-  JsonOf,
-  MergeShapes,
-  type SqlType,
-} from "./types";
-import { DecodeFunction } from "./value";
 
 const MAPPER_OPERAND = 2;
 

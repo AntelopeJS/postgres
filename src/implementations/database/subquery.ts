@@ -1,6 +1,10 @@
-import type { DecodingContext } from "./context";
+import { ArrayOf } from "./types";
 import { Collected } from "./jsonb";
 import { AsJson } from "./readings";
+import type { Compiled } from "./sql";
+import { FIRST_OPERAND } from "./stage";
+import type { QueryStage } from "./utils";
+import type { DecodingContext } from "./context";
 import {
   AbsorbOrder,
   CurrentValue,
@@ -10,10 +14,6 @@ import {
   Render,
   SetProjection,
 } from "./relation";
-import type { Compiled } from "./sql";
-import { FIRST_OPERAND } from "./stage";
-import { ArrayOf } from "./types";
-import type { QueryStage } from "./utils";
 
 /**
  * What has already decided *which* rows there are blocks the aggregate from absorbing.

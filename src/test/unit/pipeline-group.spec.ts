@@ -1,26 +1,27 @@
+import { expect } from "chai";
 import assert from "node:assert";
 import { Query, Stream } from "@antelopejs/interface-database";
 import {
   QueryStage,
   type StagedObject,
 } from "@antelopejs/interface-database/common";
-import { expect } from "chai";
-import type { DecodingContext } from "../../implementations/database/context";
-import {
-  type Relation,
-  Render,
-  SetProjection,
-} from "../../implementations/database/relation";
+
 import type { Compiled } from "../../implementations/database/sql";
-import { SubStreamProvider } from "../../implementations/database/stages-group";
+import { DecodeValue } from "../../implementations/database/value";
 import { CompileSubquery } from "../../implementations/database/subquery";
+import type { DecodingContext } from "../../implementations/database/context";
+import { SubStreamProvider } from "../../implementations/database/stages-group";
 import {
   ArrayOf,
   BOOL,
   FLOAT,
   TEXT,
 } from "../../implementations/database/types";
-import { DecodeValue } from "../../implementations/database/value";
+import {
+  type Relation,
+  Render,
+  SetProjection,
+} from "../../implementations/database/relation";
 import {
   type Applied,
   Apply,

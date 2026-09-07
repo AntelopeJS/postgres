@@ -3,14 +3,9 @@ import type {
   SchemaDefinition,
   TableDefinition,
 } from "@antelopejs/interface-database/schema";
-import type { MigrationMode } from "../../config";
+
 import { Cast } from "./coerce";
-import {
-  type FieldSpec,
-  PhysicalOrder,
-  type SchemaShape,
-  type TableShape,
-} from "./fields";
+import type { MigrationMode } from "../../config";
 import { IndexName, QualifiedName, TableName } from "./identifier";
 import { JSON_NULL, JsonKey, QuoteIdentifier, QuoteLiteral } from "./sql";
 import {
@@ -26,8 +21,14 @@ import {
   INSTANCE_COLUMN,
   RESERVED_COLUMNS,
 } from "./utils";
+import {
+  type FieldSpec,
+  PhysicalOrder,
+  type SchemaShape,
+  type TableShape,
+} from "./fields";
 
-export type IndexMethod = "btree" | "gin";
+type IndexMethod = "btree" | "gin";
 
 /**
  * The field a column stores, present on the declared columns and absent on the reserved three.
@@ -36,7 +37,7 @@ export type IndexMethod = "btree" | "gin";
  * the value under before the column existed, and the *type* is what reads it back out. Carrying them
  * as one member is what stops a caller supplying one without the other.
  */
-export interface DeclaredField {
+interface DeclaredField {
   readonly field: string;
   readonly type: SqlType;
 }

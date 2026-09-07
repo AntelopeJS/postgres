@@ -1,15 +1,16 @@
 import assert from "node:assert";
 import { StagedObject } from "@antelopejs/interface-database/common";
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
-import type { DecodingContext } from "./context";
+
+import { TEXT } from "./types";
 import { IndexFields } from "./ddl";
+import { IsPlainObject } from "./value";
 import { TableReference } from "./identifier";
-import { type Relation, type TableOrigin, TableRelation } from "./relation";
+import type { DecodingContext } from "./context";
 import { GetIndex, GetTableShape } from "./schema";
 import { type Compiled, Param, QualifiedColumn } from "./sql";
-import { TEXT } from "./types";
+import { type Relation, type TableOrigin, TableRelation } from "./relation";
 import { DEFAULT_INSTANCE_ID, INSTANCE_COLUMN, type QueryStage } from "./utils";
-import { IsPlainObject } from "./value";
 
 export const SCHEMA_STAGE = "schema";
 const INSTANCE_STAGE = "instance";

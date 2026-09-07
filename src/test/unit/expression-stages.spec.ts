@@ -1,4 +1,5 @@
 import { expect } from "chai";
+
 import { STAGES } from "../../implementations/database/expression";
 
 const VOCABULARY: readonly string[] = [

@@ -1,6 +1,7 @@
 import { expect } from "chai";
-import { GetOptions, type Options, SetOptions } from "../../config";
+
 import { WithOptions } from "./spec-fixture";
+import { GetOptions, type Options, SetOptions } from "../../config";
 
 const DEFAULT_CURSOR_BATCH_SIZE = 100;
 const DEFAULT_CURSOR_IDLE_TIMEOUT_MS = 60_000;

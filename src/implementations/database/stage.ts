@@ -1,8 +1,9 @@
 import type { QueryStage } from "@antelopejs/interface-database/common";
-import type { DecodingContext } from "./context";
-import { JsonRowSource, type RowSource } from "./row-source";
+
 import type { Compiled } from "./sql";
 import { DecodeValue } from "./value";
+import type { DecodingContext } from "./context";
+import { JsonRowSource, type RowSource } from "./row-source";
 
 /**
  * Accumulator threaded through the stages of one expression.

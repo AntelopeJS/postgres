@@ -1,5 +1,11 @@
 import assert from "node:assert";
+
+import { QuoteIdentifier } from "./sql";
+import { WRITE_STAGES } from "./writes";
+import type { QueryStage } from "./utils";
 import { DecodingContext } from "./context";
+import { CompileSubquery } from "./subquery";
+import { OPAQUE, type SqlType } from "./types";
 import { CompileExpression } from "./expression";
 import { ApplyStages, CompileRelation, PIPELINE_STAGES } from "./pipeline";
 import {
@@ -9,11 +15,6 @@ import {
   Render,
   type TableOrigin,
 } from "./relation";
-import { QuoteIdentifier } from "./sql";
-import { CompileSubquery } from "./subquery";
-import { OPAQUE, type SqlType } from "./types";
-import type { QueryStage } from "./utils";
-import { WRITE_STAGES } from "./writes";
 
 /**
  * The alias each side's one row is read through, fixed rather than taken from the context.
@@ -22,7 +23,7 @@ import { WRITE_STAGES } from "./writes";
 const SIDE_ALIAS = "s";
 const ROW_COLUMN = QuoteIdentifier("r");
 
-export const LOGGED_ROW = `${QuoteIdentifier(SIDE_ALIAS)}.${ROW_COLUMN}`;
+const LOGGED_ROW = `${QuoteIdentifier(SIDE_ALIAS)}.${ROW_COLUMN}`;
 
 const MATCHES_EVERYTHING = "TRUE";
 

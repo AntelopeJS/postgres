@@ -1,5 +1,6 @@
-import type { DeepPartial } from "@antelopejs/interface-database/common";
 import { expect } from "chai";
+import type { DeepPartial } from "@antelopejs/interface-database/common";
+
 import {
   AssertedIdentity,
   CrossInstanceRoot,
