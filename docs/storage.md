@@ -29,7 +29,7 @@ CREATE TABLE "test-lookup-operations".orders (
   generated with `node:crypto.randomUUID` when absent, before the statement runs, which is what
   makes `insert` able to return the keys it created without reading anything back.
 - **`_instance` is the instance discriminator**, defaulting to `''` for the unnamed instance, and it
-  is the *leading* column of the primary key — so `WHERE _instance = $1` is served by the primary
+  is the _leading_ column of the primary key — so `WHERE _instance = $1` is served by the primary
   key with no extra index, and `CROSS_INSTANCE` is simply the absence of that predicate. Every
   document a read answers carries the instance it came from under `_instance`, which is how a
   `CROSS_INSTANCE` read tells its rows apart; the default instance carries no key at all rather
@@ -59,17 +59,17 @@ name is not always the field name verbatim.
 
 The accepted token set is closed and **case-insensitive** — `"date"` and `"Date"` both work.
 
-| Declared | Column type | Notes |
-| --- | --- | --- |
-| `string` | `text` | |
-| `number` | `double precision` | JS numbers *are* float64, so this is exact rather than a compromise |
-| `boolean` | `boolean` | |
-| `date` | `timestamptz` | read back as a `Date` |
-| `object` / `any` | `jsonb` | no declared shape |
-| nested record, e.g. `{ a: "number" }` | `jsonb` | shape is remembered for type inference |
-| `"string[]"` or `["string"]` | `jsonb` | see below |
-| io-ts codec at the field root | `jsonb` | **the codec is recorded and never invoked** — the field behaves as a plain shapeless `jsonb` column |
-| anything else | — | error at registration, naming the field |
+| Declared                              | Column type        | Notes                                                                                               |
+| ------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------- |
+| `string`                              | `text`             |                                                                                                     |
+| `number`                              | `double precision` | JS numbers _are_ float64, so this is exact rather than a compromise                                 |
+| `boolean`                             | `boolean`          |                                                                                                     |
+| `date`                                | `timestamptz`      | read back as a `Date`                                                                               |
+| `object` / `any`                      | `jsonb`            | no declared shape                                                                                   |
+| nested record, e.g. `{ a: "number" }` | `jsonb`            | shape is remembered for type inference                                                              |
+| `"string[]"` or `["string"]`          | `jsonb`            | see below                                                                                           |
+| io-ts codec at the field root         | `jsonb`            | **the codec is recorded and never invoked** — the field behaves as a plain shapeless `jsonb` column |
+| anything else                         | —                  | error at registration, naming the field                                                             |
 
 **Arrays map to `jsonb`, not to native `text[]`.** jsonb's `->` is 0-based, which matches the
 interface's array indexing; `jsonb_array_elements` handles nested and heterogeneous arrays
@@ -96,17 +96,17 @@ serve it.
 
 Registration reconciles the declared schema against what is actually in the database.
 
-| Change | `safe` (default) | `destructive` |
-| --- | --- | --- |
-| New declared field | `ADD COLUMN` | `ADD COLUMN` |
-| Declared type differs from the column | **error naming the field** | `ALTER COLUMN … TYPE` |
-| Column exists, no longer declared | warning, column kept | `DROP COLUMN` |
-| Index missing | `CREATE INDEX` | same |
-| Index definition changed | `DROP` + `CREATE` | same |
-| Adapter-owned index no longer declared | `DROP INDEX` | same |
-| Index this adapter did not create | left alone | left alone |
+| Change                                 | `safe` (default)           | `destructive`         |
+| -------------------------------------- | -------------------------- | --------------------- |
+| New declared field                     | `ADD COLUMN`               | `ADD COLUMN`          |
+| Declared type differs from the column  | **error naming the field** | `ALTER COLUMN … TYPE` |
+| Column exists, no longer declared      | warning, column kept       | `DROP COLUMN`         |
+| Index missing                          | `CREATE INDEX`             | same                  |
+| Index definition changed               | `DROP` + `CREATE`          | same                  |
+| Adapter-owned index no longer declared | `DROP INDEX`               | same                  |
+| Index this adapter did not create      | left alone                 | left alone            |
 
-A type mismatch is fatal under `safe` because it is otherwise a *query-time* failure, silent until
+A type mismatch is fatal under `safe` because it is otherwise a _query-time_ failure, silent until
 the first read. Dropping an index loses no data, which is why the index rows need no opt-in.
 
 **A newly added column is backfilled out of `_extra` in the same transaction.** Adding a field to a

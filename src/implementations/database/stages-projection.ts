@@ -54,9 +54,10 @@ const MapStage: PipelineStage = (relation, stage, context) => {
  */
 const PluckStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, PROJECTION_BLOCKERS, context);
-  const members = FieldNames(stage).map(
-    (name): DocumentMember => ({ name, ...prepared.source.field(name) }),
-  );
+  const members = FieldNames(stage).map((name): DocumentMember => ({
+    name,
+    ...prepared.source.field(name),
+  }));
   return SetProjection(prepared, BuildDocument(members));
 };
 
