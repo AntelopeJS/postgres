@@ -1,11 +1,12 @@
 import assert from "node:assert";
+
+import { PhysicalType, TEXT } from "./types";
 import {
   type Compiled,
   QualifiedColumn,
   QuoteIdentifier,
   QuoteLiteral,
 } from "./sql";
-import { PhysicalType, TEXT } from "./types";
 
 /** A `text[]` of literal keys, which is the operand every key-set operator takes. */
 export function TextArray(names: readonly string[]): string {

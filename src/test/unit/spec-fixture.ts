@@ -1,10 +1,10 @@
+import type { Compilers } from "../../implementations/database/context";
 import {
   ClearOptions,
   GetOptions,
   type Options,
   SetOptions,
 } from "../../config";
-import type { Compilers } from "../../implementations/database/context";
 
 function Refusing(kind: string): () => never {
   return () => {

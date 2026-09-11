@@ -1,6 +1,8 @@
 import type { QueryStage } from "@antelopejs/interface-database/common";
-import { AsFloat, Moment, UTC_ZONE } from "./readings";
+
+import { BOOL } from "./types";
 import { type Compiled, QuoteLiteral } from "./sql";
+import { AsFloat, Moment, UTC_ZONE } from "./readings";
 import {
   AsValue,
   BuildStages,
@@ -11,7 +13,6 @@ import {
   type StageHandler,
   type StageMap,
 } from "./stage";
-import { BOOL } from "./types";
 
 type LocalReading = (local: string) => string;
 

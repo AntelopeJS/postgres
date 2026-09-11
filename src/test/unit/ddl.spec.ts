@@ -1,6 +1,10 @@
-import type { TableDefinition } from "@antelopejs/interface-database/schema";
 import { expect } from "chai";
+import type { TableDefinition } from "@antelopejs/interface-database/schema";
+
 import type { MigrationMode } from "../../config";
+import { FLOAT } from "../../implementations/database/types";
+import { ParseTable } from "../../implementations/database/fields";
+import { PgIdentifier } from "../../implementations/database/identifier";
 import {
   type ActualColumn,
   type ActualIndex,
@@ -15,9 +19,6 @@ import {
   PlanTable,
   type TablePlan,
 } from "../../implementations/database/ddl";
-import { ParseTable } from "../../implementations/database/fields";
-import { PgIdentifier } from "../../implementations/database/identifier";
-import { FLOAT } from "../../implementations/database/types";
 
 const vehicles: TableDefinition = {
   fields: { car: "string", price: "number", tags: "string[]" },

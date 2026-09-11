@@ -1,18 +1,24 @@
+import { expect } from "chai";
 import { SchemaInstance } from "@antelopejs/interface-database";
 import { QueryStage } from "@antelopejs/interface-database/common";
 import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
-import { expect } from "chai";
-import { DecodingContext } from "../../implementations/database/context";
-import {
-  CountOpenCursors,
-  type CursorOpener,
-} from "../../implementations/database/cursors";
-import { CompileExpression } from "../../implementations/database/expression";
+
+import { Schemas } from "../../implementations/database/schema";
+import { ParamLedgerOf, WhileConfigured } from "./spec-fixture";
+import { FLOAT, TEXT } from "../../implementations/database/types";
 import type { TableShape } from "../../implementations/database/fields";
+import { DecodingContext } from "../../implementations/database/context";
+import { CompileSubquery } from "../../implementations/database/subquery";
+import { CompileExpression } from "../../implementations/database/expression";
+import type { OriginResolver } from "../../implementations/database/selection";
 import {
   CompileRelation,
   REJECTED_STAGES,
 } from "../../implementations/database/pipeline";
+import {
+  CountOpenCursors,
+  type CursorOpener,
+} from "../../implementations/database/cursors";
 import {
   CloseCursor,
   CompileCursor,
@@ -25,11 +31,6 @@ import {
   type TableOrigin,
   TableRelation,
 } from "../../implementations/database/relation";
-import { Schemas } from "../../implementations/database/schema";
-import type { OriginResolver } from "../../implementations/database/selection";
-import { CompileSubquery } from "../../implementations/database/subquery";
-import { FLOAT, TEXT } from "../../implementations/database/types";
-import { ParamLedgerOf, WhileConfigured } from "./spec-fixture";
 
 const PEOPLE: TableShape = {
   fields: {

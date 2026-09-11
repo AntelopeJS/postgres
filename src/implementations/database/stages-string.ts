@@ -1,6 +1,8 @@
-import type { DecodingContext } from "./context";
-import { AsFloat, INT4_MAX, INT4_MIN, Text } from "./readings";
+import { DecodeValue } from "./value";
 import { type Compiled, Param } from "./sql";
+import type { DecodingContext } from "./context";
+import { ArrayOf, BOOL, type SqlType, TEXT } from "./types";
+import { AsFloat, INT4_MAX, INT4_MIN, Text } from "./readings";
 import {
   BuildStages,
   FIRST_OPERAND,
@@ -10,8 +12,6 @@ import {
   type StageHandler,
   type StageMap,
 } from "./stage";
-import { ArrayOf, BOOL, type SqlType, TEXT } from "./types";
-import { DecodeValue } from "./value";
 
 interface SplitOptions {
   separator?: string;

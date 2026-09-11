@@ -1,15 +1,14 @@
-import { ValueProxy } from "@antelopejs/interface-database";
 import { expect } from "chai";
+import { ValueProxy } from "@antelopejs/interface-database";
+
+import type { TableShape } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import { CompileExpression } from "../../implementations/database/expression";
-import type { TableShape } from "../../implementations/database/fields";
 import {
-  ID_AS_ASSERTION,
-  ID_AS_KEY,
-  type PayloadOptions,
-  type PayloadSplit,
-  SplitPayload,
-} from "../../implementations/database/payload";
+  type ParamLedger,
+  ParamLedgerOf,
+  RefusingCompilers,
+} from "./spec-fixture";
 import {
   BOOL,
   FLOAT,
@@ -18,10 +17,12 @@ import {
   TIMESTAMP,
 } from "../../implementations/database/types";
 import {
-  type ParamLedger,
-  ParamLedgerOf,
-  RefusingCompilers,
-} from "./spec-fixture";
+  ID_AS_ASSERTION,
+  ID_AS_KEY,
+  type PayloadOptions,
+  type PayloadSplit,
+  SplitPayload,
+} from "../../implementations/database/payload";
 
 const vehicles: TableShape = {
   fields: {

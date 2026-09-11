@@ -1,5 +1,6 @@
-import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
 import { expect } from "chai";
+import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
+
 import {
   GetSchema,
   GetTableNames,

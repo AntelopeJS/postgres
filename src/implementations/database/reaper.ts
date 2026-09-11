@@ -1,7 +1,9 @@
 import type { ClientBase } from "pg";
-import { GetOptions } from "../../config";
-import { AcquireClient, RegisterBeforeDisconnect } from "../../connection";
+
 import { Logger } from "../../logger";
+import { GetOptions } from "../../config";
+import { CHANGE_LOG_TABLE, REGISTRY_SCHEMA } from "./utils";
+import { AcquireClient, RegisterBeforeDisconnect } from "../../connection";
 import {
   CREATED_COLUMN,
   EPOCH_COLUMN,
@@ -11,7 +13,6 @@ import {
   SEQ_COLUMN,
   SINGLETON_COLUMN,
 } from "./changes";
-import { CHANGE_LOG_TABLE, REGISTRY_SCHEMA } from "./utils";
 
 /**
  * The advisory lock every reaping process contends for, a literal so `pg_locks` greps back here.

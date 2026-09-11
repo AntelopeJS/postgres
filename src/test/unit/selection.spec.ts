@@ -1,12 +1,15 @@
+import { expect } from "chai";
+import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 import { SchemaInstance, ValueProxy } from "@antelopejs/interface-database";
 import {
   QueryStage,
   type StagedObject,
 } from "@antelopejs/interface-database/common";
-import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
-import { expect } from "chai";
-import { DecodingContext } from "../../implementations/database/context";
+
+import { RefusingCompilers, WithOptions } from "./spec-fixture";
+import { FLOAT, TEXT } from "../../implementations/database/types";
 import type { TableShape } from "../../implementations/database/fields";
+import { DecodingContext } from "../../implementations/database/context";
 import type { TableOrigin } from "../../implementations/database/relation";
 import {
   BuildRoot,
@@ -14,8 +17,6 @@ import {
   RegisteredOrigin,
   type RootSelection,
 } from "../../implementations/database/selection";
-import { FLOAT, TEXT } from "../../implementations/database/types";
-import { RefusingCompilers, WithOptions } from "./spec-fixture";
 
 interface Vehicle {
   car: string;
@@ -58,7 +59,7 @@ function NewContext(): DecodingContext {
   return new DecodingContext(RefusingCompilers(), StubOrigin);
 }
 
-function Root(schemaId = SCHEMA_ID, instanceId: InstanceId = undefined) {
+function Root(schemaId = SCHEMA_ID, instanceId?: InstanceId) {
   const schema = new SchemaInstance<Shop>(
     QueryStage("schema", { id: schemaId }),
   );

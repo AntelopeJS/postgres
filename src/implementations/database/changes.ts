@@ -1,5 +1,5 @@
-import { QualifiedName, SchemaName, TableName } from "./identifier";
 import { QuoteIdentifier, QuoteLiteral } from "./sql";
+import { QualifiedName, SchemaName, TableName } from "./identifier";
 import {
   CHANGE_LOG_TABLE,
   CHANGE_REAPED_TABLE,

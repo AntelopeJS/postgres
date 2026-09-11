@@ -1,9 +1,10 @@
+import { expect } from "chai";
+import { Query } from "@antelopejs/interface-database/query";
 import {
   QueryStage,
   type StagedObject,
 } from "@antelopejs/interface-database/common";
-import { Query } from "@antelopejs/interface-database/query";
-import { expect } from "chai";
+
 import { ID_COLUMN } from "../../implementations/database/utils";
 import {
   Apply,

@@ -1,3 +1,13 @@
+import { AsJson } from "./readings";
+import { type Compiled, QuoteLiteral } from "./sql";
+import {
+  ArrayOf,
+  BOOL,
+  MergeShapes,
+  OPAQUE,
+  type SqlType,
+  TEXT,
+} from "./types";
 import {
   Collected,
   GuardJson,
@@ -9,8 +19,6 @@ import {
   Walk,
   WalkColumn,
 } from "./jsonb";
-import { AsJson } from "./readings";
-import { type Compiled, QuoteLiteral } from "./sql";
 import {
   AsSource,
   FIRST_OPERAND,
@@ -22,14 +30,6 @@ import {
   type StageHandler,
   type StageMap,
 } from "./stage";
-import {
-  ArrayOf,
-  BOOL,
-  MergeShapes,
-  OPAQUE,
-  type SqlType,
-  TEXT,
-} from "./types";
 
 const KEY_COLUMN = "key";
 const MERGED_COLUMN = "merged";

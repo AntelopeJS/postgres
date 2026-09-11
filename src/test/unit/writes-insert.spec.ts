@@ -1,9 +1,10 @@
+import { expect } from "chai";
+import { QueryStage } from "@antelopejs/interface-database/common";
 import type {
   DeepPartial,
   InsertOptions,
 } from "@antelopejs/interface-database/common";
-import { QueryStage } from "@antelopejs/interface-database/common";
-import { expect } from "chai";
+
 import { SplitWrite } from "../../implementations/database/writes";
 import {
   CrossInstanceRoot,

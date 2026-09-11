@@ -1,6 +1,12 @@
 import { Cast, WithDefault } from "./coerce";
-import { DocumentKeys, type TableShape } from "./fields";
 import { Defaulted, StoredAs } from "./readings";
+import { DocumentKeys, type TableShape } from "./fields";
+import {
+  DEFAULT_INSTANCE_ID,
+  EXTRA_COLUMN,
+  ID_COLUMN,
+  INSTANCE_COLUMN,
+} from "./utils";
 import {
   type Compiled,
   JSON_NULL,
@@ -17,12 +23,6 @@ import {
   type SqlType,
   TEXT,
 } from "./types";
-import {
-  DEFAULT_INSTANCE_ID,
-  EXTRA_COLUMN,
-  ID_COLUMN,
-  INSTANCE_COLUMN,
-} from "./utils";
 
 /**
  * Field access over a row, so the same expression compiler works against native typed columns

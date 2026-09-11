@@ -1,18 +1,18 @@
-import { WithDefault } from "./coerce";
-import { ARRAY_TYPEOF, HeldOnce, OBJECT_TYPEOF, TextArray } from "./jsonb";
-import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { AsJson } from "./readings";
+import { WithDefault } from "./coerce";
+import { type Compiled, QuoteLiteral } from "./sql";
+import { JsonOf, OPAQUE, ShapeOf, type SqlType } from "./types";
+import { DecodeFunction, DecodeValue, NULL_JSON } from "./value";
+import type { PipelineStage, PipelineStageMap } from "./pipeline";
+import { BuildDocument, type DocumentMember } from "./row-source";
+import { ARRAY_TYPEOF, HeldOnce, OBJECT_TYPEOF, TextArray } from "./jsonb";
+import { FIRST_OPERAND, FieldNames, FieldOf, RequireOperand } from "./stage";
 import {
   CurrentValue,
   Prepare,
   type RelationFlag,
   SetProjection,
 } from "./relation";
-import { BuildDocument, type DocumentMember } from "./row-source";
-import { type Compiled, QuoteLiteral } from "./sql";
-import { FIRST_OPERAND, FieldNames, FieldOf, RequireOperand } from "./stage";
-import { JsonOf, OPAQUE, ShapeOf, type SqlType } from "./types";
-import { DecodeFunction, DecodeValue, NULL_JSON } from "./value";
 
 /**
  * Every projection stage is blocked by a pending projection and by nothing else.
@@ -54,9 +54,10 @@ const MapStage: PipelineStage = (relation, stage, context) => {
  */
 const PluckStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, PROJECTION_BLOCKERS, context);
-  const members = FieldNames(stage).map(
-    (name): DocumentMember => ({ name, ...prepared.source.field(name) }),
-  );
+  const members = FieldNames(stage).map((name): DocumentMember => ({
+    name,
+    ...prepared.source.field(name),
+  }));
   return SetProjection(prepared, BuildDocument(members));
 };
 

@@ -1,14 +1,15 @@
 import type { QueryStage } from "@antelopejs/interface-database/common";
-import type { DecodingContext } from "./context";
-import type { RowSource } from "./row-source";
+
 import type { Compiled } from "./sql";
-import { AsValue, type ExpressionState, type StageMap } from "./stage";
-import { ARRAY_STAGES } from "./stages-array";
 import { CORE_STAGES } from "./stages-core";
 import { DATE_STAGES } from "./stages-date";
-import { NUMERIC_STAGES } from "./stages-numeric";
+import type { RowSource } from "./row-source";
+import { ARRAY_STAGES } from "./stages-array";
 import { OBJECT_STAGES } from "./stages-object";
 import { STRING_STAGES } from "./stages-string";
+import type { DecodingContext } from "./context";
+import { NUMERIC_STAGES } from "./stages-numeric";
+import { AsValue, type ExpressionState, type StageMap } from "./stage";
 
 export const STAGES: StageMap = {
   ...CORE_STAGES,

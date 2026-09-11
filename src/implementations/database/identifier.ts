@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { GetSchemaPrefix } from "../../connection";
+
 import { QuoteIdentifier } from "./sql";
 import { MAX_IDENTIFIER_BYTES } from "./utils";
+import { GetSchemaPrefix } from "../../connection";
 
 const HASH_LENGTH = 7;
 const HASH_SEPARATOR = "_";

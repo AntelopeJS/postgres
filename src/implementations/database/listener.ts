@@ -1,9 +1,10 @@
 import { Client } from "pg";
-import { GetOptions } from "../../config";
-import { RegisterBeforeDisconnect } from "../../connection";
+
 import { Logger } from "../../logger";
-import { CHANGE_CHANNEL } from "./changes";
 import { QuoteIdentifier } from "./sql";
+import { GetOptions } from "../../config";
+import { CHANGE_CHANNEL } from "./changes";
+import { RegisterBeforeDisconnect } from "../../connection";
 
 /**
  * What a notification means to a feed: this target changed, or everything may have.
@@ -43,7 +44,7 @@ export function SubscribeToChanges(subscriber: ChangeSubscriber): () => void {
 }
 
 function Announce(target?: string) {
-  for (const subscriber of [...subscribers]) {
+  for (const subscriber of subscribers) {
     subscriber(target);
   }
 }
@@ -116,7 +117,7 @@ export function EnsureListening(): Promise<void> {
 }
 
 /** Ends the listener; registered below so `Disconnect` closes it rather than leaving it open. */
-export async function StopListening(): Promise<void> {
+async function StopListening(): Promise<void> {
   isStopped = true;
   if (retry) {
     clearTimeout(retry);
@@ -129,10 +130,6 @@ export async function StopListening(): Promise<void> {
   if (open) {
     await open.end().catch(() => undefined);
   }
-}
-
-export function IsListening(): boolean {
-  return client !== undefined;
 }
 
 RegisterBeforeDisconnect(StopListening);

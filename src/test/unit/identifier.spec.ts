@@ -1,4 +1,6 @@
 import { expect } from "chai";
+
+import { WithOptions } from "./spec-fixture";
 import {
   IndexName,
   PgIdentifier,
@@ -7,7 +9,6 @@ import {
   TableName,
   TableReference,
 } from "../../implementations/database/identifier";
-import { WithOptions } from "./spec-fixture";
 
 const LONG = "a".repeat(100);
 const MULTIBYTE = "é".repeat(40);

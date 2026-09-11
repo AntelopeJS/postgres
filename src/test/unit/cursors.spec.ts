@@ -1,7 +1,10 @@
 import { expect } from "chai";
 import type { PoolClient } from "pg";
+
 import type { Options } from "../../config";
+import { WithOptions } from "./spec-fixture";
 import { SettleBeforeDisconnect } from "../../connection";
+import type { ResultRow } from "../../implementations/database/query";
 import {
   CloseAllCursors,
   CloseOneCursor,
@@ -9,8 +12,6 @@ import {
   type CursorOpener,
   ReadCursorRow,
 } from "../../implementations/database/cursors";
-import type { ResultRow } from "../../implementations/database/query";
-import { WithOptions } from "./spec-fixture";
 
 const CURSOR = '"antelopejs_cursor"';
 const SQL = 'SELECT "n" FROM "t" WHERE "n" > ($1::int)';

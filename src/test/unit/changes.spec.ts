@@ -1,10 +1,11 @@
 import { expect } from "chai";
+
+import { WithOptions } from "./spec-fixture";
 import {
   CHANGE_CHANNEL,
   CHANGE_LOG_STATEMENTS,
   TriggerStatements,
 } from "../../implementations/database/changes";
-import { WithOptions } from "./spec-fixture";
 
 const SCHEMA_ID = "shop";
 const TABLE_ID = "orders";

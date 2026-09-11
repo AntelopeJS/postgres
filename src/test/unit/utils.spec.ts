@@ -1,5 +1,6 @@
-import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 import { expect } from "chai";
+import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
+
 import { NormalizeInstanceId } from "../../implementations/database/utils";
 
 describe("NormalizeInstanceId", () => {

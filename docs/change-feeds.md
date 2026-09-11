@@ -7,8 +7,10 @@ feed structurally cannot see.
 **iterated**, and it must be the **last** stage of a query.
 
 ```typescript
-for await (const change of table.filter((d) => d.key("price").lt(100)).changes()) {
-    console.log(change.changeType, change.oldValue, change.newValue);
+for await (const change of table
+  .filter((d) => d.key("price").lt(100))
+  .changes()) {
+  console.log(change.changeType, change.oldValue, change.newValue);
 }
 ```
 
@@ -22,13 +24,13 @@ one process trims per pass, however many you run.
 **Ordering.** Per-row order is guaranteed: two writers to the same row serialize on its lock and so
 are delivered in commit order. Across unrelated rows, delivery is in insert order. A reader consumes
 only events whose transaction has settled, so nothing is skipped when two writers commit out of
-order — the cost is that one long-running *writing* transaction anywhere in the database delays
+order — the cost is that one long-running _writing_ transaction anywhere in the database delays
 delivery until it ends. A long-running read-only transaction does not.
 
 **Delivery is at-least-once at the moment a feed opens.** The horizon a feed opens above is computed
 across every backend on the server, so while any write transaction is open anywhere, a row that had
 already committed can fall below it and be delivered as though it were new. Erring that way is
-deliberate: the other direction opens *above* transactions that have not settled, which loses events
+deliberate: the other direction opens _above_ transactions that have not settled, which loses events
 rather than repeating them. A consumer that cannot tolerate a repeat should compare `oldValue` and
 `newValue` rather than assume every event is a change it has not seen.
 
@@ -38,7 +40,7 @@ lost**, rather than quietly falling out of sync. A feed also ends if the server 
 the log does not survive one.
 
 **A filtered feed shows a row's whole lifetime.** The predicate is evaluated on both sides of an
-event and the event is delivered if *either* matched, so you see rows entering and leaving the
+event and the event is delivered if _either_ matched, so you see rows entering and leaving the
 filter as well as changing within it. `changeType` describes what happened to the **row**, not to
 its membership, so entering and leaving are both `modified`; compare `oldValue` and `newValue` to
 tell them apart.
@@ -51,7 +53,7 @@ filter, which is what lets you see what a row looked like before it left.
 Accepted before `changes()`: `filter`, `map`, `pluck`, `without`, `key`, `default`, `get`, `getAll`,
 `between` and `lookup`. A `lookup` resolves against the other table **as of delivery**, not as of
 the event. On a feed `get(k)` is the predicate alone — the lowest-`_instance` rule it carries on the
-read path bounds a *relation*, and a stream of independent events has nothing for it to bound.
+read path bounds a _relation_, and a stream of independent events has nothing for it to bound.
 
 **A feed never times out.** A quiet table and an abandoned consumer look the same from here, both
 sitting on a read that has not been answered, and a feed holds no connection to reclaim — so nothing

@@ -1,4 +1,10 @@
 import { expect } from "chai";
+
+import { WhileConfigured } from "./spec-fixture";
+import type { QueryStage } from "../../implementations/database/utils";
+import type { TableShape } from "../../implementations/database/fields";
+import type { TableOrigin } from "../../implementations/database/relation";
+import { CloseCursor, ReadCursor } from "../../implementations/database/query";
 import {
   CloseAllFeeds,
   CloseOneFeed,
@@ -7,11 +13,6 @@ import {
   IsRegisteredFeed,
   ReadFeedEvent,
 } from "../../implementations/database/feeds";
-import type { TableShape } from "../../implementations/database/fields";
-import { CloseCursor, ReadCursor } from "../../implementations/database/query";
-import type { TableOrigin } from "../../implementations/database/relation";
-import type { QueryStage } from "../../implementations/database/utils";
-import { WhileConfigured } from "./spec-fixture";
 
 /**
  * A feed that never opens against a live schema, driven entirely through the reader seam.

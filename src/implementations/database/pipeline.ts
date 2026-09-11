@@ -1,15 +1,15 @@
-import { CHANGES_STAGE } from "./changes";
-import type { DecodingContext } from "./context";
-import type { Relation } from "./relation";
-import { BuildRoot } from "./selection";
-import { AGGREGATE_STAGES } from "./stages-aggregate";
-import { GROUP_STAGES } from "./stages-group";
-import { JOIN_STAGES } from "./stages-join";
-import { PROJECTION_STAGES } from "./stages-projection";
-import { ROW_STAGES } from "./stages-rows";
-import { SELECTION_STAGES } from "./stages-selection";
-import type { QueryStage } from "./utils";
 import { SplitWrite } from "./writes";
+import { BuildRoot } from "./selection";
+import { CHANGES_STAGE } from "./changes";
+import type { QueryStage } from "./utils";
+import type { Relation } from "./relation";
+import { ROW_STAGES } from "./stages-rows";
+import { JOIN_STAGES } from "./stages-join";
+import { GROUP_STAGES } from "./stages-group";
+import type { DecodingContext } from "./context";
+import { AGGREGATE_STAGES } from "./stages-aggregate";
+import { SELECTION_STAGES } from "./stages-selection";
+import { PROJECTION_STAGES } from "./stages-projection";
 
 /**
  * One step of the read pipeline: it either absorbs into the relation it is given or wraps it,

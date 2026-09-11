@@ -1,22 +1,16 @@
 import assert from "node:assert";
-import type { DecodingContext } from "./context";
-import { PRIMARY_KEY_COLUMNS } from "./ddl";
-import { DeclaredColumns, DocumentKeys, type TableShape } from "./fields";
-import { GuardJson, OBJECT_TYPEOF, TextArray } from "./jsonb";
-import {
-  ID_AS_ASSERTION,
-  MembersByColumn,
-  type PayloadOptions,
-  type PayloadSplit,
-  SplitPayload,
-} from "./payload";
+
 import { AsJson } from "./readings";
-import { Render, type TableOrigin } from "./relation";
-import { JsonRowSource } from "./row-source";
-import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import { FIRST_OPERAND } from "./stage";
+import { PRIMARY_KEY_COLUMNS } from "./ddl";
+import { JsonRowSource } from "./row-source";
 import { JsonOf, type SqlShape } from "./types";
+import type { DecodingContext } from "./context";
+import { Render, type TableOrigin } from "./relation";
+import { GuardJson, OBJECT_TYPEOF, TextArray } from "./jsonb";
 import { EXTRA_COLUMN, ID_COLUMN, type QueryStage } from "./utils";
+import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
+import { DeclaredColumns, DocumentKeys, type TableShape } from "./fields";
 import {
   DecodeValue,
   FunctionBody,
@@ -24,6 +18,13 @@ import {
   RecordedFunction,
   WithBoundArguments,
 } from "./value";
+import {
+  ID_AS_ASSERTION,
+  MembersByColumn,
+  type PayloadOptions,
+  type PayloadSplit,
+  SplitPayload,
+} from "./payload";
 import {
   AsDocument,
   Assignment,

@@ -1,8 +1,25 @@
 import type { Changes } from "@antelopejs/interface-database/common";
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
-import { GetOptions, type ResolvedOptions } from "../../config";
-import { Query, RegisterBeforeDisconnect } from "../../connection";
+
 import { Logger } from "../../logger";
+import { ReviveValue } from "./result";
+import type { SqlType } from "./types";
+import { QuoteIdentifier } from "./sql";
+import { EnsureTriggers } from "./migrate";
+import { WaitForSchemaReady } from "./schema";
+import { RegisteredOrigin } from "./selection";
+import { SchemaName, TableName } from "./identifier";
+import { OUTPUT_COLUMN, type TableOrigin } from "./relation";
+import { DEFAULT_INSTANCE_ID, type QueryStage } from "./utils";
+import { GetOptions, type ResolvedOptions } from "../../config";
+import { EnsureListening, SubscribeToChanges } from "./listener";
+import { Query, RegisterBeforeDisconnect } from "../../connection";
+import {
+  CompileFeed,
+  DOC_KEY,
+  type FeedPlan,
+  MATCHED_KEY,
+} from "./feed-pipeline";
 import {
   type ChangeOperation,
   EPOCH_COLUMN,
@@ -18,22 +35,6 @@ import {
   TABLE_COLUMN,
   TXID_COLUMN,
 } from "./changes";
-import {
-  CompileFeed,
-  DOC_KEY,
-  type FeedPlan,
-  MATCHED_KEY,
-} from "./feed-pipeline";
-import { SchemaName, TableName } from "./identifier";
-import { EnsureListening, SubscribeToChanges } from "./listener";
-import { EnsureTriggers } from "./migrate";
-import { OUTPUT_COLUMN, type TableOrigin } from "./relation";
-import { ReviveValue } from "./result";
-import { WaitForSchemaReady } from "./schema";
-import { RegisteredOrigin } from "./selection";
-import { QuoteIdentifier } from "./sql";
-import type { SqlType } from "./types";
-import { DEFAULT_INSTANCE_ID, type QueryStage } from "./utils";
 
 /** One side of an event as the laterals answered it: what it projects, and whether it matched. */
 interface LoggedSide {
@@ -56,7 +57,7 @@ interface PollRow {
 }
 
 /** What a feed watches: the physical names the trigger wrote, and the instance it is scoped to. */
-export interface FeedTarget {
+interface FeedTarget {
   readonly schemaId: string;
   readonly tableId: string;
   readonly schemaName: string;
@@ -84,7 +85,7 @@ const OUTPUT = QuoteIdentifier(OUTPUT_COLUMN);
 
 /** The settled slice of a batch, which the laterals and the presence guard both address. */
 const EVENT_CTE = QuoteIdentifier("settled");
-export const EVENT = QuoteIdentifier("ev");
+const EVENT = QuoteIdentifier("ev");
 
 const INSTANCE_PARAM = 3;
 
@@ -571,10 +572,6 @@ export async function CloseAllFeeds(): Promise<void> {
   } finally {
     isSweeping = false;
   }
-}
-
-export function CountOpenFeeds(): number {
-  return [...feeds.values()].filter((state) => !state.reason).length;
 }
 
 RegisterBeforeDisconnect(CloseAllFeeds);

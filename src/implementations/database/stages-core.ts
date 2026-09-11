@@ -1,6 +1,8 @@
-import { type CompiledPair, UnifyOperands, WithDefault } from "./coerce";
-import { AsJson, Predicate } from "./readings";
 import type { Compiled } from "./sql";
+import { AsJson, Predicate } from "./readings";
+import { DecodeValue, NULL_JSON } from "./value";
+import { BOOL, IsJsonBacked, IsOpaque, OPAQUE } from "./types";
+import { type CompiledPair, UnifyOperands, WithDefault } from "./coerce";
 import {
   BuildStages,
   FIRST_OPERAND,
@@ -9,8 +11,6 @@ import {
   type StageHandler,
   type StageMap,
 } from "./stage";
-import { BOOL, IsJsonBacked, IsOpaque, OPAQUE } from "./types";
-import { DecodeValue, NULL_JSON } from "./value";
 
 type Equality = (value: Compiled, other: Compiled) => Compiled;
 

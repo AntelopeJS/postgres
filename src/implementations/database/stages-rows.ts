@@ -1,10 +1,15 @@
 import assert from "node:assert";
 import { Query } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
+
+import type { Compiled } from "./sql";
 import { Cast, Widen } from "./coerce";
+import type { SqlType } from "./types";
 import type { DecodingContext } from "./context";
+import { DecodeFunction, DecodeValue } from "./value";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { ClampToRange, INT4_MAX, Numeric, Predicate } from "./readings";
+import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import {
   CurrentValue,
   IndexColumns,
@@ -19,10 +24,6 @@ import {
   ValueRelation,
   WHERE_BLOCKERS,
 } from "./relation";
-import type { Compiled } from "./sql";
-import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
-import type { SqlType } from "./types";
-import { DecodeFunction, DecodeValue } from "./value";
 
 /**
  * An `ORDER BY` runs before the row bounds, so those and an aggregate are what block it.

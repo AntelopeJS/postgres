@@ -1,11 +1,12 @@
-import type { FieldType } from "@antelopejs/interface-database/schema";
 import { expect } from "chai";
+import type { FieldType } from "@antelopejs/interface-database/schema";
+
+import { PgIdentifier } from "../../implementations/database/identifier";
 import {
   DocumentKeys,
   ParseFieldType,
   ParseTable,
 } from "../../implementations/database/fields";
-import { PgIdentifier } from "../../implementations/database/identifier";
 import {
   ArrayOf,
   FLOAT,

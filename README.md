@@ -60,12 +60,12 @@ Cursor and change-feed tuning, and what each option does, is in
 
 ## Documentation
 
-| | |
-| --- | --- |
-| [Storage and schema](./docs/storage.md) | What a registered schema becomes in the database, the field-type table, what reaches an index, and how registration converges |
-| [Configuration](./docs/configuration.md) | Every option `construct` accepts |
-| [Change feeds](./docs/change-feeds.md) | `changes()`, its ordering guarantee, its retention contract and its blind spots |
-| [Errors and refusals](./docs/errors.md) | Everything the module refuses, with the message it refuses by |
+|                                                |                                                                                                                                                    |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Storage and schema](./docs/storage.md)        | What a registered schema becomes in the database, the field-type table, what reaches an index, and how registration converges                      |
+| [Configuration](./docs/configuration.md)       | Every option `construct` accepts                                                                                                                   |
+| [Change feeds](./docs/change-feeds.md)         | `changes()`, its ordering guarantee, its retention contract and its blind spots                                                                    |
+| [Errors and refusals](./docs/errors.md)        | Everything the module refuses, with the message it refuses by                                                                                      |
 | [Behaviour worth knowing](./docs/behaviour.md) | Things that answer rather than throw, where the answer may surprise you — including where this backend differs from the MongoDB and RethinkDB ones |
 
 ## Development

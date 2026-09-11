@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import type { ClientBase, QueryResult } from "pg";
+
 import { EnsureTriggers } from "../../implementations/database/migrate";
 import { ReapInterval, ReapOnce } from "../../implementations/database/reaper";
 

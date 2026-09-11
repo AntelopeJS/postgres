@@ -5,8 +5,9 @@ import {
   type QueryResult,
   type QueryResultRow,
 } from "pg";
-import { ClearOptions, GetOptions, type Options, SetOptions } from "./config";
+
 import { Logger } from "./logger";
+import { ClearOptions, GetOptions, type Options, SetOptions } from "./config";
 
 const NOT_CONNECTED =
   "PostgreSQL adapter is not connected: construct() has not run yet";
@@ -182,10 +183,6 @@ async function EndPool() {
 /** Settles every `RegisterBeforeDisconnect` callback, then ends the pool and forgets the options. */
 export async function Disconnect() {
   await SettleBeforeDisconnect(EndPool);
-}
-
-export function IsConnected() {
-  return pool !== undefined;
 }
 
 export function GetPool(): Pool {

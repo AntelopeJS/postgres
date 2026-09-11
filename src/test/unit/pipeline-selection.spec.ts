@@ -1,5 +1,6 @@
-import { QueryStage } from "@antelopejs/interface-database/common";
 import { expect } from "chai";
+import { QueryStage } from "@antelopejs/interface-database/common";
+
 import { Render } from "../../implementations/database/relation";
 import {
   Apply,

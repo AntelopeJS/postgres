@@ -1,8 +1,9 @@
 import type { PoolClient } from "pg";
+
+import { QuoteIdentifier } from "./sql";
+import type { ResultRow } from "./query";
 import { GetOptions, type ResolvedOptions } from "../../config";
 import { AcquireClient, RegisterBeforeDisconnect } from "../../connection";
-import type { ResultRow } from "./query";
-import { QuoteIdentifier } from "./sql";
 
 const CURSOR_NAME = QuoteIdentifier("antelopejs_cursor");
 const BEGIN = "BEGIN";
@@ -22,10 +23,10 @@ const UNARMED = 0;
 const REMEMBERED_ENDINGS = 1024;
 
 /** Turns the driver's rows into what the caller asked for — `query.ts:DecodeRows`, bound to one relation. */
-export type RowDecoder = (rows: ResultRow[]) => unknown[];
+type RowDecoder = (rows: ResultRow[]) => unknown[];
 
 /** Where a cursor's dedicated client comes from; production never supplies one. */
-export type ClientSource = () => Promise<PoolClient>;
+type ClientSource = () => Promise<PoolClient>;
 
 /**
  * Everything a cursor needs to open, as the caller that compiled it already holds it.

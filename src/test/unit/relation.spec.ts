@@ -1,6 +1,14 @@
 import { expect } from "chai";
-import { DecodingContext } from "../../implementations/database/context";
+
+import { Occurrences, RefusingCompilers } from "./spec-fixture";
 import type { TableShape } from "../../implementations/database/fields";
+import { DecodingContext } from "../../implementations/database/context";
+import {
+  FLOAT,
+  JsonOf,
+  OPAQUE,
+  TEXT,
+} from "../../implementations/database/types";
 import {
   AbsorbOrder,
   CurrentValue,
@@ -14,13 +22,6 @@ import {
   TableRelation,
   ValueRelation,
 } from "../../implementations/database/relation";
-import {
-  FLOAT,
-  JsonOf,
-  OPAQUE,
-  TEXT,
-} from "../../implementations/database/types";
-import { Occurrences, RefusingCompilers } from "./spec-fixture";
 
 const VEHICLES: TableShape = {
   fields: {

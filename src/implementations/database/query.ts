@@ -1,30 +1,31 @@
 import assert from "node:assert";
+
 import { Query } from "../../connection";
 import { CHANGES_STAGE } from "./changes";
 import { DecodingContext } from "./context";
-import { CloseOneCursor, type CursorRequest, ReadCursorRow } from "./cursors";
+import { CompileSubquery } from "./subquery";
 import { CompileExpression } from "./expression";
+import { DecodeRow, ReviveValue } from "./result";
+import { ApplyStages, CompileRelation } from "./pipeline";
+import { GetTableNames, WaitForSchemaReady } from "./schema";
+import { type WriteTarget, WriteTargetOf } from "./writes-shared";
+import { CompileWrite, SplitWrite, type WriteSplit } from "./writes";
 import { CloseOneFeed, IsRegisteredFeed, ReadFeedEvent } from "./feeds";
 import { CreateInstance, DestroyInstance, ListInstances } from "./instances";
-import { ApplyStages, CompileRelation } from "./pipeline";
+import { CREATE_INSTANCE, DESTROY_INSTANCE, type QueryStage } from "./utils";
+import { CloseOneCursor, type CursorRequest, ReadCursorRow } from "./cursors";
 import {
   OUTPUT_COLUMN,
   type Relation,
   Render,
   RequireOrigin,
 } from "./relation";
-import { DecodeRow, ReviveValue } from "./result";
-import { GetTableNames, WaitForSchemaReady } from "./schema";
 import {
   BuildRoot,
   CollectSchemaIds,
   type RootSelection,
   SCHEMA_STAGE,
 } from "./selection";
-import { CompileSubquery } from "./subquery";
-import { CREATE_INSTANCE, DESTROY_INSTANCE, type QueryStage } from "./utils";
-import { CompileWrite, SplitWrite, type WriteSplit } from "./writes";
-import { type WriteTarget, WriteTargetOf } from "./writes-shared";
 
 type LifecycleHandler = (
   schemaId: string,

@@ -1,7 +1,7 @@
-import { Query } from "../../connection";
 import { CreateSchemaSql } from "./ddl";
-import { QualifiedName, SchemaName, TableReference } from "./identifier";
 import { QuoteIdentifier } from "./sql";
+import { Query } from "../../connection";
+import { QualifiedName, SchemaName, TableReference } from "./identifier";
 import {
   CREATE_INSTANCE,
   DEFAULT_INSTANCE_ID,

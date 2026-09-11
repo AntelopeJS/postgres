@@ -1,12 +1,6 @@
 import { expect } from "chai";
+
 import type { TableShape } from "../../implementations/database/fields";
-import {
-  AliasedColumns,
-  BuildDocument,
-  ColumnRowSource,
-  type DocumentMember,
-  JsonRowSource,
-} from "../../implementations/database/row-source";
 import {
   ArrayOf,
   FLOAT,
@@ -15,6 +9,13 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
+import {
+  AliasedColumns,
+  BuildDocument,
+  ColumnRowSource,
+  type DocumentMember,
+  JsonRowSource,
+} from "../../implementations/database/row-source";
 
 const vehicles: TableShape = {
   fields: {
