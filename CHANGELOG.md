@@ -1,0 +1,62 @@
+# Changelog
+
+
+## v0.1.1
+
+
+### 🚀 Enhancements
+
+- Scaffold PostgreSQL database backend ([25d1a84](https://github.com/AntelopeJS/postgres/commit/25d1a84))
+- **query:** Add type and value model ([439ce1e](https://github.com/AntelopeJS/postgres/commit/439ce1e))
+- **schema:** Converge DDL and add instance lifecycle ([d4e50e5](https://github.com/AntelopeJS/postgres/commit/d4e50e5))
+- **query:** Compile every ValueProxy expression stage ([45a4f57](https://github.com/AntelopeJS/postgres/commit/45a4f57))
+- **query:** Build the relation and read pipeline ([de47bbe](https://github.com/AntelopeJS/postgres/commit/de47bbe))
+- **query:** Select rows by key and close the write path ([781e98e](https://github.com/AntelopeJS/postgres/commit/781e98e))
+- **query:** Join, lookup and a query used as a value ([dd71d8c](https://github.com/AntelopeJS/postgres/commit/dd71d8c))
+- **query:** Group and its sub-stream aggregates ([19eb6f4](https://github.com/AntelopeJS/postgres/commit/19eb6f4))
+- **query:** Cursors, and the last scaffold error ([0fc7250](https://github.com/AntelopeJS/postgres/commit/0fc7250))
+- **changes:** The change log, its triggers and the reaper ([1d44791](https://github.com/AntelopeJS/postgres/commit/1d44791))
+- **changes:** The feed registry, its watermark and the three endings ([e9a198d](https://github.com/AntelopeJS/postgres/commit/e9a198d))
+- **changes:** The stages, compiled against a logged event ([702268e](https://github.com/AntelopeJS/postgres/commit/702268e))
+- Report the conditions the adapter used to pass over in silence ([aaded20](https://github.com/AntelopeJS/postgres/commit/aaded20))
+- **database:** Add atomic single-record mutations ([#4](https://github.com/AntelopeJS/postgres/pull/4))
+
+### 🩹 Fixes
+
+- **query:** Harden the type and value model ([3dec954](https://github.com/AntelopeJS/postgres/commit/3dec954))
+- **query:** Read a payload's `_id` as an assertion, not an error ([ed82167](https://github.com/AntelopeJS/postgres/commit/ed82167))
+- **query:** Read a payload's null `_id` as no key supplied ([252cca5](https://github.com/AntelopeJS/postgres/commit/252cca5))
+- **query:** Close the design review's semantic and structural findings ([da1ccfe](https://github.com/AntelopeJS/postgres/commit/da1ccfe))
+- **query:** Settle the eight decisions the design review left open ([412b7e5](https://github.com/AntelopeJS/postgres/commit/412b7e5))
+- Four defects on paths the conformance suite cannot reach ([3f26c1a](https://github.com/AntelopeJS/postgres/commit/3f26c1a))
+- **changes:** Six defects the conformance suite cannot reach ([e92d0a5](https://github.com/AntelopeJS/postgres/commit/e92d0a5))
+- Three gaps between the adapter and the document contract ([7b928bb](https://github.com/AntelopeJS/postgres/commit/7b928bb))
+- **lookup:** Correlate under a plucked projection, so the other key keeps its index ([#3](https://github.com/AntelopeJS/postgres/pull/3))
+- **release:** Publish postgres to the AntelopeJS private registry ([#5](https://github.com/AntelopeJS/postgres/pull/5))
+
+### 💅 Refactors
+
+- Cap private TSDoc at two lines and drop unresolvable citations ([bac0daa](https://github.com/AntelopeJS/postgres/commit/bac0daa))
+
+### 📖 Documentation
+
+- The README as the whole caller-facing contract ([13dd199](https://github.com/AntelopeJS/postgres/commit/13dd199))
+- Split the README's reference material into docs/ ([9df0888](https://github.com/AntelopeJS/postgres/commit/9df0888))
+- Publish the behaviour, refusals and feed detail that lived in source ([fef09ff](https://github.com/AntelopeJS/postgres/commit/fef09ff))
+
+### 🏡 Chore
+
+- Replace Biome with oxlint, oxfmt and Knip ([#2](https://github.com/AntelopeJS/postgres/pull/2))
+
+### 🤖 CI
+
+- Run on Node 22 and 24, since 20 cannot load the test config ([9ac2fc6](https://github.com/AntelopeJS/postgres/commit/9ac2fc6))
+- Standardize npm releases ([f588cd0](https://github.com/AntelopeJS/postgres/commit/f588cd0))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+- Fabrice Cst <fabrice@altab.be>
+- Thomas ([@Thomasims](http://github.com/Thomasims))
+- Thomasims <thomas@antelopejs.com>
+
