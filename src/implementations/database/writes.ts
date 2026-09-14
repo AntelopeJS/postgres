@@ -3,6 +3,7 @@ import assert from "node:assert";
 import type { QueryStage } from "./utils";
 import { InsertWrite } from "./writes-insert";
 import type { DecodingContext } from "./context";
+import { ATOMIC_MUTATION, AtomicWrite } from "./writes-atomic";
 import { DeleteWrite, ReplaceWrite, UpdateWrite } from "./writes-identity";
 import type {
   WriteCompiler,
@@ -41,6 +42,7 @@ export interface WriteSplit {
  * what makes that cut available at all.
  */
 export const WRITE_STAGES: WriteSpecMap = {
+  [ATOMIC_MUTATION]: { compile: AtomicWrite, readsRelation: false },
   insert: { compile: InsertWrite, readsRelation: false },
   update: { compile: UpdateWrite, readsRelation: true },
   replace: { compile: ReplaceWrite, readsRelation: true },

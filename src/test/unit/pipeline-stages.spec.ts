@@ -2,13 +2,14 @@ import { expect } from "chai";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { SingleSelection, Table } from "@antelopejs/interface-database";
+import { SingleSelection } from "@antelopejs/interface-database";
 import {
   QueryStage,
   type StagedObject,
 } from "@antelopejs/interface-database/common";
 
 import { WRITE_STAGES } from "../../implementations/database/writes";
+import { Root } from "./pipeline-fixture";
 import {
   DEFERRED_STAGES,
   PIPELINE_STAGES,
@@ -43,6 +44,7 @@ const VOCABULARY: readonly string[] = [
 const STAGE_COUNT = 22;
 
 const WRITE_VOCABULARY: readonly string[] = [
+  "atomicMutation",
   "delete",
   "insert",
   "replace",
@@ -69,7 +71,7 @@ type MethodBag = Record<string, StageMethod>;
 type BuilderFactory = () => StagedObject;
 
 const BUILDER_ROOTS: readonly BuilderFactory[] = [
-  () => new Table<ProbeRow>(QueryStage("table", { id: PROBE_TABLE_ID })),
+  Root,
   () =>
     new SingleSelection<ProbeRow>(QueryStage("table", { id: PROBE_TABLE_ID })),
 ];
@@ -97,7 +99,13 @@ function Identity(value: unknown): unknown {
  * hands one back as the recorded body; every other parameter is stored verbatim, so one vector as
  * wide as the widest method serves all of them.
  */
-function ProbeArguments(): unknown[] {
+function ProbeArguments(method: string): unknown[] {
+  if (method === "atomicMutation") {
+    return [
+      "record",
+      { type: "delete", revisionField: "revision", expectedRevision: "old" },
+    ];
+  }
   return Array.from({ length: MAX_STAGE_ARITY }, () => Identity);
 }
 
@@ -128,7 +136,7 @@ function RecordedStage(
   const root = make();
   const depth = root.build().length;
   const methods = root as unknown as MethodBag;
-  const stages = methods[method](...ProbeArguments()).build();
+  const stages = methods[method](...ProbeArguments(method)).build();
   return stages.length > depth ? stages[stages.length - 1].stage : undefined;
 }
 
@@ -207,7 +215,7 @@ describe("the pipeline stage vocabulary", () => {
     const reading = Object.entries(WRITE_STAGES)
       .filter(([, spec]) => !spec.readsRelation)
       .map(([name]) => name);
-    expect(reading).to.deep.equal(["insert"]);
+    expect(reading).to.deep.equal(["atomicMutation", "insert"]);
   });
 
   it("declines a stage either permanently or for now, never both", () => {
@@ -275,7 +283,7 @@ const MERGED_VOCABULARIES: readonly MergedVocabulary[] = [
     merger: "writes",
     access: "WRITE_STAGES",
     dispatch: "entry?.compile",
-    families: ["writes-identity", "writes-insert"],
+    families: ["writes-identity", "writes-insert", "writes-atomic"],
     expected: WRITE_VOCABULARY,
   },
 ];
