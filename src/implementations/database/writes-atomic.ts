@@ -1,20 +1,20 @@
 import assert from "node:assert";
 import { DatabaseError } from "pg";
+import { ValidateAtomicMutation } from "@antelopejs/interface-database/atomic";
 import type {
   AtomicMutation,
   AtomicMutationOutcome,
   AtomicDelete,
   AtomicUpdate,
 } from "@antelopejs/interface-database";
-import { ValidateAtomicMutation } from "@antelopejs/interface-database/atomic";
 
-import { Query } from "../../connection";
-import type { DecodingContext } from "./context";
-import { UnifyOperands } from "./coerce";
 import { DecodeValue } from "./value";
-import { ID_AS_ASSERTION, SplitPayload } from "./payload";
-import { JsonKey, Param, QualifiedColumn } from "./sql";
 import { OPAQUE, TEXT } from "./types";
+import { Query } from "../../connection";
+import { UnifyOperands } from "./coerce";
+import type { DecodingContext } from "./context";
+import { JsonKey, Param, QualifiedColumn } from "./sql";
+import { ID_AS_ASSERTION, SplitPayload } from "./payload";
 import {
   EXTRA_COLUMN,
   ID_COLUMN,

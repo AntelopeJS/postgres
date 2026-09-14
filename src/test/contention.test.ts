@@ -4,17 +4,17 @@ import { Schema } from "@antelopejs/interface-database/schema";
 import { StagedObject } from "@antelopejs/interface-database/common";
 
 import { AcquireClient, Query } from "../connection";
-import { CompileWrite, SplitWrite } from "../implementations/database/writes";
 import { BuildRoot } from "../implementations/database/selection";
+import { DecodingContext } from "../implementations/database/context";
+import { CompileSubquery } from "../implementations/database/subquery";
+import { WriteTargetOf } from "../implementations/database/writes-shared";
+import { CompileExpression } from "../implementations/database/expression";
+import { CompileWrite, SplitWrite } from "../implementations/database/writes";
+import { ExecuteAtomicWrite } from "../implementations/database/writes-atomic";
 import {
   ApplyStages,
   CompileRelation,
 } from "../implementations/database/pipeline";
-import { CompileExpression } from "../implementations/database/expression";
-import { CompileSubquery } from "../implementations/database/subquery";
-import { DecodingContext } from "../implementations/database/context";
-import { WriteTargetOf } from "../implementations/database/writes-shared";
-import { ExecuteAtomicWrite } from "../implementations/database/writes-atomic";
 
 interface RecordValue {
   _id?: string;

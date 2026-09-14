@@ -1,6 +1,6 @@
 import { expect } from "chai";
-import { Schema, CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 import type { AtomicUpdate } from "@antelopejs/interface-database/atomic";
+import { Schema, CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 
 interface Document {
   _id: string;

@@ -1,8 +1,8 @@
 import { expect } from "chai";
 import { DatabaseError } from "pg";
 
-import { ExecuteAtomicWrite } from "../../implementations/database/writes-atomic";
 import { Root, Write, WrittenSql, CrossInstanceRoot } from "./pipeline-fixture";
+import { ExecuteAtomicWrite } from "../../implementations/database/writes-atomic";
 
 const UPDATE = {
   type: "update",

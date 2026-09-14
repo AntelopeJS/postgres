@@ -4,7 +4,6 @@ import { ValidateAtomicMutationTable } from "@antelopejs/interface-database/atom
 import { Query } from "../../connection";
 import { CHANGES_STAGE } from "./changes";
 import { DecodingContext } from "./context";
-import { ATOMIC_MUTATION, ExecuteAtomicWrite } from "./writes-atomic";
 import { CompileSubquery } from "./subquery";
 import { CompileExpression } from "./expression";
 import { DecodeRow, ReviveValue } from "./result";
@@ -12,6 +11,7 @@ import { ApplyStages, CompileRelation } from "./pipeline";
 import { GetTableNames, WaitForSchemaReady } from "./schema";
 import { type WriteTarget, WriteTargetOf } from "./writes-shared";
 import { CompileWrite, SplitWrite, type WriteSplit } from "./writes";
+import { ATOMIC_MUTATION, ExecuteAtomicWrite } from "./writes-atomic";
 import { CloseOneFeed, IsRegisteredFeed, ReadFeedEvent } from "./feeds";
 import { CreateInstance, DestroyInstance, ListInstances } from "./instances";
 import { CREATE_INSTANCE, DESTROY_INSTANCE, type QueryStage } from "./utils";

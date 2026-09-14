@@ -8,8 +8,8 @@ import {
   type StagedObject,
 } from "@antelopejs/interface-database/common";
 
-import { WRITE_STAGES } from "../../implementations/database/writes";
 import { Root } from "./pipeline-fixture";
+import { WRITE_STAGES } from "../../implementations/database/writes";
 import {
   DEFERRED_STAGES,
   PIPELINE_STAGES,
