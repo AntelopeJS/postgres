@@ -65,9 +65,8 @@ Things that answer rather than throw, where the answer may not be the one you ex
 
 ## Atomic single-record mutations
 
-`table.atomicMutation(id, request)` requires the matching interface-database atomic contract.
-This change depends on an unpublished interface artifact; the published `0.1.4` package does not
-provide that contract yet. Do not release this adapter until a published dependency supplies it.
+`table.atomicMutation(id, request)` uses the atomic contract published in
+`@antelopejs/interface-database` version `0.1.5` or later.
 
 The adapter places instance, identity, and the revision or scalar equality condition directly in
 the target row's `WHERE` clause and uses `RETURNING` to distinguish `applied` from `not-applied`.
