@@ -1,5 +1,5 @@
 {
-  "name": "@antelopejs/postgres",
+  "name": "@antelopejs-private/postgres",
   "version": "0.1.0",
   "description": "PostgreSQL module that implements the Database interface of antelopejs",
   "keywords": [
@@ -19,8 +19,7 @@
   ],
   "main": "dist/index.js",
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "registry": "https://npm.antelopejs.cloud/"
   },
   "scripts": {
     "build": "rimraf dist && tsc",
