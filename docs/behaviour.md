@@ -63,6 +63,34 @@ Things that answer rather than throw, where the answer may not be the one you ex
 | A payload `_id` is an _assertion_, so naming a different row's key answers `0`                             | It states which row you believe you addressed, and never what to write. Over a selection of many rows it is refused instead                                      |
 | `update(fn)` with an _expression_ body answers rows matched, where every other write answers rows modified | The modified test cannot be spelled for that one shape without evaluating the mapper twice per row                                                               |
 
+## Atomic single-record mutations
+
+`table.atomicMutation(id, request)` requires the matching interface-database atomic contract.
+This change depends on an unpublished interface artifact; the published `0.1.4` package does not
+provide that contract yet. Do not release this adapter until a published dependency supplies it.
+
+The adapter places instance, identity, and the revision or scalar equality condition directly in
+the target row's `WHERE` clause and uses `RETURNING` to distinguish `applied` from `not-applied`.
+PostgreSQL rechecks those conditions after a competing writer releases its row lock. The generic
+`filter(...).update(...)` and `filter(...).delete()` paths do not provide this guarantee: their
+identity subqueries can retain stale matches after a concurrent update.
+
+Revision updates replace supplied top-level fields and install the new revision in the same
+statement. They never upsert or retry. Validation and definitive PostgreSQL error responses throw;
+other dispatch failures conservatively return `unknown`, including a lost acknowledgement after
+commit. Callers must reconcile unknown outcomes rather than treating them as a failed match.
+
+An absent-only `{ kind: "missing" }` revision condition works on undeclared fields stored in
+`_extra`. It does not match JSON null or an absent record. Declared SQL columns cannot distinguish
+absent fields from null, so the adapter rejects missing-revision bootstrap there. String revision
+conditions support declared text columns and undeclared fields. Raw inserts, reads, and filters
+preserve undeclared revision tokens.
+
+`deleteIfEqual` compares one scalar field without providing revision or no-ABA guarantees. Date
+comparisons use the adapter's native typed-value conversion. Every variant requires one instance,
+rejects `CROSS_INSTANCE`, and protects identity and adapter-owned fields. Immutable record IDs and
+revision tokens must not be reused across record incarnations.
+
 ## Matching text
 
 | Behaviour                                | Detail                                                                                                                                                                |
