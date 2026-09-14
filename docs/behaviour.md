@@ -66,7 +66,9 @@ Things that answer rather than throw, where the answer may not be the one you ex
 ## Atomic single-record mutations
 
 `table.atomicMutation(id, request)` uses the atomic contract published in
-`@antelopejs/interface-database` version `0.1.5` or later.
+`@antelopejs/interface-database` version `0.1.6` or later. Antelope automatically
+runs its shared real-backend conformance tests alongside this provider's SQL,
+row-lock, storage, and fault tests.
 
 The adapter places instance, identity, and the revision or scalar equality condition directly in
 the target row's `WHERE` clause and uses `RETURNING` to distinguish `applied` from `not-applied`.
