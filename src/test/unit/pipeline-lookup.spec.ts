@@ -35,6 +35,11 @@ const CHAINED_LATERAL_ALIAS = "t5";
 
 const FILTER_WRAP_ALIAS = "t3";
 
+/** A plucked other query keeps its own root alias: the correlation goes under the projection. */
+const PLUCKED_RIGHT_ALIAS = "t1";
+const PLUCKED_WRAP_ALIAS = "t2";
+const PLUCKED_LATERAL_ALIAS = "t3";
+
 const SLICE_OFFSET = 0;
 const SLICE_COUNT = 2;
 const MINIMUM_AGE = 25;
@@ -157,6 +162,28 @@ function MappedLookup() {
 
 function FilteredLookup() {
   return ScalarLookup().filter((doc) => doc.key("age").gt(MINIMUM_AGE));
+}
+
+/**
+ * The shape a caller reaches for to carry fewer columns back, and the one `interface-data-api`
+ * builds for every relation column that names the fields it wants.
+ */
+function PluckedLookup() {
+  return Root().lookup(Other().pluck("name", "price") as any, "name", "name");
+}
+
+/** The same, with the other key left out of the projection entirely. */
+function PluckedWithoutKeyLookup() {
+  return Root().lookup(Other().pluck("price") as any, "name", "name");
+}
+
+/** A plucked other query whose rows were already chosen, which the correlation may not pass. */
+function SlicedPluckedLookup() {
+  return Root().lookup(
+    Other().slice(SLICE_OFFSET, SLICE_COUNT).pluck("name") as any,
+    "name",
+    "name",
+  );
 }
 
 describe("the lookup stage", () => {
@@ -330,6 +357,46 @@ describe("a lookup over a relation that has already chosen its rows", () => {
       `"${FILTER_WRAP_ALIAS}"."value" -> 'age'`,
     );
     expect(relation.where[0]).to.not.contain(LATERAL);
+  });
+});
+
+describe("a lookup whose other query only plucked its columns", () => {
+  it("correlates on the column the projection renamed, not on the document it built", () => {
+    const from = Apply(PluckedLookup()).relation.joins[0].from;
+    expect(from).to.contain(MATCHING_NAME);
+    expect(from).to.not.contain("-> 'name'");
+  });
+
+  it("keeps the other table's own alias, the correlation running under the projection", () => {
+    const { relation } = Apply(PluckedLookup());
+    expect(relation.joins[0].from).to.contain(
+      `${OTHER_TABLE} AS "${PLUCKED_RIGHT_ALIAS}"`,
+    );
+    expect(relation.joins.map((join) => join.alias)).to.deep.equal([
+      PLUCKED_LATERAL_ALIAS,
+    ]);
+  });
+
+  it("answers the plucked document rather than the whole row", () => {
+    const sql = Sql(PluckedLookup());
+    expect(sql).to.contain("'name'");
+    expect(sql).to.contain("'price'");
+    expect(sql).to.not.contain(ProductDocument(PLUCKED_RIGHT_ALIAS));
+  });
+
+  it("still matches when the other key is not among the plucked fields", () => {
+    const from = Apply(PluckedWithoutKeyLookup()).relation.joins[0].from;
+    expect(from).to.contain(MATCHING_NAME);
+  });
+
+  it("leaves the correlation above a projection whose rows were already chosen", () => {
+    const from = Apply(SlicedPluckedLookup()).relation.joins[0].from;
+    expect(from).to.contain(`"${PLUCKED_WRAP_ALIAS}"."value" -> 'name'`);
+  });
+
+  it("references every parameter it binds, and binds every one it references", () => {
+    const ledger = ReadParamLedger(Apply(PluckedLookup()));
+    expect(ledger.referenced).to.deep.equal(ledger.bound);
   });
 });
 

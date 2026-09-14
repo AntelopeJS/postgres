@@ -119,6 +119,13 @@ export interface Relation {
   source: RowSource;
   projection?: Compiled;
   origin?: TableOrigin;
+  /**
+   * The row source a *plain* projection was built from, kept so a later stage can still address
+   * the columns underneath it. Set only by the stages whose projection is a straight rename of
+   * the source's own fields, and cleared by every other {@link SetProjection}: a projection that
+   * computed its members no longer has columns that answer for them.
+   */
+  projectedFrom?: RowSource;
 }
 
 type RelationSeed = Pick<
@@ -484,7 +491,32 @@ export function SetProjection(relation: Relation, value: Compiled): Relation {
   relation.projection = value;
   relation.source = new JsonRowSource(value);
   relation.origin = undefined;
+  relation.projectedFrom = undefined;
   return relation;
+}
+
+/**
+ * Records the source a projection renamed, which is what lets a lookup correlate under it.
+ *
+ * Separate from {@link SetProjection} so that recording it is a deliberate claim about the
+ * projection's shape rather than something every projecting stage inherits.
+ */
+export function SetPlainProjection(
+  relation: Relation,
+  value: Compiled,
+  source: RowSource,
+): Relation {
+  const projected = SetProjection(relation, value);
+  projected.projectedFrom = source;
+  return projected;
+}
+
+/** Whether any of the named flags is raised on the relation. */
+export function HasFlag(
+  relation: Relation,
+  flags: readonly RelationFlag[],
+): boolean {
+  return flags.some((flag) => FLAG_PREDICATES[flag](relation));
 }
 
 /** What the relation currently yields, materialized — the operand of a field-less stage. */

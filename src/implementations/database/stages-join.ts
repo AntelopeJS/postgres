@@ -36,6 +36,7 @@ import {
   SetProjection,
   SINGLE_ROW,
   WHERE_BLOCKERS,
+  HasFlag,
 } from "./relation";
 
 const MAPPER_OPERAND = 2;
@@ -231,8 +232,20 @@ function LookedUp(stage: QueryStage, context: DecodingContext): Relation {
     other instanceof Query,
     "The 'lookup' stage takes another query to read the key from",
   );
-  return Prepare(context.relation(other.build()), WHERE_BLOCKERS, context);
+  return context.relation(other.build());
 }
+
+/**
+ * What still forbids correlating under a plain projection: {@link WHERE_BLOCKERS} without it.
+ *
+ * A projection blocks a predicate because the columns it renamed are no longer addressable — but a
+ * *plain* one kept them under {@link Relation.projectedFrom}, and a correlation reading them runs
+ * before the projection is applied, which is where it belongs. The other four still bind: each one
+ * chose rows, and filtering past them would test the rows the relation held before they did.
+ */
+const PUSHDOWN_BLOCKERS: readonly RelationFlag[] = WHERE_BLOCKERS.filter(
+  (flag) => flag !== "projection",
+);
 
 /**
  * Pushes the correlation onto the looked-up relation, comparing two declared columns.
@@ -240,11 +253,12 @@ function LookedUp(stage: QueryStage, context: DecodingContext): Relation {
  */
 function Correlate(
   right: Relation,
+  source: RowSource,
   otherKey: string,
   local: Compiled,
   form: LookupForm,
 ): void {
-  const other = right.source.field(otherKey);
+  const other = source.field(otherKey);
   if (IsArray(other.type) && !IsArray(local.type)) {
     right.where.push(`(${other.sql} ${CONTAINS} ${AsJson(local).sql})`);
     return;
@@ -257,6 +271,20 @@ function Correlate(
  * The left document with one key overwritten, which is what a lookup answers.
  * `||` overwrites and is total over every json type, so it is emitted bare with nothing defending it.
  */
+/**
+ * The source a correlation may be pushed onto, or nothing when it has to sit above the projection.
+ *
+ * Pushing it onto the base columns is what keeps the other key on an index: a predicate on the
+ * built document reads an expression the planner cannot invert back to the column it was built
+ * from, and the lateral degrades to a scan of the whole other table per row of the left.
+ */
+function Correlatable(right: Relation): RowSource | undefined {
+  if (HasFlag(right, PUSHDOWN_BLOCKERS)) {
+    return undefined;
+  }
+  return right.projectedFrom;
+}
+
 function Replaced(document: Compiled, key: string, value: Compiled): Compiled {
   const member = `jsonb_build_object(${QuoteLiteral(key)}, ${value.sql})`;
   return {
@@ -274,8 +302,15 @@ const LookupStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, LOOKUP_BLOCKERS, context);
   const local = prepared.source.field(keys.localKey);
   const form = FormOf(local, keys.localKey);
-  const right = LookedUp(stage, context);
-  Correlate(right, keys.otherKey, local, form);
+  const other = LookedUp(stage, context);
+  const under = Correlatable(other);
+  if (under) {
+    Correlate(other, under, keys.otherKey, local, form);
+  }
+  const right = Prepare(other, WHERE_BLOCKERS, context);
+  if (!under) {
+    Correlate(right, right.source, keys.otherKey, local, form);
+  }
   const answer = CurrentValue(right);
   const from = form.lateral(SetProjection(right, answer), context);
   const alias = context.nextAlias();
