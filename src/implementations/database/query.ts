@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { ValidateAtomicMutationTable } from "@antelopejs/interface-database/atomic";
 
 import { Query } from "../../connection";
 import { CHANGES_STAGE } from "./changes";
@@ -10,6 +11,7 @@ import { ApplyStages, CompileRelation } from "./pipeline";
 import { GetTableNames, WaitForSchemaReady } from "./schema";
 import { type WriteTarget, WriteTargetOf } from "./writes-shared";
 import { CompileWrite, SplitWrite, type WriteSplit } from "./writes";
+import { ATOMIC_MUTATION, ExecuteAtomicWrite } from "./writes-atomic";
 import { CloseOneFeed, IsRegisteredFeed, ReadFeedEvent } from "./feeds";
 import { CreateInstance, DestroyInstance, ListInstances } from "./instances";
 import { CREATE_INSTANCE, DESTROY_INSTANCE, type QueryStage } from "./utils";
@@ -139,6 +141,9 @@ async function RunWrite(
   if (!statement.sql) {
     return statement.ids ?? NO_ROWS;
   }
+  if (stage.stage === ATOMIC_MUTATION) {
+    return ExecuteAtomicWrite(statement.sql, context.params.all());
+  }
   const result = await Query(statement.sql, context.params.all());
   return statement.ids ?? result.rowCount ?? NO_ROWS;
 }
@@ -157,6 +162,9 @@ function CompileQuery(
   stages: QueryStage[],
   context: DecodingContext,
 ): CompiledQuery {
+  if (stages.at(-1)?.stage === ATOMIC_MUTATION) {
+    ValidateAtomicMutationTable(stages.slice(0, -1));
+  }
   const root = BuildRoot(stages, context);
   const split = SplitWrite(root.rest);
   const relation = ApplyStages(root.relation, split.pipeline, context);

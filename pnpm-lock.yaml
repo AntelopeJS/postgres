@@ -12,8 +12,8 @@ importers:
         specifier: ^0.0.12
         version: 0.0.12
       '@antelopejs/interface-database':
-        specifier: ^0.1.4
-        version: 0.1.4(@antelopejs/interface-core@0.0.12)
+        specifier: ^0.1.6
+        version: 0.1.6(@antelopejs/interface-core@0.0.12)
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -75,8 +75,8 @@ packages:
   '@antelopejs/interface-core@0.0.12':
     resolution: {integrity: sha512-SuHSQXOFEa04JEErN3PprdwT/jrtXGP6Eiwrk19wZ9QRSjaYkq54xpwFnq9NkYh3BG2EdNmIB9CIwadiCZUsaw==}
 
-  '@antelopejs/interface-database@0.1.4':
-    resolution: {integrity: sha512-RFPly7SWNITX6O2Qrey4riIgc6zuLqPTsEJQqapAnTylWB+XisR1s99qvaXmfAxUBFZPKdSporuSvpCOdewpLg==}
+  '@antelopejs/interface-database@0.1.6':
+    resolution: {integrity: sha512-y/P/BC659qHQfq+ItVyZ6FmdWNUH3PRKDYCDbVaRtmIH64CKpvcmmjsCV3zWK4FfzYtWZ15yw4rJfSwMF9JszQ==}
     peerDependencies:
       '@antelopejs/interface-core': '>=0.0.3 <1.0.0'
 
@@ -2634,7 +2634,7 @@ snapshots:
     dependencies:
       reflect-metadata: 0.2.2
 
-  '@antelopejs/interface-database@0.1.4(@antelopejs/interface-core@0.0.12)':
+  '@antelopejs/interface-database@0.1.6(@antelopejs/interface-core@0.0.12)':
     dependencies:
       '@antelopejs/interface-core': 0.0.12
 
