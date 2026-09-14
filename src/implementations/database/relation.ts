@@ -119,12 +119,7 @@ export interface Relation {
   source: RowSource;
   projection?: Compiled;
   origin?: TableOrigin;
-  /**
-   * The row source a *plain* projection was built from, kept so a later stage can still address
-   * the columns underneath it. Set only by the stages whose projection is a straight rename of
-   * the source's own fields, and cleared by every other {@link SetProjection}: a projection that
-   * computed its members no longer has columns that answer for them.
-   */
+  /** The source a plain projection renamed — see {@link SetPlainProjection}. */
   projectedFrom?: RowSource;
 }
 
@@ -496,10 +491,8 @@ export function SetProjection(relation: Relation, value: Compiled): Relation {
 }
 
 /**
- * Records the source a projection renamed, which is what lets a lookup correlate under it.
- *
- * Separate from {@link SetProjection} so that recording it is a deliberate claim about the
- * projection's shape rather than something every projecting stage inherits.
+ * Projects, and keeps the source addressable: only for a projection that *renames* its members, so
+ * that the columns underneath still answer for them. Every other {@link SetProjection} clears it.
  */
 export function SetPlainProjection(
   relation: Relation,
