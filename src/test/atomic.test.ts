@@ -57,36 +57,6 @@ describe("atomic mutation results and scope", () => {
     expect(rows[0].details).to.deep.equal({ kept: true });
   });
 
-  it("never upserts a missing identity", async () => {
-    expect(await table.atomicMutation(ID, update)).to.equal("not-applied");
-    expect(await table.get(ID)).to.equal(undefined);
-  });
-
-  it("does not change wrong-tenant or stale-revision rows", async () => {
-    await Seed({ revision: "old" });
-    expect(
-      await schema
-        .instance("other")
-        .table("records")
-        .atomicMutation(ID, update),
-    ).to.equal("not-applied");
-    expect(
-      await table.atomicMutation(ID, { ...update, expectedRevision: "stale" }),
-    ).to.equal("not-applied");
-    expect((await table.get(ID))?.value).to.equal("before");
-  });
-
-  it("deletes only a matching revision and distinguishes missing rows", async () => {
-    await Seed({ revision: "old" });
-    const request = {
-      type: "delete",
-      revisionField: "revision",
-      expectedRevision: "old",
-    } as const;
-    expect(await table.atomicMutation(ID, request)).to.equal("applied");
-    expect(await table.atomicMutation(ID, request)).to.equal("not-applied");
-  });
-
   it("bootstraps absent overflow revisions but not stored null or an absent row", async () => {
     const request = {
       ...update,

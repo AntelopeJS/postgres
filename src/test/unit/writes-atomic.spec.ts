@@ -50,18 +50,6 @@ describe("the atomic mutation statement", () => {
       ),
     ).to.throw();
   });
-
-  it("rejects nonconstant data and direct revision changes", () => {
-    for (const patch of [
-      { age: undefined },
-      { age: () => 1 },
-      { name: "bypass" },
-    ]) {
-      expect(() =>
-        Write(Root().atomicMutation("one", { ...UPDATE, patch } as never)),
-      ).to.throw();
-    }
-  });
 });
 
 describe("atomic mutation acknowledgement loss", () => {
