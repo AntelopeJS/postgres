@@ -26,6 +26,7 @@ import {
 } from "./types";
 import {
   CurrentValue,
+  HasFlag,
   type JoinKind,
   Nested,
   OUTPUT_COLUMN,
@@ -231,8 +232,16 @@ function LookedUp(stage: QueryStage, context: DecodingContext): Relation {
     other instanceof Query,
     "The 'lookup' stage takes another query to read the key from",
   );
-  return Prepare(context.relation(other.build()), WHERE_BLOCKERS, context);
+  return context.relation(other.build());
 }
+
+/**
+ * {@link WHERE_BLOCKERS} without the projection, which a plain one survives: its columns are still
+ * addressable, and the correlation is emitted before the projection applies. The rest chose rows.
+ */
+const PUSHDOWN_BLOCKERS: readonly RelationFlag[] = WHERE_BLOCKERS.filter(
+  (flag) => flag !== "projection",
+);
 
 /**
  * Pushes the correlation onto the looked-up relation, comparing two declared columns.
@@ -240,17 +249,26 @@ function LookedUp(stage: QueryStage, context: DecodingContext): Relation {
  */
 function Correlate(
   right: Relation,
+  source: RowSource,
   otherKey: string,
   local: Compiled,
   form: LookupForm,
 ): void {
-  const other = right.source.field(otherKey);
+  const other = source.field(otherKey);
   if (IsArray(other.type) && !IsArray(local.type)) {
     right.where.push(`(${other.sql} ${CONTAINS} ${AsJson(local).sql})`);
     return;
   }
   const unified = UnifyOperands(other, local);
   right.where.push(form.correlate(unified.left, unified.right));
+}
+
+/**
+ * The source {@link Correlate} may push onto, or nothing when it has to sit above the projection.
+ * Reaching the base column is what keeps the other key on an index.
+ */
+function Correlatable(right: Relation): RowSource | undefined {
+  return HasFlag(right, PUSHDOWN_BLOCKERS) ? undefined : right.projectedFrom;
 }
 
 /**
@@ -274,8 +292,15 @@ const LookupStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, LOOKUP_BLOCKERS, context);
   const local = prepared.source.field(keys.localKey);
   const form = FormOf(local, keys.localKey);
-  const right = LookedUp(stage, context);
-  Correlate(right, keys.otherKey, local, form);
+  const other = LookedUp(stage, context);
+  const under = Correlatable(other);
+  if (under) {
+    Correlate(other, under, keys.otherKey, local, form);
+  }
+  const right = Prepare(other, WHERE_BLOCKERS, context);
+  if (!under) {
+    Correlate(right, right.source, keys.otherKey, local, form);
+  }
   const answer = CurrentValue(right);
   const from = form.lateral(SetProjection(right, answer), context);
   const alias = context.nextAlias();

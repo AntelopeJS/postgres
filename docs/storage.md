@@ -86,7 +86,10 @@ A declared index becomes a real index, and the operations that can use one do:
   index-reachable. A GIN index is keyed on the column alone, with no leading `_instance`. `multi` on
   a scalar field falls back to btree rather than erroring.
 - **What reaches an index:** `filter` and `orderBy` on a declared field, `get`, `getAll`, `between`,
-  a `joinInner` predicate, and a `lookup`'s local key.
+  a `joinInner` predicate, and a `lookup`'s local key — **including when the looked-up query only
+  plucked its columns**, since the correlation is pushed under that projection onto the column
+  itself. A projection that _computed_ its members is not pushed under, and the lateral scans the
+  other table once per row of the left.
 
 Declaring a field is therefore the single most useful thing you can do for query performance: an
 undeclared key lives in `_extra`, where there is no declared type to compare by and no index to

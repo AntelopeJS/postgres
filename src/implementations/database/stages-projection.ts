@@ -11,6 +11,7 @@ import {
   CurrentValue,
   Prepare,
   type RelationFlag,
+  SetPlainProjection,
   SetProjection,
 } from "./relation";
 
@@ -54,11 +55,12 @@ const MapStage: PipelineStage = (relation, stage, context) => {
  */
 const PluckStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, PROJECTION_BLOCKERS, context);
+  const source = prepared.source;
   const members = FieldNames(stage).map((name): DocumentMember => ({
     name,
-    ...prepared.source.field(name),
+    ...source.field(name),
   }));
-  return SetProjection(prepared, BuildDocument(members));
+  return SetPlainProjection(prepared, BuildDocument(members), source);
 };
 
 function RemainingType(type: SqlType, removed: readonly string[]): SqlType {
