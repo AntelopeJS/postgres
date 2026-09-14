@@ -1,8 +1,7 @@
-# @antelopejs/postgres
+# @antelopejs-private/postgres
 
 <div align="center">
-<a href="https://www.npmjs.com/package/@antelopejs/postgres"><img alt="NPM version" src="https://img.shields.io/npm/v/@antelopejs/postgres.svg?style=for-the-badge&labelColor=000000"></a>
-<a href="./LICENSE"><img alt="License" src="https://img.shields.io/npm/l/@antelopejs/postgres.svg?style=for-the-badge&labelColor=000000"></a>
+<a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue?style=for-the-badge&labelColor=000000"></a>
 <a href="https://discord.gg/sjK28QHrA7"><img src="https://img.shields.io/badge/Discord-18181B?logo=discord&style=for-the-badge&color=000000" alt="Discord"></a>
 <a href="https://antelopejs.com/modules/postgres"><img src="https://img.shields.io/badge/Docs-18181B?style=for-the-badge&color=000000" alt="Documentation"></a>
 </div>
@@ -12,8 +11,17 @@ definitions onto real relational tables with native column types and indexes.
 
 ## Installation
 
+Configure the private registry in your project's `.npmrc` and authenticate with an AntelopeJS registry token:
+
+```ini
+@antelopejs-private:registry=https://npm.antelopejs.cloud/
+//npm.antelopejs.cloud/:_authToken=${NPM_ANTELOPE_TOKEN}
+```
+
+Set `NPM_ANTELOPE_TOKEN` in your environment, then install the module:
+
 ```bash
-ajs project modules add @antelopejs/postgres
+ajs project modules add @antelopejs-private/postgres
 ```
 
 ## Interfaces
