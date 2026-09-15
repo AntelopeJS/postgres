@@ -30,13 +30,14 @@ describe("SqlType", () => {
     expect(IsOpaque(TEXT)).to.equal(false);
   });
 
-  it("collapses an empty shape to the bottom type", () => {
+  it("separates a shape that is empty from one that is unknown", () => {
     expect(JsonOf(undefined)).to.equal(OPAQUE);
-    expect(JsonOf({})).to.equal(OPAQUE);
+    expect(JsonOf({})).to.deep.equal({ kind: "json", shape: {} });
   });
 
-  it("treats a hand-built empty shape as the bottom type", () => {
-    expect(IsOpaque({ kind: "json", shape: {} })).to.equal(true);
+  it("calls only an absent shape the bottom type", () => {
+    expect(IsOpaque({ kind: "json", shape: {} })).to.equal(false);
+    expect(IsOpaque(OPAQUE)).to.equal(true);
   });
 
   it("reads the members of a shaped json and nothing else", () => {

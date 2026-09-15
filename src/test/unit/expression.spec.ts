@@ -269,7 +269,7 @@ describe("default", () => {
     expect(out.sql).to.equal(
       `COALESCE(NULLIF(("t"."_extra" -> 'meta'), 'null'::jsonb), jsonb_build_object())`,
     );
-    expect(out.type).to.equal(OPAQUE);
+    expect(out.type).to.deep.equal({ kind: "json", shape: {} });
   });
 
   /**
