@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.2
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.1.1...v0.1.2)
+
+### 🩹 Fixes
+
+- **value:** Bind a list of constants as one parameter, not one argument each ([#6](https://github.com/AntelopeJS/postgres/pull/6))
+- **types:** An empty shape is not an unknown one, so a merge keeps what it knows ([#7](https://github.com/AntelopeJS/postgres/pull/7))
+
+### ❤️ Contributors
+
+- Fabrice Cst <fabrice@altab.be>
+
 ## v0.1.1
 
 ### 🚀 Enhancements
