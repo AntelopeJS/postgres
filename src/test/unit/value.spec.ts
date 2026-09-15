@@ -3,6 +3,9 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 import { Datum, Query, ValueProxy } from "@antelopejs/interface-database";
 
 import { RefusingCompilers } from "./spec-fixture";
+
+/** PostgreSQL's own limit on arguments to one function call, which is what the fold exists for. */
+const ARGUMENT_CAP = 100;
 import type { Compiled } from "../../implementations/database/sql";
 import {
   AliasedColumns,
@@ -150,9 +153,8 @@ describe("DecodeValue", () => {
   it("builds a jsonb array with a uniform element type", () => {
     const context = NewContext(NewRecorded());
     const out = DecodeValue([1, 2], context);
-    expect(out?.sql).to.equal(
-      "jsonb_build_array(to_jsonb(($1::double precision)), to_jsonb(($2::double precision)))",
-    );
+    expect(out?.sql).to.equal("($1::jsonb)");
+    expect(context.params.all()).to.deep.equal(["[1,2]"]);
     expect(out?.type).to.deep.equal(ArrayOf(FLOAT));
   });
 
@@ -162,10 +164,25 @@ describe("DecodeValue", () => {
     expect(out?.type).to.deep.equal(ArrayOf(OPAQUE));
   });
 
+  it("binds a list longer than postgresql's argument cap as one parameter", () => {
+    const context = NewContext(NewRecorded());
+    const values = Array.from({ length: ARGUMENT_CAP * 2 }, (_, i) => `k${i}`);
+    const out = DecodeValue(values, context);
+    expect(out?.sql).to.equal("($1::jsonb)");
+    expect(context.params.all()).to.have.lengthOf(1);
+    expect(out?.type).to.deep.equal(ArrayOf(TEXT));
+  });
+
+  it("still compiles an element the row has to supply", () => {
+    const context = NewContext(NewRecorded());
+    const out = DecodeValue([1, ValueProxy.constant(2)], context);
+    expect(out?.sql).to.contain("jsonb_build_array");
+  });
+
   it("keeps a null array member as a json null", () => {
     const context = NewContext(NewRecorded());
     const out = DecodeValue([null], context);
-    expect(out?.sql).to.equal("jsonb_build_array('null'::jsonb)");
+    expect(out?.sql).to.equal("($1::jsonb)");
     expect(out?.type).to.deep.equal(ArrayOf(OPAQUE));
   });
 });

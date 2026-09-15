@@ -1,8 +1,6 @@
 # Changelog
 
-
 ## v0.1.1
-
 
 ### 🚀 Enhancements
 
@@ -59,4 +57,3 @@
 - Fabrice Cst <fabrice@altab.be>
 - Thomas ([@Thomasims](http://github.com/Thomasims))
 - Thomasims <thomas@antelopejs.com>
-
