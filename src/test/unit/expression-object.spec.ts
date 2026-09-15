@@ -126,6 +126,11 @@ describe("obj_merge", () => {
     );
   });
 
+  it("keeps the left shape when the right side declares no member", () => {
+    const out = Compile((doc) => doc.key("metadata").merge({}));
+    expect(out.type).to.deep.equal(JsonOf({ level: FLOAT, since: TIMESTAMP }));
+  });
+
   it("lets the right shape win on a key both sides declare", () => {
     const out = Compile((doc) =>
       doc.key("metadata").merge({ level: "nine" as never }),

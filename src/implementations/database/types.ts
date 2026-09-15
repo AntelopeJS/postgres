@@ -50,8 +50,13 @@ export function ArrayOf(elem: SqlType): ArrayType {
   return { kind: "array", elem };
 }
 
+/**
+ * A shape that is *empty* is not a shape that is *unknown*: the first declares no members, the
+ * second declares nothing about them. Only the second is {@link OPAQUE} — conflating them makes
+ * `merge({})` erase what the left side declared, and a declared date then reads back as text.
+ */
 export function JsonOf(shape?: SqlShape): JsonType {
-  if (!shape || Object.keys(shape).length === 0) {
+  if (!shape) {
     return OPAQUE;
   }
   return { kind: "json", shape };
@@ -62,10 +67,7 @@ export function PhysicalType(type: SqlType): string {
 }
 
 export function IsOpaque(type: SqlType): boolean {
-  if (type.kind !== "json") {
-    return false;
-  }
-  return !type.shape || Object.keys(type.shape).length === 0;
+  return type.kind === "json" && !type.shape;
 }
 
 export function IsJsonBacked(type: SqlType): type is ArrayType | JsonType {

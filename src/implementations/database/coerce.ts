@@ -57,7 +57,7 @@ function UnifyShapes(left?: SqlShape, right?: SqlShape): SqlShape | undefined {
       shape[name] = Unify(type, right[name]);
     }
   }
-  return shape;
+  return Object.keys(shape).length > 0 ? shape : undefined;
 }
 
 /**
