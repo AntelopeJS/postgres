@@ -191,9 +191,7 @@ describe("add", () => {
 
   it("concatenates two arrays and keeps the element type", () => {
     const out = Compile((doc) => doc.key("tags").add(["x"] as never));
-    expect(out.sql).to.equal(
-      `("t"."tags" || jsonb_build_array(to_jsonb(($1::text))))`,
-    );
+    expect(out.sql).to.equal(`("t"."tags" || ($1::jsonb))`);
     expect(out.type).to.deep.equal(ArrayOf(TEXT));
   });
 

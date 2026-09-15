@@ -422,7 +422,7 @@ describe("the update statement's refusals", () => {
       Updates(
         `"_extra" = (${EXISTING_EXTRA} || jsonb_build_object(` +
           `'stage', to_jsonb(($3::text)),` +
-          " 'args', jsonb_build_array(to_jsonb(($4::double precision)))))",
+          " 'args', ($4::jsonb)))",
       ),
     );
   });

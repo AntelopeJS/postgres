@@ -96,7 +96,65 @@ function DecodePrimitive(value: unknown, context: DecodingContext): Compiled {
   return Param(context.params, value, type);
 }
 
+/**
+ * Whether a value is json the driver can send whole, rather than an expression to compile.
+ *
+ * A `ValueProxy` or a `Query` reads the row and has to be emitted as SQL; a `Date` is deliberately
+ * excluded because `to_jsonb(timestamptz)` and `JSON.stringify` do not spell the same instant.
+ */
+function IsConstantJson(value: unknown): boolean {
+  if (value === null) {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.every(IsConstantJson);
+  }
+  if (IsPlainObject(value)) {
+    return Object.values(value).every(
+      (item) => item === undefined || IsConstantJson(item),
+    );
+  }
+  return Object.hasOwn(PRIMITIVE_TYPES, typeof value);
+}
+
+/**
+ * The type {@link DecodeValue} would give a constant, read off the value instead of the SQL.
+ *
+ * Mirrors the three decoders below it, so that binding a constant whole does not change the type
+ * the caller sees — only the number of parameters it takes.
+ */
+function ConstantType(value: unknown): SqlType {
+  if (value === null) {
+    return NULL_JSON.type;
+  }
+  if (Array.isArray(value)) {
+    return ArrayOf(UnifyAll(value.map(ConstantType)));
+  }
+  if (IsPlainObject(value)) {
+    const shape: Record<string, SqlType> = {};
+    for (const [name, item] of Object.entries(value)) {
+      if (item !== undefined) {
+        shape[name] = ConstantType(item);
+      }
+    }
+    return JsonOf(shape);
+  }
+  return PRIMITIVE_TYPES[typeof value];
+}
+
+/**
+ * A list of constants binds as one jsonb parameter, where a list of expressions cannot.
+ *
+ * `jsonb_build_array` takes one argument per element and PostgreSQL caps a function call at 100,
+ * so a literal list longer than that loses the whole statement — and the lists callers pass are
+ * the ones they did not count, like every route of an application. Sending the array itself keeps
+ * the same value, the same type, and one parameter whatever its length.
+ */
 function DecodeArray(values: unknown[], context: DecodingContext): Compiled {
+  if (values.every(IsConstantJson)) {
+    const type = ArrayOf(UnifyAll(values.map(ConstantType)));
+    return { sql: Param(context.params, values, OPAQUE).sql, type };
+  }
   const items = values.map((item) => DecodeValue(item, context) ?? NULL_JSON);
   const elem = UnifyAll(items.map((item) => item.type));
   const parts = items.map((item) => Cast(item, OPAQUE).sql);

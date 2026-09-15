@@ -192,9 +192,7 @@ describe("constant", () => {
       ValueProxy.constant([1, 2]).build(),
       NewContext(),
     );
-    expect(out.sql).to.equal(
-      "jsonb_build_array(to_jsonb(($1::double precision)), to_jsonb(($2::double precision)))",
-    );
+    expect(out.sql).to.equal("($1::jsonb)");
     expect(out.type).to.deep.equal(ArrayOf(FLOAT));
   });
 

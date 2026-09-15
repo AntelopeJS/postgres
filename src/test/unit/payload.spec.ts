@@ -215,7 +215,7 @@ describe("SplitPayload over undeclared keys", () => {
     const applied = Split({ productIds: ["a"] });
     expect(applied.split.members).to.deep.equal([]);
     expect(applied.split.extra?.sql).to.equal(
-      "jsonb_build_object('productIds', jsonb_build_array(to_jsonb(($1::text))))",
+      "jsonb_build_object('productIds', ($1::jsonb))",
     );
   });
 
@@ -242,7 +242,7 @@ describe("SplitPayload over undeclared keys", () => {
     const applied = Split({ productIds: ["a"], price: 1 });
     expect(Columns(applied)).to.deep.equal(["price"]);
     expect(applied.split.extra?.sql).to.contain("'productIds'");
-    expect(applied.context.params.all()).to.deep.equal([1, "a"]);
+    expect(applied.context.params.all()).to.deep.equal([1, '["a"]']);
   });
 
   it("does not resolve a key inherited from Object.prototype", () => {

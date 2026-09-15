@@ -145,7 +145,7 @@ describe("obj_merge", () => {
 
   it("guards the merged result, since || wraps a non-object into an array", () => {
     const out = Compile((doc) => doc.key("metadata").merge([1] as never));
-    const right = `jsonb_build_array(to_jsonb(${FLOAT_PARAM}))`;
+    const right = "($1::jsonb)";
     expect(out.sql).to.equal(Merged(METADATA, right, "t0"));
   });
 
