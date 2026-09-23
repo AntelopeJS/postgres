@@ -35,7 +35,7 @@
     "knip": "knip"
   },
   "dependencies": {
-    "@antelopejs/interface-core": "^0.0.12",
+    "@antelopejs/interface-core": "^0.1.1",
     "@antelopejs/interface-database": "^0.1.6",
     "pg": "^8.22.0"
   },
