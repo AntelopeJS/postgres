@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   release:
-    uses: AntelopeJS/.github/.github/workflows/release-npm-private.yml@f4ce81591d09d271a480fd796e12a725cc973e0f
+    uses: AntelopeJS/.github/.github/workflows/release-npm-private.yml@v1
     with:
       channel: ${{ inputs.channel }}
     secrets:
