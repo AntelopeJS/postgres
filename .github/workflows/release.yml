@@ -20,6 +20,7 @@ jobs:
     uses: AntelopeJS/.github/.github/workflows/release-npm-private.yml@v1
     with:
       channel: ${{ inputs.channel }}
+      install-core: false
     secrets:
       RELEASE_GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
       NPM_ANTELOPE_TOKEN: ${{ secrets.NPM_ANTELOPE_TOKEN }}
