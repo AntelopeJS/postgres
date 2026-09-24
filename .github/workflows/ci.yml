@@ -33,7 +33,6 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           echo "$PR_TITLE" | grep -Eq '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?!?: .+'
-      - run: pnpm add --global @antelopejs/core
       - run: pnpm install --frozen-lockfile
       - run: pnpm prepack
       - run: pnpm lint

@@ -4,9 +4,6 @@ export default antelopeKnipConfig({
   // The unit suites are `*.spec.ts`, which `pnpm test:unit` runs with Mocha over
   // the compiled output; the shared preset only knows about `*.test.ts`.
   entry: ["src/test/**/*.spec.ts"],
-  // `ajs` comes from @antelopejs/core, which CI installs globally rather than
-  // pulling the whole CLI into every module's dependency tree.
-  ignoreBinaries: ["ajs"],
   ignoreDependencies: [
     // Mocha's globals, supplied to the suites `ajs module test` runs.
     "@types/mocha",
