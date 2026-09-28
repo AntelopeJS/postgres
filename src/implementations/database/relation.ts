@@ -18,6 +18,7 @@ import {
 export const OUTPUT_COLUMN = "value";
 
 type IndexResolver = (name: string) => string[];
+type ScanNotice = (name: string) => void;
 
 /**
  * What the relation still knows about the table it reads.
@@ -30,6 +31,8 @@ export interface TableOrigin {
   tableId: string;
   shape: TableShape;
   index: IndexResolver;
+  /** Told when a `CROSS_INSTANCE` read scans by an index name; absent where nobody is listening. */
+  crossInstanceScan?: ScanNotice;
 }
 
 export interface OrderTerm {
@@ -171,6 +174,20 @@ export function IndexColumns(
     name: field,
     ...relation.source.field(field),
   }));
+}
+
+/**
+ * {@link IndexColumns} for the stages that scan by the index — `getAll`, `between` and `orderBy` —
+ * which is what a table's origin hears about when the read spans every instance.
+ */
+export function ScanColumns(
+  relation: Relation,
+  name: string,
+): DocumentMember[] {
+  if (relation.crossInstance) {
+    relation.origin?.crossInstanceScan?.(name);
+  }
+  return IndexColumns(relation, name);
 }
 
 function RowColumns(relation: Relation): string[] {

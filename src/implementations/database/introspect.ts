@@ -1,6 +1,5 @@
-import type { QueryResultRow } from "pg";
+import type { ClientBase, QueryResultRow } from "pg";
 
-import { Query } from "../../connection";
 import type { ActualColumn, ActualIndex, ActualTable } from "./ddl";
 
 interface ColumnRow extends ActualColumn, QueryResultRow {}
@@ -8,6 +7,7 @@ interface ColumnRow extends ActualColumn, QueryResultRow {}
 interface IndexRow extends QueryResultRow {
   name: string;
   signature: string | null;
+  valid: boolean;
 }
 
 const COLUMNS_SQL = `
@@ -20,7 +20,8 @@ const COLUMNS_SQL = `
   ORDER BY a.attnum`;
 
 const INDEXES_SQL = `
-  SELECT c.relname AS name, obj_description(c.oid, 'pg_class') AS signature
+  SELECT c.relname AS name, obj_description(c.oid, 'pg_class') AS signature,
+    i.indisvalid AS valid
   FROM pg_index i
   JOIN pg_class c ON c.oid = i.indexrelid
   JOIN pg_class t ON t.oid = i.indrelid
@@ -28,7 +29,11 @@ const INDEXES_SQL = `
   WHERE n.nspname = $1 AND t.relname = $2 AND NOT i.indisprimary`;
 
 function ReadIndex(row: IndexRow): ActualIndex {
-  return { name: row.name, signature: row.signature ?? undefined };
+  return {
+    name: row.name,
+    signature: row.signature ?? undefined,
+    valid: row.valid,
+  };
 }
 
 /**
@@ -39,16 +44,20 @@ function ReadIndex(row: IndexRow): ActualIndex {
  * restricted to `relkind = 'r'`, so a name occupied by a view or a partitioned
  * table reads back as absent too — and the resulting `CREATE TABLE` fails
  * naming the conflict rather than silently adopting an object we do not own.
+ *
+ * It reads through the client that holds the convergence lock, so the catalog it reports is the
+ * one that client then converges, and a one-connection pool cannot wait on itself.
  */
 export async function ReadTable(
+  client: ClientBase,
   schemaName: string,
   tableName: string,
 ): Promise<ActualTable> {
   const target = [schemaName, tableName];
-  const columns = await Query<ColumnRow>(COLUMNS_SQL, target);
+  const columns = await client.query<ColumnRow>(COLUMNS_SQL, target);
   if (columns.rows.length === 0) {
     return { columns: [], indexes: [] };
   }
-  const indexes = await Query<IndexRow>(INDEXES_SQL, target);
+  const indexes = await client.query<IndexRow>(INDEXES_SQL, target);
   return { columns: columns.rows, indexes: indexes.rows.map(ReadIndex) };
 }

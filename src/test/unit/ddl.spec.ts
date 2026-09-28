@@ -17,6 +17,7 @@ import {
   type IndexPlan,
   IsAdapterIndex,
   PlanTable,
+  ServesCrossInstance,
   type TablePlan,
 } from "../../implementations/database/ddl";
 
@@ -166,6 +167,43 @@ describe("BuildTablePlan", () => {
     expect(index.keys).to.deep.equal([`"_instance"`, `("_extra" -> 'ref')`]);
   });
 
+  it("adds an unprefixed __g twin to a crossInstance btree index", () => {
+    const plan = PlanFor("t", {
+      fields: { car: "string", price: "number" },
+      indexes: { byCar: { fields: ["car", "price"], crossInstance: true } },
+    });
+    expect(plan.indexes.map((index) => index.name)).to.deep.equal([
+      "t_byCar",
+      "t_byCar__g",
+    ]);
+    const [scoped, unscoped] = plan.indexes;
+    expect(scoped.keys).to.deep.equal([`"_instance"`, `"car"`, `"price"`]);
+    expect(unscoped.keys).to.deep.equal([`"car"`, `"price"`]);
+    expect(unscoped.signature).to.equal(`antelopejs:1:btree:"car","price"`);
+    expect(unscoped.signature).to.not.equal(scoped.signature);
+  });
+
+  it("keeps a crossInstance gin index as one bare index", () => {
+    const plan = PlanFor("t", {
+      fields: { tags: "string[]" },
+      indexes: { tags: { multi: true, crossInstance: true } },
+    });
+    expect(plan.indexes.map((index) => index.name)).to.deep.equal(["t_tags"]);
+    expect(plan.indexes[0].method).to.equal("gin");
+  });
+
+  it("fits the __g name into the identifier limit", () => {
+    const longId = "x".repeat(70);
+    const plan = PlanFor("t", {
+      fields: {},
+      indexes: { [longId]: { crossInstance: true } },
+    });
+    const names = plan.indexes.map((index) => index.name);
+    expect(names[0]).to.equal(PgIdentifier(`t_${longId}`));
+    expect(names[1]).to.equal(PgIdentifier(`${names[0]}__g`));
+    expect(Buffer.byteLength(names[1])).to.be.at.most(63);
+  });
+
   it("signs an index with its method and keys", () => {
     const index = FindIndex(VEHICLES_PLAN, "vehicles_price");
     expect(index.signature).to.equal(`antelopejs:1:btree:"_instance","price"`);
@@ -177,10 +215,10 @@ describe("BuildTablePlan", () => {
     expect(sql).to.contain(`PRIMARY KEY ("_instance", "_id")`);
   });
 
-  it("emits a create index statement and its signature comment", () => {
+  it("emits a concurrent create index statement and its signature comment", () => {
     const index = FindIndex(VEHICLES_PLAN, "vehicles_price");
     expect(CreateIndexSql("shop", VEHICLES_PLAN, index)).to.deep.equal([
-      `CREATE INDEX "vehicles_price" ON "shop"."vehicles" USING btree ("_instance", "price")`,
+      `CREATE INDEX CONCURRENTLY "vehicles_price" ON "shop"."vehicles" USING btree ("_instance", "price")`,
       `COMMENT ON INDEX "shop"."vehicles_price" IS 'antelopejs:1:btree:"_instance","price"'`,
     ]);
   });
@@ -198,6 +236,24 @@ describe("BuildTablePlan", () => {
     expect(DecodeLiteral((matched as RegExpExecArray)[1])).to.equal(
       index.signature,
     );
+  });
+});
+
+describe("ServesCrossInstance", () => {
+  const shape = ParseTable(vehicles, "s.vehicles");
+
+  it("is true for a declared crossInstance index", () => {
+    expect(
+      ServesCrossInstance("price", { crossInstance: true }, shape),
+    ).to.equal(true);
+  });
+
+  it("is false for a btree index that is not crossInstance", () => {
+    expect(ServesCrossInstance("price", {}, shape)).to.equal(false);
+  });
+
+  it("is true for a gin index, which carries no instance prefix", () => {
+    expect(ServesCrossInstance("tags", { multi: true }, shape)).to.equal(true);
   });
 });
 
@@ -319,14 +375,31 @@ const UNCASTABLE_COLUMNS: ActualColumn[] = FULL_COLUMNS.map((column) =>
   column.name === "price" ? { name: column.name, type: "boolean" } : column,
 );
 
-const PRICELESS_COLUMNS: ActualColumn[] = FULL_COLUMNS.filter(
-  (column) => column.name !== "price",
-);
-
 const DRIFTED_TAGS_INDEX: ActualIndex = {
   name: "vehicles_tags",
   signature: `antelopejs:1:gin:"outdated"`,
+  valid: true,
 };
+
+const PRICE_SIGNATURE = `antelopejs:1:btree:"_instance","price"`;
+const DRIFTED_PRICE_INDEX: ActualIndex = {
+  name: "vehicles_price",
+  signature: `antelopejs:1:btree:"price"`,
+  valid: true,
+};
+const DROP_PRICE = `DROP INDEX CONCURRENTLY IF EXISTS "shop"."vehicles_price"`;
+const DROP_PRICE_REPLACEMENT = `DROP INDEX CONCURRENTLY IF EXISTS "shop"."vehicles_price__next"`;
+const CREATE_PRICE = `CREATE INDEX CONCURRENTLY "vehicles_price"`;
+const CREATE_PRICE_REPLACEMENT = `CREATE INDEX CONCURRENTLY "vehicles_price__next"`;
+const RENAME_PRICE_REPLACEMENT = `ALTER INDEX "shop"."vehicles_price__next" RENAME TO "vehicles_price"`;
+
+function OtherIndexes(plan: TablePlan, name: string): ActualIndex[] {
+  return SignedIndexes(plan).filter((index) => index.name !== name);
+}
+
+function StartsAt(statements: string[], prefix: string): number {
+  return statements.findIndex((sql) => sql.startsWith(prefix));
+}
 
 function Existing(
   columns: ActualColumn[],
@@ -339,6 +412,7 @@ function SignedIndexes(plan: TablePlan): ActualIndex[] {
   return plan.indexes.map((index) => ({
     name: index.name,
     signature: index.signature,
+    valid: true,
   }));
 }
 
@@ -361,9 +435,6 @@ type StatementPredicate = (sql: string) => boolean;
 const IsIndexDrop: StatementPredicate = (sql) => sql.startsWith("DROP INDEX");
 const IsColumnChange: StatementPredicate = (sql) =>
   sql.startsWith("ALTER TABLE");
-const IsIndexCreate: StatementPredicate = (sql) =>
-  sql.startsWith("CREATE INDEX") || sql.startsWith("COMMENT ON INDEX");
-
 function FirstAt(statements: string[], matches: StatementPredicate): number {
   const position = statements.findIndex(matches);
   if (position < 0) {
@@ -382,9 +453,12 @@ function LastAt(statements: string[], matches: StatementPredicate): number {
 describe("PlanTable", () => {
   it("creates everything when the table is absent", () => {
     const out = PlanTable(SCHEMA, VEHICLES_PLAN, EMPTY, SAFE);
+    expect(out.statements).to.have.lengthOf(1);
     expect(out.statements[0]).to.contain("CREATE TABLE IF NOT EXISTS");
     expect(
-      out.statements.filter((sql) => sql.startsWith("CREATE INDEX")),
+      out.indexStatements.filter((sql) =>
+        sql.startsWith("CREATE INDEX CONCURRENTLY"),
+      ),
     ).to.have.lengthOf(DECLARED_INDEX_COUNT);
     expect(out.warnings).to.deep.equal([]);
   });
@@ -525,88 +599,124 @@ describe("PlanTable", () => {
   });
 
   it("leaves a matching index alone", () => {
+    const actual = Existing(FULL_COLUMNS, SignedIndexes(VEHICLES_PLAN));
+    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
+    expect(out.indexStatements).to.deep.equal([]);
+  });
+
+  it("builds indexes outside the transaction", () => {
+    const actual = Existing(FULL_COLUMNS);
+    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
+    expect(out.statements).to.deep.equal([]);
+    expect(out.indexStatements).to.have.lengthOf(DECLARED_INDEX_COUNT * 2);
+  });
+
+  it("builds a drifted index's replacement before it drops the index", () => {
     const actual = Existing(FULL_COLUMNS, [
-      {
-        name: "vehicles_price",
-        signature: `antelopejs:1:btree:"_instance","price"`,
-      },
+      ...OtherIndexes(VEHICLES_PLAN, "vehicles_price"),
+      DRIFTED_PRICE_INDEX,
     ]);
     const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
-    expect(
-      out.statements.some((sql) => sql.includes("vehicles_price")),
-    ).to.equal(false);
+    expect(out.statements).to.deep.equal([]);
+    expect(out.indexStatements).to.deep.equal([
+      `${CREATE_PRICE_REPLACEMENT} ON ${VEHICLES_TARGET} USING btree ("_instance", "price")`,
+      `COMMENT ON INDEX "shop"."vehicles_price__next" IS '${PRICE_SIGNATURE}'`,
+      DROP_PRICE,
+      RENAME_PRICE_REPLACEMENT,
+    ]);
   });
 
-  it("recreates an index whose signature drifted", () => {
+  it("replaces an index we own but never signed", () => {
     const actual = Existing(FULL_COLUMNS, [
-      { name: "vehicles_price", signature: `antelopejs:1:btree:"price"` },
+      ...OtherIndexes(VEHICLES_PLAN, "vehicles_price"),
+      { name: "vehicles_price", valid: true },
     ]);
     const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
-    expect(out.statements).to.contain(
-      `DROP INDEX IF EXISTS "shop"."vehicles_price"`,
-    );
-    expect(
-      out.statements.some((sql) =>
-        sql.startsWith(`CREATE INDEX "vehicles_price"`),
-      ),
-    ).to.equal(true);
+    expect(StartsAt(out.indexStatements, CREATE_PRICE_REPLACEMENT)).to.equal(0);
+    expect(out.indexStatements).to.contain(RENAME_PRICE_REPLACEMENT);
   });
 
-  it("recreates an index we own but never signed", () => {
-    const actual = Existing(FULL_COLUMNS, [{ name: "vehicles_price" }]);
+  it("drops and rebuilds an index a failed concurrent build left invalid", () => {
+    const actual = Existing(FULL_COLUMNS, [
+      ...OtherIndexes(VEHICLES_PLAN, "vehicles_price"),
+      { name: "vehicles_price", signature: PRICE_SIGNATURE, valid: false },
+    ]);
     const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
-    expect(out.statements).to.contain(
-      `DROP INDEX IF EXISTS "shop"."vehicles_price"`,
-    );
+    expect(out.indexStatements[0]).to.equal(DROP_PRICE);
+    expect(StartsAt(out.indexStatements, CREATE_PRICE)).to.equal(1);
   });
 
-  it("drops an adapter index whose declaration is gone", () => {
+  it("clears a replacement a failed rebuild left behind", () => {
+    const actual = Existing(FULL_COLUMNS, [
+      ...SignedIndexes(VEHICLES_PLAN),
+      { name: "vehicles_price__next", valid: false },
+    ]);
+    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
+    expect(out.indexStatements).to.deep.equal([DROP_PRICE_REPLACEMENT]);
+  });
+
+  it("swaps in a ready replacement when a crash left the index missing", () => {
+    const actual = Existing(FULL_COLUMNS, [
+      ...OtherIndexes(VEHICLES_PLAN, "vehicles_price"),
+      { name: "vehicles_price__next", signature: PRICE_SIGNATURE, valid: true },
+    ]);
+    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
+    expect(out.indexStatements).to.deep.equal([RENAME_PRICE_REPLACEMENT]);
+  });
+
+  it("drops an adapter index whose declaration is gone, after every build", () => {
     const actual = Existing(FULL_COLUMNS, [
       {
         name: "vehicles_retired",
         signature: `antelopejs:1:btree:"_instance","retired"`,
+        valid: true,
       },
     ]);
     const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
-    expect(out.statements).to.contain(
-      `DROP INDEX IF EXISTS "shop"."vehicles_retired"`,
+    expect(out.indexStatements.at(-1)).to.equal(
+      `DROP INDEX CONCURRENTLY IF EXISTS "shop"."vehicles_retired"`,
     );
+  });
+
+  it("drops the __g twin once an index is no longer crossInstance", () => {
+    const shared = PlanFor("vehicles", {
+      fields: vehicles.fields,
+      indexes: { ...vehicles.indexes, price: { crossInstance: true } },
+    });
+    const actual = Existing(FULL_COLUMNS, SignedIndexes(shared));
+    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
+    expect(out.indexStatements).to.deep.equal([
+      `DROP INDEX CONCURRENTLY IF EXISTS "shop"."vehicles_price__g"`,
+    ]);
   });
 
   it("leaves a hand-made index alone", () => {
     const actual = Existing(FULL_COLUMNS, [
       ...SignedIndexes(VEHICLES_PLAN),
-      { name: "operator_hunch" },
+      { name: "operator_hunch", valid: true },
+      { name: "operator_broken", valid: false },
     ]);
-    expect(
-      PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE).statements,
-    ).to.deep.equal([]);
+    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
+    expect(out.statements).to.deep.equal([]);
+    expect(out.indexStatements).to.deep.equal([]);
   });
 
-  it("drops every index before it touches a column, and creates after", () => {
-    const actual = Existing(PRICELESS_COLUMNS, [DRIFTED_TAGS_INDEX]);
-    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
+  it("drops obsolete indexes inside the transaction before a column retype", () => {
+    const actual = Existing(RETYPED_COLUMNS, [
+      ...OtherIndexes(VEHICLES_PLAN, "vehicles_tags"),
+      DRIFTED_TAGS_INDEX,
+    ]);
+    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, DESTRUCTIVE);
     expect(LastAt(out.statements, IsIndexDrop)).to.be.lessThan(
       FirstAt(out.statements, IsColumnChange),
     );
-    expect(LastAt(out.statements, IsColumnChange)).to.be.lessThan(
-      FirstAt(out.statements, IsIndexCreate),
+    expect(out.statements[0]).to.equal(
+      `DROP INDEX IF EXISTS "shop"."vehicles_tags"`,
     );
-  });
-
-  it("drops a drifted index before recreating it", () => {
-    const actual = Existing(FULL_COLUMNS, [
-      { name: "vehicles_price", signature: `antelopejs:1:btree:"price"` },
-    ]);
-    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
-    const dropped = out.statements.indexOf(
-      `DROP INDEX IF EXISTS "shop"."vehicles_price"`,
+    expect(out.indexStatements).to.have.lengthOf(2);
+    expect(out.indexStatements[0]).to.match(
+      /^CREATE INDEX CONCURRENTLY "vehicles_tags"/,
     );
-    const created = out.statements.findIndex((sql) =>
-      sql.startsWith(`CREATE INDEX "vehicles_price"`),
-    );
-    expect(dropped).to.be.greaterThan(-1);
-    expect(dropped).to.be.lessThan(created);
   });
 
   it("emits nothing against the state its own creation produces", () => {
@@ -616,6 +726,7 @@ describe("PlanTable", () => {
     );
     expect(PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE)).to.deep.equal({
       statements: [],
+      indexStatements: [],
       warnings: [],
     });
   });
