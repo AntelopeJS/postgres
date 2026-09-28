@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.1.3
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.1.2...v0.1.3)
+
+### 🚀 Enhancements
+
+- **indexes:** Add crossInstance indexes and build them concurrently ([#14](https://github.com/AntelopeJS/postgres/pull/14))
+
+### 🩹 Fixes
+
+- **deps:** Align interface packages with the current interface-core line ([#11](https://github.com/AntelopeJS/postgres/pull/11))
+
+### 🏡 Chore
+
+- Remove .git-blame-ignore-revs ([#9](https://github.com/AntelopeJS/postgres/pull/9))
+
+### 🤖 CI
+
+- Use shared private release workflow ([#8](https://github.com/AntelopeJS/postgres/pull/8))
+- **release:** Release next from a dedicated branch and restore requireCommits ([#10](https://github.com/AntelopeJS/postgres/pull/10))
+- **release:** Reference the shared release workflows through v1 ([#12](https://github.com/AntelopeJS/postgres/pull/12))
+- Pin the antelope core locally instead of installing it globally ([#13](https://github.com/AntelopeJS/postgres/pull/13))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.1.2
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.1.1...v0.1.2)
