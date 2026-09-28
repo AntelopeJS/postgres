@@ -5,12 +5,18 @@ import type {
   TableDefinition,
 } from "@antelopejs/interface-database/schema";
 
+import { Logger } from "../../logger";
 import { SyncSchema } from "./migrate";
+import { ServesCrossInstance } from "./ddl";
 import { ParseSchema, type SchemaShape, type TableShape } from "./fields";
 
 const definitions: Record<string, SchemaDefinition> = {};
 const shapes: Record<string, SchemaShape> = {};
 const ready: Record<string, Promise<void>> = {};
+const warnedScans = new Set<string>();
+
+/** Joins a schema, a table and an index into one memo key, with a character none of them can hold. */
+const SCAN_KEY_SEPARATOR = "\u0000";
 
 async function initialize(schemaId: string, schema: SchemaDefinition) {
   const shape = ParseSchema(schemaId, schema);
@@ -118,4 +124,35 @@ export function GetIndex(
   }
   assert(!onlyIndex, `Unknown index '${indexId}' on '${schemaId}.${tableId}'`);
   return { fields: [indexId] };
+}
+
+function UnservedScanWarning(
+  schemaId: string,
+  tableId: string,
+  indexId: string,
+): string {
+  return `A CROSS_INSTANCE query on '${schemaId}.${tableId}' scans index '${indexId}', which is not declared crossInstance: its physical index leads with the instance, so the query stays correct but may be slow. Set crossInstance: true on the index to keep such queries fast`;
+}
+
+/**
+ * Warns, once per index per process, that a `CROSS_INSTANCE` read scans a declared index no
+ * unprefixed physical index backs. A name that is not a declared index is a plain field, and says
+ * nothing about how the schema was declared, so it never warns.
+ */
+export function NoticeCrossInstanceScan(
+  schemaId: string,
+  tableId: string,
+  indexId: string,
+): void {
+  const key = [schemaId, tableId, indexId].join(SCAN_KEY_SEPARATOR);
+  const indexes = GetTable(schemaId, tableId).indexes ?? {};
+  if (warnedScans.has(key) || !Object.hasOwn(indexes, indexId)) {
+    return;
+  }
+  const shape = GetTableShape(schemaId, tableId);
+  if (ServesCrossInstance(indexId, indexes[indexId], shape)) {
+    return;
+  }
+  warnedScans.add(key);
+  Logger.Warn(UnservedScanWarning(schemaId, tableId, indexId));
 }

@@ -81,10 +81,16 @@ A declared index becomes a real index, and the operations that can use one do:
 
 - **Secondary btree indexes lead with `_instance`**, because every non-`CROSS_INSTANCE` read carries
   `WHERE _instance = $1`. An index on `("_instance", "price")` serves
-  `_instance = '' AND price > 1000` as one range scan.
+  `_instance = '' AND price > 1000` as one range scan. It is named `<table>_<index>`.
+- **`crossInstance: true` adds an unprefixed twin.** The adapter also maintains
+  `<table>_<index>__g` over the same keys without `_instance`, which is what serves a
+  `CROSS_INSTANCE` read of that index. Without the flag such a read stays correct but cannot use the
+  index well, and the first `getAll`, `between` or `orderBy` naming the index under
+  `CROSS_INSTANCE` logs one warning per index per process. A plain `filter` never warns.
 - **`multi` maps to GIN** over a single jsonb-backed field, making `@>`, `?`, `?|` and `?&`
-  index-reachable. A GIN index is keyed on the column alone, with no leading `_instance`. `multi` on
-  a scalar field falls back to btree rather than erroring.
+  index-reachable. A GIN index is keyed on the column alone, with no leading `_instance`, so it
+  already serves both kinds of read and `crossInstance` changes nothing for it. `multi` on a scalar
+  field falls back to btree rather than erroring.
 - **What reaches an index:** `filter` and `orderBy` on a declared field, `get`, `getAll`, `between`,
   a `joinInner` predicate, and a `lookup`'s local key — **including when the looked-up query only
   plucked its columns**, since the correlation is pushed under that projection onto the column
@@ -99,15 +105,16 @@ serve it.
 
 Registration reconciles the declared schema against what is actually in the database.
 
-| Change                                 | `safe` (default)           | `destructive`         |
-| -------------------------------------- | -------------------------- | --------------------- |
-| New declared field                     | `ADD COLUMN`               | `ADD COLUMN`          |
-| Declared type differs from the column  | **error naming the field** | `ALTER COLUMN … TYPE` |
-| Column exists, no longer declared      | warning, column kept       | `DROP COLUMN`         |
-| Index missing                          | `CREATE INDEX`             | same                  |
-| Index definition changed               | `DROP` + `CREATE`          | same                  |
-| Adapter-owned index no longer declared | `DROP INDEX`               | same                  |
-| Index this adapter did not create      | left alone                 | left alone            |
+| Change                                 | `safe` (default)                     | `destructive`         |
+| -------------------------------------- | ------------------------------------ | --------------------- |
+| New declared field                     | `ADD COLUMN`                         | `ADD COLUMN`          |
+| Declared type differs from the column  | **error naming the field**           | `ALTER COLUMN … TYPE` |
+| Column exists, no longer declared      | warning, column kept                 | `DROP COLUMN`         |
+| Index missing                          | `CREATE INDEX CONCURRENTLY`          | same                  |
+| Index left `INVALID` by a failed build | `DROP` + `CREATE`, both concurrently | same                  |
+| Index definition changed               | build replacement, then swap         | same                  |
+| Adapter-owned index no longer declared | `DROP INDEX CONCURRENTLY`            | same                  |
+| Index this adapter did not create      | left alone                           | left alone            |
 
 A type mismatch is fatal under `safe` because it is otherwise a _query-time_ failure, silent until
 the first read. Dropping an index loses no data, which is why the index rows need no opt-in.
@@ -118,9 +125,27 @@ column, so a row does not go on displaying a value that `filter` can no longer f
 lossless: a stored value the new column cannot hold — the wrong JSON type for the declared one —
 stays in `_extra`, where it can still be read, rather than being dropped or coerced.
 
-Each schema converges in one transaction, and adapter-owned indexes are recognised by a signature
-stored as the index comment rather than by parsing the index definition back.
+Adapter-owned indexes are recognised by a signature stored as the index comment rather than by
+parsing the index definition back.
 
-**Several processes may converge the same schema at once.** Whichever loses the race to create an
-object sees the catalog's duplicate-object error, re-reads what is now there, and plans the no-op
-that is left; there is no lock to take and no ordering to arrange between deployments.
+**Schemas, tables and columns converge in one transaction; indexes converge after it.** Every
+secondary index is built with `CREATE INDEX CONCURRENTLY`, so a table keeps taking writes while an
+index is added to it, however large it is:
+
+- An index a failed or interrupted build left `INVALID` (`pg_index.indisvalid = false`) under one of
+  the adapter's names serves no read, so the next convergence drops it concurrently and builds it
+  again.
+- An index whose definition changed keeps serving while its replacement is built under
+  `<name>__next`; only once that is valid is the old one dropped and the replacement renamed.
+- Adapter-owned indexes nothing declares any more are dropped last, after every build succeeded, so
+  no index is dropped before the one replacing it is valid.
+- The one exception is a column type change under `destructive`: it rewrites the table under an
+  exclusive lock anyway, so the indexes it would otherwise rebuild in an incompatible shape are
+  dropped inside the transaction, before the `ALTER`.
+
+**Several processes may converge the same schema at once.** They take turns through a PostgreSQL
+advisory lock per schema, held by the converging connection for the whole convergence, and the one
+that goes second re-reads the catalog and finds nothing left to do. A process that dies mid-way
+releases the lock with its connection, and whatever build it left `INVALID` is repaired by the next
+one. A duplicate-object error from something outside that lock still re-reads the catalog and plans
+the no-op that is left.

@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { DatabaseError, type Pool, type PoolClient } from "pg";
 import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
 
@@ -26,6 +27,18 @@ const COMMIT = "COMMIT";
 const ROLLBACK = "ROLLBACK";
 const UNLIMITED_STATEMENT_TIMEOUT = "SET LOCAL statement_timeout = 0";
 const TRANSACTION_PROLOGUE = [BEGIN, UNLIMITED_STATEMENT_TIMEOUT];
+
+const SCHEMA_LOCK_NAMESPACE = "antelopejs:converge:";
+const TRY_SCHEMA_LOCK_SQL =
+  "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS locked";
+const SCHEMA_UNLOCK_SQL = "SELECT pg_advisory_unlock(hashtextextended($1, 0))";
+const SCHEMA_LOCK_POLL_MS = 100;
+const UNLIMITED_SESSION_STATEMENT_TIMEOUT = "SET statement_timeout = 0";
+const RESTORE_SESSION_STATEMENT_TIMEOUT = "RESET statement_timeout";
+
+interface LockRow {
+  locked: boolean;
+}
 
 const ABORTED_TRANSACTION = new Error(
   "PostgreSQL client discarded: its migration transaction could not be rolled back",
@@ -89,19 +102,28 @@ function MigrationError(
   );
 }
 
-async function RunTransaction(
+/** Runs each statement on its own, in order, naming the one that failed. */
+async function RunEach(
   client: PoolClient,
   schemaName: string,
   statements: readonly string[],
 ): Promise<void> {
-  const sequence = [...TRANSACTION_PROLOGUE, ...statements, COMMIT];
-  for (const statement of sequence) {
+  for (const statement of statements) {
     try {
       await client.query(statement);
     } catch (err) {
       throw MigrationError(schemaName, statement, err);
     }
   }
+}
+
+function RunTransaction(
+  client: PoolClient,
+  schemaName: string,
+  statements: readonly string[],
+): Promise<void> {
+  const sequence = [...TRANSACTION_PROLOGUE, ...statements, COMMIT];
+  return RunEach(client, schemaName, sequence);
 }
 
 async function Rollback(client: PoolClient): Promise<boolean> {
@@ -219,18 +241,21 @@ function SeedStatements(schemaName: string): string[] {
 }
 
 async function PlanSchema(
+  client: PoolClient,
   schemaName: string,
   plans: readonly TablePlan[],
   mode: MigrationMode,
 ): Promise<ConvergencePlan> {
   const merged: ConvergencePlan = {
     statements: SeedStatements(schemaName),
+    indexStatements: [],
     warnings: [],
   };
   for (const plan of plans) {
-    const actual = await ReadTable(schemaName, plan.table);
+    const actual = await ReadTable(client, schemaName, plan.table);
     const table = PlanTable(schemaName, plan, actual, mode);
     merged.statements.push(...table.statements);
+    merged.indexStatements.push(...table.indexStatements);
     merged.warnings.push(...table.warnings);
   }
   return merged;
@@ -248,15 +273,50 @@ function ReportConvergence(schemaName: string, changed: number): void {
   Logger.Info(`converged schema '${schemaName}' in ${changed} statements`);
 }
 
+async function AcquireSchemaLock(
+  client: PoolClient,
+  key: readonly string[],
+): Promise<void> {
+  const tryLock = () => client.query<LockRow>(TRY_SCHEMA_LOCK_SQL, [...key]);
+  while (!(await tryLock()).rows[0].locked) {
+    await delay(SCHEMA_LOCK_POLL_MS);
+  }
+}
+
+/** Runs work on one client holding the schema's lock; a failure destroys the client, releasing it. */
+async function WithSchemaLock(
+  schemaName: string,
+  work: (client: PoolClient) => Promise<void>,
+): Promise<void> {
+  const key = [`${SCHEMA_LOCK_NAMESPACE}${schemaName}`];
+  const client = await AcquireClient();
+  try {
+    await client.query(UNLIMITED_SESSION_STATEMENT_TIMEOUT);
+    await AcquireSchemaLock(client, key);
+    await work(client);
+    await client.query(SCHEMA_UNLOCK_SQL, key);
+    await client.query(RESTORE_SESSION_STATEMENT_TIMEOUT);
+  } catch (err) {
+    client.release(err instanceof Error ? err : new Error(Describe(err)));
+    throw err;
+  }
+  client.release();
+}
+
 async function Converge(
   schemaName: string,
   plans: readonly TablePlan[],
 ): Promise<void> {
   const baseline = SeedStatements(schemaName).length;
-  const merged = await PlanSchema(schemaName, plans, GetOptions().migrations);
-  await Apply(schemaName, merged.statements);
-  ReportConvergence(schemaName, merged.statements.length - baseline);
-  WarnOnce(merged.warnings);
+  await WithSchemaLock(schemaName, async (client) => {
+    const mode = GetOptions().migrations;
+    const merged = await PlanSchema(client, schemaName, plans, mode);
+    await RunTransaction(client, schemaName, merged.statements);
+    await RunEach(client, schemaName, merged.indexStatements);
+    const applied = merged.statements.length + merged.indexStatements.length;
+    ReportConvergence(schemaName, applied - baseline);
+    WarnOnce(merged.warnings);
+  });
 }
 
 /**
@@ -266,8 +326,21 @@ async function Converge(
  * up front and the retried region is introspect, diff and apply — only the
  * catalog state can go stale between attempts.
  *
- * A duplicate-object failure means another process created something between
- * the introspection and the DDL, which makes the diff stale rather than the
+ * Processes converging the same schema take turns through a session advisory
+ * lock per schema, and the one that goes second re-reads the catalog and finds
+ * nothing left to do. The lock is polled with `pg_try_advisory_lock` rather
+ * than awaited with `pg_advisory_lock`: a backend blocked in the latter holds a
+ * snapshot, `CREATE INDEX CONCURRENTLY` waits out every older snapshot, and the
+ * holder would wait on the very process waiting on it. It is held on one client
+ * with no statement timeout, since an index build lasts as long as the table is
+ * large, and a process that dies releases it by disconnecting.
+ * Tables and columns converge in one transaction; indexes are then built with
+ * `CREATE INDEX CONCURRENTLY`, so writes keep flowing while they build, and an
+ * index a failed build left `INVALID` is dropped and built again.
+ *
+ * A duplicate-object failure means something outside that lock — a process on
+ * an older version of this adapter — created an object between the
+ * introspection and the DDL, which makes the diff stale rather than the
  * statements retryable, so the whole convergence is what gets attempted again.
  */
 export async function SyncSchema(

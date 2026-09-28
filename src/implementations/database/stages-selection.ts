@@ -9,10 +9,10 @@ import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { ID_COLUMN, INSTANCE_COLUMN, type QueryStage } from "./utils";
 import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import {
-  IndexColumns,
   Prepare,
   type Relation,
   RequireOrigin,
+  ScanColumns,
   SINGLE_ROW,
   WHERE_BLOCKERS,
 } from "./relation";
@@ -48,7 +48,7 @@ function Selected(
   const columns =
     indexId === undefined
       ? [prepared.source.field(ID_COLUMN)]
-      : IndexColumns(prepared, indexId);
+      : ScanColumns(prepared, indexId);
   return { relation: prepared, columns, indexId, stage, context };
 }
 

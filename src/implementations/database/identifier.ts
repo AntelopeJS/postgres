@@ -7,6 +7,8 @@ import { GetSchemaPrefix } from "../../connection";
 const HASH_LENGTH = 7;
 const HASH_SEPARATOR = "_";
 const INDEX_NAME_SEPARATOR = "_";
+const CROSS_INSTANCE_INDEX_SUFFIX = "__g";
+const REPLACEMENT_INDEX_SUFFIX = "__next";
 const KEPT_BYTES = MAX_IDENTIFIER_BYTES - HASH_LENGTH - HASH_SEPARATOR.length;
 const CONTINUATION_MASK = 0xc0;
 const CONTINUATION_BITS = 0x80;
@@ -49,6 +51,16 @@ export function TableName(tableId: string): string {
 
 export function IndexName(tableId: string, indexId: string): string {
   return PgIdentifier(`${tableId}${INDEX_NAME_SEPARATOR}${indexId}`);
+}
+
+/** The unprefixed twin a `crossInstance` index also gets, named after the prefixed one. */
+export function CrossInstanceIndexName(indexName: string): string {
+  return PgIdentifier(`${indexName}${CROSS_INSTANCE_INDEX_SUFFIX}`);
+}
+
+/** Where a drifted index's replacement is built before it takes the index's name. */
+export function ReplacementIndexName(indexName: string): string {
+  return PgIdentifier(`${indexName}${REPLACEMENT_INDEX_SUFFIX}`);
 }
 
 /** Qualifies any schema-scoped object — a table or an index — by physical name. */

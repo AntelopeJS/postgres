@@ -17,6 +17,7 @@ import {
   Prepare,
   type Relation,
   Render,
+  ScanColumns,
   SetProjection,
   type TableOrigin,
   TableRelation,
@@ -427,5 +428,31 @@ describe("ValueRelation", () => {
     expect(Render(relation)).to.equal(
       'SELECT "t3"."value" AS "value" FROM ((a) UNION ALL (b)) AS "t3"',
     );
+  });
+});
+
+describe("ScanColumns", () => {
+  function Scanning(crossInstance: boolean): string[] {
+    const scanned: string[] = [];
+    const relation = TableRelation(TABLE, ROOT_ALIAS, {
+      ...NewOrigin(),
+      crossInstanceScan: (name) => scanned.push(name),
+    });
+    relation.crossInstance = crossInstance;
+    ScanColumns(relation, "price");
+    return scanned;
+  }
+
+  it("tells the origin about an index a cross-instance read scans", () => {
+    expect(Scanning(true)).to.deep.equal(["price"]);
+  });
+
+  it("stays silent for a read scoped to one instance", () => {
+    expect(Scanning(false)).to.deep.equal([]);
+  });
+
+  it("expands the index exactly as IndexColumns does", () => {
+    const columns = ScanColumns(NewTable(), "price");
+    expect(columns.map((column) => column.sql)).to.deep.equal(['"t0"."price"']);
   });
 });

@@ -12,7 +12,7 @@ import { ClampToRange, INT4_MAX, Numeric, Predicate } from "./readings";
 import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import {
   CurrentValue,
-  IndexColumns,
+  ScanColumns,
   type OrderTerm,
   Prepare,
   type Relation,
@@ -104,7 +104,7 @@ function SortName(stage: QueryStage): string {
 const OrderByStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, ORDER_BLOCKERS, context);
   const descending = stage.options?.direction === DESCENDING;
-  const terms = IndexColumns(prepared, SortName(stage)).map(
+  const terms = ScanColumns(prepared, SortName(stage)).map(
     (column): OrderTerm => ({ sql: column.sql, descending }),
   );
   prepared.orderBy.unshift(...terms);

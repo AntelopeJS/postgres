@@ -7,8 +7,8 @@ import { IndexFields } from "./ddl";
 import { IsPlainObject } from "./value";
 import { TableReference } from "./identifier";
 import type { DecodingContext } from "./context";
-import { GetIndex, GetTableShape } from "./schema";
 import { type Compiled, Param, QualifiedColumn } from "./sql";
+import { GetIndex, GetTableShape, NoticeCrossInstanceScan } from "./schema";
 import { type Relation, type TableOrigin, TableRelation } from "./relation";
 import { DEFAULT_INSTANCE_ID, INSTANCE_COLUMN, type QueryStage } from "./utils";
 
@@ -67,6 +67,8 @@ export function RegisteredOrigin(
     tableId,
     shape: GetTableShape(schemaId, tableId),
     index: (name) => IndexFields(name, GetIndex(schemaId, tableId, name)),
+    crossInstanceScan: (name) =>
+      NoticeCrossInstanceScan(schemaId, tableId, name),
   };
 }
 
