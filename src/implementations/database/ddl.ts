@@ -623,10 +623,10 @@ function PlanIndexes(
   schemaName: string,
   plan: TablePlan,
   actual: readonly ActualIndex[],
-  out: ConvergencePlan,
-): void {
+): string[] {
   const found = new Map(actual.map((index) => [index.name, index]));
   const managed = new Set<string>();
+  const statements: string[] = [];
   for (const index of plan.indexes) {
     const replacement = ReplacementIndexName(index.name);
     managed.add(index.name).add(replacement);
@@ -634,15 +634,26 @@ function PlanIndexes(
       current: found.get(index.name),
       replacement: found.get(replacement),
     };
-    out.indexStatements.push(...PlanIndexBuild(schemaName, plan, index, state));
+    statements.push(...PlanIndexBuild(schemaName, plan, index, state));
   }
   for (const index of actual) {
     if (!managed.has(index.name) && IsAdapterIndex(index.signature)) {
-      out.indexStatements.push(
-        DropIndexConcurrentlySql(schemaName, index.name),
-      );
+      statements.push(DropIndexConcurrentlySql(schemaName, index.name));
     }
   }
+  return statements;
+}
+
+/**
+ * The concurrent index statements that converge a table whose columns already converged, in the
+ * order {@link ConvergencePlan} lays out. Pure; a table the catalog does not hold has no index yet.
+ */
+export function PlanIndexStatements(
+  schemaName: string,
+  plan: TablePlan,
+  actual: ActualTable,
+): string[] {
+  return PlanIndexes(schemaName, plan, actual.indexes);
 }
 
 /**
@@ -666,11 +677,11 @@ export function PlanTable(
   };
   if (actual.columns.length === 0) {
     out.statements.push(CreateTableSql(schemaName, plan));
-    PlanIndexes(schemaName, plan, [], out);
+    out.indexStatements.push(...PlanIndexes(schemaName, plan, []));
     return out;
   }
   const kept = PlanRetypeDrops(schemaName, plan, actual, out);
   PlanColumns(QualifiedName(schemaName, plan.table), plan, actual, mode, out);
-  PlanIndexes(schemaName, plan, kept, out);
+  out.indexStatements.push(...PlanIndexes(schemaName, plan, kept));
   return out;
 }

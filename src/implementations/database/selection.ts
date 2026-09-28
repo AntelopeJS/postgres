@@ -8,8 +8,8 @@ import { IsPlainObject } from "./value";
 import { TableReference } from "./identifier";
 import type { DecodingContext } from "./context";
 import { type Compiled, Param, QualifiedColumn } from "./sql";
-import { GetIndex, GetTableShape, NoticeCrossInstanceScan } from "./schema";
 import { type Relation, type TableOrigin, TableRelation } from "./relation";
+import { GetCrossInstanceScanNotice, GetIndex, GetTableShape } from "./schema";
 import { DEFAULT_INSTANCE_ID, INSTANCE_COLUMN, type QueryStage } from "./utils";
 
 export const SCHEMA_STAGE = "schema";
@@ -67,8 +67,7 @@ export function RegisteredOrigin(
     tableId,
     shape: GetTableShape(schemaId, tableId),
     index: (name) => IndexFields(name, GetIndex(schemaId, tableId, name)),
-    crossInstanceScan: (name) =>
-      NoticeCrossInstanceScan(schemaId, tableId, name),
+    crossInstanceScan: GetCrossInstanceScanNotice(schemaId, tableId),
   };
 }
 

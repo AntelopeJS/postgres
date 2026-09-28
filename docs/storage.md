@@ -128,9 +128,11 @@ stays in `_extra`, where it can still be read, rather than being dropped or coer
 Adapter-owned indexes are recognised by a signature stored as the index comment rather than by
 parsing the index definition back.
 
-**Schemas, tables and columns converge in one transaction; indexes converge after it.** Every
-secondary index is built with `CREATE INDEX CONCURRENTLY`, so a table keeps taking writes while an
-index is added to it, however large it is:
+**Schemas, tables and columns converge in one transaction; indexes converge after it, in the
+background.** A schema is ready for queries as soon as that transaction commits: no query ever waits
+for a secondary index, and results never depend on whether one exists yet. Every secondary index is
+then built with `CREATE INDEX CONCURRENTLY`, so a table keeps taking reads and writes while an index
+is added to it, however large it is. A failed build is logged and repaired by the next registration:
 
 - An index a failed or interrupted build left `INVALID` (`pg_index.indisvalid = false`) under one of
   the adapter's names serves no read, so the next convergence drops it concurrently and builds it
@@ -143,9 +145,13 @@ index is added to it, however large it is:
   exclusive lock anyway, so the indexes it would otherwise rebuild in an incompatible shape are
   dropped inside the transaction, before the `ALTER`.
 
-**Several processes may converge the same schema at once.** They take turns through a PostgreSQL
-advisory lock per schema, held by the converging connection for the whole convergence, and the one
-that goes second re-reads the catalog and finds nothing left to do. A process that dies mid-way
-releases the lock with its connection, and whatever build it left `INVALID` is repaired by the next
-one. A duplicate-object error from something outside that lock still re-reads the catalog and plans
-the no-op that is left.
+**Several processes may converge the same schema at once.** The tables phase is serialized by a
+transaction-scoped PostgreSQL advisory lock per schema: the process that goes second waits for the
+first to commit, re-reads the catalog and finds nothing left to do. Waiting is safe there because
+that phase never builds an index concurrently. The index phase takes a second, session-level
+advisory lock per schema with a single `pg_try_advisory_lock` and never waits for it: a process that
+finds it held skips the phase, since another one is already building the same indexes. That lock is
+held on a dedicated connection, released when the phase ends, and released with the connection when
+a build fails or the adapter disconnects, which cancels the running build. Whatever build a crash or
+a shutdown left `INVALID` is repaired by the next registration. A duplicate-object error from
+something outside those locks still re-reads the catalog and plans the no-op that is left.

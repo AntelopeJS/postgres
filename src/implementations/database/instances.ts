@@ -103,7 +103,7 @@ function DestroyInstanceSql(
  * reference.
  *
  * @param tableIds The schema's tables, passed in rather than read back from
- * `schema.ts`: once `initialize` calls `SyncSchema`, importing it here closes
+ * `schema.ts`: once `initialize` calls `ConvergeTables`, importing it here closes
  * the cycle `schema → migrate → instances → schema`.
  */
 export async function DestroyInstance(

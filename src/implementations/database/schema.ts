@@ -6,22 +6,81 @@ import type {
 } from "@antelopejs/interface-database/schema";
 
 import { Logger } from "../../logger";
-import { SyncSchema } from "./migrate";
 import { ServesCrossInstance } from "./ddl";
+import { BuildIndexes, ConvergeTables } from "./migrate";
 import { ParseSchema, type SchemaShape, type TableShape } from "./fields";
+
+/** Told the name a `CROSS_INSTANCE` read scans a table by. */
+export type CrossInstanceScanNotice = (indexId: string) => void;
+
+type TableScanNotices = Record<string, CrossInstanceScanNotice>;
 
 const definitions: Record<string, SchemaDefinition> = {};
 const shapes: Record<string, SchemaShape> = {};
+const scanNotices: Record<string, TableScanNotices> = {};
 const ready: Record<string, Promise<void>> = {};
-const warnedScans = new Set<string>();
+const indexing: Record<string, Promise<void>> = {};
 
-/** Joins a schema, a table and an index into one memo key, with a character none of them can hold. */
-const SCAN_KEY_SEPARATOR = "\u0000";
+function UnservedScanWarning(
+  schemaId: string,
+  tableId: string,
+  indexId: string,
+): string {
+  return `A CROSS_INSTANCE query on '${schemaId}.${tableId}' scans index '${indexId}', which is not declared crossInstance: its physical index leads with the instance, so the query stays correct but may be slow. Set crossInstance: true on the index to keep such queries fast`;
+}
 
+/** The declared indexes of a table no unprefixed physical index backs. */
+function UnservedIndexes(
+  table: TableDefinition,
+  shape: TableShape,
+): Set<string> {
+  const indexes = Object.entries(table.indexes ?? {});
+  const unserved = indexes.filter(
+    ([indexId, index]) => !ServesCrossInstance(indexId, index, shape),
+  );
+  return new Set(unserved.map(([indexId]) => indexId));
+}
+
+/**
+ * Warns, once per index per registration, that a `CROSS_INSTANCE` read scans a declared index no
+ * unprefixed physical index backs. The set is computed once, so the read pays one lookup; a name
+ * that is not a declared index is a plain field, and never warns.
+ */
+function ScanNotice(
+  schemaId: string,
+  tableId: string,
+  unserved: Set<string>,
+): CrossInstanceScanNotice {
+  return (indexId) => {
+    if (unserved.delete(indexId)) {
+      Logger.Warn(UnservedScanWarning(schemaId, tableId, indexId));
+    }
+  };
+}
+
+function SchemaScanNotices(
+  schemaId: string,
+  schema: SchemaDefinition,
+  shape: SchemaShape,
+): TableScanNotices {
+  const notices: TableScanNotices = {};
+  for (const [tableId, table] of Object.entries(schema)) {
+    const unserved = UnservedIndexes(table, shape[tableId]);
+    notices[tableId] = ScanNotice(schemaId, tableId, unserved);
+  }
+  return notices;
+}
+
+/**
+ * Parses the schema and converges its tables; the secondary indexes then converge in the
+ * background, tracked in `indexing`, so the readiness gate never waits on an index build.
+ */
 async function initialize(schemaId: string, schema: SchemaDefinition) {
   const shape = ParseSchema(schemaId, schema);
   shapes[schemaId] = shape;
-  await SyncSchema(schemaId, schema, shape);
+  scanNotices[schemaId] = SchemaScanNotices(schemaId, schema, shape);
+  const plans = await ConvergeTables(schemaId, schema, shape);
+  indexing[schemaId] = BuildIndexes(schemaId, plans);
 }
 
 /**
@@ -52,6 +111,7 @@ export const Schemas = {
       if (ready[schemaId] === pending) {
         delete definitions[schemaId];
         delete shapes[schemaId];
+        delete scanNotices[schemaId];
       }
       throw err;
     });
@@ -62,7 +122,9 @@ export const Schemas = {
   unregister(schemaId: string) {
     delete definitions[schemaId];
     delete shapes[schemaId];
+    delete scanNotices[schemaId];
     delete ready[schemaId];
+    delete indexing[schemaId];
   },
 };
 
@@ -126,33 +188,24 @@ export function GetIndex(
   return { fields: [indexId] };
 }
 
-function UnservedScanWarning(
+/** The notice a table's `CROSS_INSTANCE` scans report to, built once at registration. */
+export function GetCrossInstanceScanNotice(
   schemaId: string,
   tableId: string,
-  indexId: string,
-): string {
-  return `A CROSS_INSTANCE query on '${schemaId}.${tableId}' scans index '${indexId}', which is not declared crossInstance: its physical index leads with the instance, so the query stays correct but may be slow. Set crossInstance: true on the index to keep such queries fast`;
+): CrossInstanceScanNotice {
+  assert(Object.hasOwn(scanNotices, schemaId), MissingSchema(schemaId));
+  const notices = scanNotices[schemaId];
+  assert(Object.hasOwn(notices, tableId), MissingTable(schemaId, tableId));
+  return notices[tableId];
 }
 
 /**
- * Warns, once per index per process, that a `CROSS_INSTANCE` read scans a declared index no
- * unprefixed physical index backs. A name that is not a declared index is a plain field, and says
- * nothing about how the schema was declared, so it never warns.
+ * Settles once the schema is ready and its background index phase has settled, whatever the
+ * phase's outcome. Nothing in the query path awaits it; it is how a caller observes the phase.
  */
-export function NoticeCrossInstanceScan(
-  schemaId: string,
-  tableId: string,
-  indexId: string,
-): void {
-  const key = [schemaId, tableId, indexId].join(SCAN_KEY_SEPARATOR);
-  const indexes = GetTable(schemaId, tableId).indexes ?? {};
-  if (warnedScans.has(key) || !Object.hasOwn(indexes, indexId)) {
-    return;
+export async function WaitForIndexes(schemaId: string): Promise<void> {
+  await WaitForSchemaReady(schemaId);
+  if (Object.hasOwn(indexing, schemaId)) {
+    await indexing[schemaId];
   }
-  const shape = GetTableShape(schemaId, tableId);
-  if (ServesCrossInstance(indexId, indexes[indexId], shape)) {
-    return;
-  }
-  warnedScans.add(key);
-  Logger.Warn(UnservedScanWarning(schemaId, tableId, indexId));
 }

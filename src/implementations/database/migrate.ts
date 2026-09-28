@@ -1,4 +1,3 @@
-import { setTimeout as delay } from "node:timers/promises";
 import { DatabaseError, type Pool, type PoolClient } from "pg";
 import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
 
@@ -8,13 +7,18 @@ import { SchemaName } from "./identifier";
 import { REGISTRY_SCHEMA } from "./utils";
 import type { SchemaShape } from "./fields";
 import { REGISTRY_STATEMENTS } from "./instances";
-import { AcquireClient, GetPool } from "../../connection";
 import { GetOptions, type MigrationMode } from "../../config";
 import { CHANGE_LOG_STATEMENTS, TriggerStatements } from "./changes";
 import {
+  AcquireClient,
+  GetPool,
+  Query,
+  RegisterBeforeDisconnect,
+} from "../../connection";
+import {
   BuildSchemaPlan,
-  type ConvergencePlan,
   CreateSchemaSql,
+  PlanIndexStatements,
   PlanTable,
   type TablePlan,
 } from "./ddl";
@@ -28,17 +32,41 @@ const ROLLBACK = "ROLLBACK";
 const UNLIMITED_STATEMENT_TIMEOUT = "SET LOCAL statement_timeout = 0";
 const TRANSACTION_PROLOGUE = [BEGIN, UNLIMITED_STATEMENT_TIMEOUT];
 
-const SCHEMA_LOCK_NAMESPACE = "antelopejs:converge:";
-const TRY_SCHEMA_LOCK_SQL =
+const TABLES_LOCK_NAMESPACE = "antelopejs:converge:tables:";
+const INDEXES_LOCK_NAMESPACE = "antelopejs:converge:indexes:";
+const TABLES_LOCK_SQL = "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))";
+const TRY_INDEXES_LOCK_SQL =
   "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS locked";
-const SCHEMA_UNLOCK_SQL = "SELECT pg_advisory_unlock(hashtextextended($1, 0))";
-const SCHEMA_LOCK_POLL_MS = 100;
+const INDEXES_UNLOCK_SQL = "SELECT pg_advisory_unlock(hashtextextended($1, 0))";
+const CANCEL_BACKEND_SQL = "SELECT pg_cancel_backend($1)";
+const BACKEND_PID_SQL = "SELECT pg_backend_pid() AS pid";
 const UNLIMITED_SESSION_STATEMENT_TIMEOUT = "SET statement_timeout = 0";
 const RESTORE_SESSION_STATEMENT_TIMEOUT = "RESET statement_timeout";
 
 interface LockRow {
   locked: boolean;
 }
+
+interface PidRow {
+  pid: number;
+}
+
+/** A background index phase: the client holding its lock, its backend, and whether to stop. */
+interface IndexBuild {
+  readonly client: PoolClient;
+  pid: number;
+  isStopping: boolean;
+}
+
+/** What converging a schema's tables changes, and what it declined to change. */
+interface SchemaChanges {
+  statements: string[];
+  warnings: string[];
+}
+
+const INDEX_BUILD_STOPPED = new Error(
+  "PostgreSQL index build stopped: the adapter is disconnecting",
+);
 
 const ABORTED_TRANSACTION = new Error(
   "PostgreSQL client discarded: its migration transaction could not be rolled back",
@@ -62,6 +90,8 @@ const warned = new Set<string>();
 let registryReady: Promise<void> | undefined;
 let registryFor: Pool | undefined;
 const triggersReady = new Map<string, Promise<void>>();
+const indexBuilds = new Set<IndexBuild>();
+const indexPhases = new Set<Promise<void>>();
 
 function IsDuplicateObject(err: unknown): boolean {
   if (err instanceof DatabaseError) {
@@ -117,15 +147,6 @@ async function RunEach(
   }
 }
 
-function RunTransaction(
-  client: PoolClient,
-  schemaName: string,
-  statements: readonly string[],
-): Promise<void> {
-  const sequence = [...TRANSACTION_PROLOGUE, ...statements, COMMIT];
-  return RunEach(client, schemaName, sequence);
-}
-
 async function Rollback(client: PoolClient): Promise<boolean> {
   try {
     await client.query(ROLLBACK);
@@ -136,9 +157,26 @@ async function Rollback(client: PoolClient): Promise<boolean> {
 }
 
 /**
- * Runs the statements as one transaction on one client, held for its duration.
+ * Runs work as one transaction on one client, held for its duration.
  * Nothing in between may touch the pool, and a client whose `ROLLBACK` missed is destroyed.
  */
+async function InTransaction(
+  schemaName: string,
+  work: (client: PoolClient) => Promise<void>,
+): Promise<void> {
+  const client = await AcquireClient();
+  try {
+    await RunEach(client, schemaName, TRANSACTION_PROLOGUE);
+    await work(client);
+    await RunEach(client, schemaName, [COMMIT]);
+  } catch (err) {
+    const rolledBack = await Rollback(client);
+    client.release(rolledBack ? undefined : ABORTED_TRANSACTION);
+    throw err;
+  }
+  client.release();
+}
+
 async function Apply(
   schemaName: string,
   statements: readonly string[],
@@ -146,15 +184,9 @@ async function Apply(
   if (statements.length === 0) {
     return;
   }
-  const client = await AcquireClient();
-  try {
-    await RunTransaction(client, schemaName, statements);
-  } catch (err) {
-    const rolledBack = await Rollback(client);
-    client.release(rolledBack ? undefined : ABORTED_TRANSACTION);
-    throw err;
-  }
-  client.release();
+  await InTransaction(schemaName, (client) =>
+    RunEach(client, schemaName, statements),
+  );
 }
 
 function EnsureRegistry(): Promise<void> {
@@ -245,17 +277,15 @@ async function PlanSchema(
   schemaName: string,
   plans: readonly TablePlan[],
   mode: MigrationMode,
-): Promise<ConvergencePlan> {
-  const merged: ConvergencePlan = {
+): Promise<SchemaChanges> {
+  const merged: SchemaChanges = {
     statements: SeedStatements(schemaName),
-    indexStatements: [],
     warnings: [],
   };
   for (const plan of plans) {
     const actual = await ReadTable(client, schemaName, plan.table);
     const table = PlanTable(schemaName, plan, actual, mode);
     merged.statements.push(...table.statements);
-    merged.indexStatements.push(...table.indexStatements);
     merged.warnings.push(...table.warnings);
   }
   return merged;
@@ -273,83 +303,203 @@ function ReportConvergence(schemaName: string, changed: number): void {
   Logger.Info(`converged schema '${schemaName}' in ${changed} statements`);
 }
 
-async function AcquireSchemaLock(
-  client: PoolClient,
-  key: readonly string[],
-): Promise<void> {
-  const tryLock = () => client.query<LockRow>(TRY_SCHEMA_LOCK_SQL, [...key]);
-  while (!(await tryLock()).rows[0].locked) {
-    await delay(SCHEMA_LOCK_POLL_MS);
+function ReportIndexBuilds(schemaName: string, applied: number): void {
+  if (applied <= NOTHING_TO_CONVERGE) {
+    return;
   }
+  Logger.Info(
+    `converged the indexes of schema '${schemaName}' in ${applied} statements`,
+  );
 }
 
-/** Runs work on one client holding the schema's lock; a failure destroys the client, releasing it. */
-async function WithSchemaLock(
-  schemaName: string,
-  work: (client: PoolClient) => Promise<void>,
-): Promise<void> {
-  const key = [`${SCHEMA_LOCK_NAMESPACE}${schemaName}`];
-  const client = await AcquireClient();
-  try {
-    await client.query(UNLIMITED_SESSION_STATEMENT_TIMEOUT);
-    await AcquireSchemaLock(client, key);
-    await work(client);
-    await client.query(SCHEMA_UNLOCK_SQL, key);
-    await client.query(RESTORE_SESSION_STATEMENT_TIMEOUT);
-  } catch (err) {
-    client.release(err instanceof Error ? err : new Error(Describe(err)));
-    throw err;
-  }
-  client.release();
+function LockKey(namespace: string, schemaName: string): string[] {
+  return [`${namespace}${schemaName}`];
 }
 
-async function Converge(
+/** Plans and applies the schema, its tables and columns, holding the schema's tables lock. */
+function ConvergeTablesLocked(
   schemaName: string,
   plans: readonly TablePlan[],
 ): Promise<void> {
   const baseline = SeedStatements(schemaName).length;
-  await WithSchemaLock(schemaName, async (client) => {
+  return InTransaction(schemaName, async (client) => {
+    await client.query(
+      TABLES_LOCK_SQL,
+      LockKey(TABLES_LOCK_NAMESPACE, schemaName),
+    );
     const mode = GetOptions().migrations;
-    const merged = await PlanSchema(client, schemaName, plans, mode);
-    await RunTransaction(client, schemaName, merged.statements);
-    await RunEach(client, schemaName, merged.indexStatements);
-    const applied = merged.statements.length + merged.indexStatements.length;
-    ReportConvergence(schemaName, applied - baseline);
-    WarnOnce(merged.warnings);
+    const changes = await PlanSchema(client, schemaName, plans, mode);
+    await RunEach(client, schemaName, changes.statements);
+    ReportConvergence(schemaName, changes.statements.length - baseline);
+    WarnOnce(changes.warnings);
   });
 }
 
 /**
- * Brings a registered schema's PostgreSQL objects in line with its definition.
+ * Brings a registered schema's PostgreSQL schema, tables and columns in line with its definition,
+ * and answers the table plans {@link BuildIndexes} converges the secondary indexes from.
  *
- * The desired plan is a pure function of the definition, so it is built once
- * up front and the retried region is introspect, diff and apply — only the
- * catalog state can go stale between attempts.
+ * The desired plan is a pure function of the definition, so it is built once up front and the
+ * retried region is introspect, diff and apply — only the catalog state can go stale between
+ * attempts.
  *
- * Processes converging the same schema take turns through a session advisory
- * lock per schema, and the one that goes second re-reads the catalog and finds
- * nothing left to do. The lock is polled with `pg_try_advisory_lock` rather
- * than awaited with `pg_advisory_lock`: a backend blocked in the latter holds a
- * snapshot, `CREATE INDEX CONCURRENTLY` waits out every older snapshot, and the
- * holder would wait on the very process waiting on it. It is held on one client
- * with no statement timeout, since an index build lasts as long as the table is
- * large, and a process that dies releases it by disconnecting.
- * Tables and columns converge in one transaction; indexes are then built with
- * `CREATE INDEX CONCURRENTLY`, so writes keep flowing while they build, and an
- * index a failed build left `INVALID` is dropped and built again.
+ * Processes converging the same schema take turns through a transaction-scoped advisory lock per
+ * schema, awaited with `pg_advisory_xact_lock`, and the one that goes second re-reads the catalog
+ * and finds nothing left to do. Blocking on it is safe because its holder never builds an index
+ * concurrently, and the lock ends with the transaction, so a process that dies mid-way releases it.
  *
- * A duplicate-object failure means something outside that lock — a process on
- * an older version of this adapter — created an object between the
- * introspection and the DDL, which makes the diff stale rather than the
- * statements retryable, so the whole convergence is what gets attempted again.
+ * A duplicate-object failure means something outside that lock — a process on an older version of
+ * this adapter — created an object between the introspection and the DDL, which makes the diff
+ * stale rather than the statements retryable, so the whole convergence is what gets attempted
+ * again.
  */
-export async function SyncSchema(
+export async function ConvergeTables(
   schemaId: string,
   schema: SchemaDefinition,
   shape: SchemaShape,
-): Promise<void> {
+): Promise<TablePlan[]> {
   const schemaName = SchemaName(schemaId);
   const plans = BuildSchemaPlan(schema, shape);
   await EnsureRegistry();
-  await RetryOnDuplicateObject(() => Converge(schemaName, plans));
+  await RetryOnDuplicateObject(() => ConvergeTablesLocked(schemaName, plans));
+  return plans;
 }
+
+async function PlanIndexPhase(
+  client: PoolClient,
+  schemaName: string,
+  plans: readonly TablePlan[],
+): Promise<string[]> {
+  const statements: string[] = [];
+  for (const plan of plans) {
+    const actual = await ReadTable(client, schemaName, plan.table);
+    statements.push(...PlanIndexStatements(schemaName, plan, actual));
+  }
+  return statements;
+}
+
+/** Runs the index statements one by one, stopping between two when shutdown asked it to. */
+async function RunIndexStatements(
+  build: IndexBuild,
+  schemaName: string,
+  statements: readonly string[],
+): Promise<void> {
+  for (const statement of statements) {
+    if (build.isStopping) {
+      throw INDEX_BUILD_STOPPED;
+    }
+    await RunEach(build.client, schemaName, [statement]);
+  }
+}
+
+async function TryIndexesLock(
+  client: PoolClient,
+  key: readonly string[],
+): Promise<boolean> {
+  const result = await client.query<LockRow>(TRY_INDEXES_LOCK_SQL, [...key]);
+  return result.rows[0].locked;
+}
+
+/** Converges the indexes under the schema's indexes lock, or does nothing when another holds it. */
+async function BuildIndexesLocked(
+  build: IndexBuild,
+  schemaName: string,
+  plans: readonly TablePlan[],
+): Promise<void> {
+  const { client } = build;
+  const key = LockKey(INDEXES_LOCK_NAMESPACE, schemaName);
+  await client.query(UNLIMITED_SESSION_STATEMENT_TIMEOUT);
+  if (await TryIndexesLock(client, key)) {
+    const statements = await PlanIndexPhase(client, schemaName, plans);
+    await RunIndexStatements(build, schemaName, statements);
+    await client.query(INDEXES_UNLOCK_SQL, key);
+    ReportIndexBuilds(schemaName, statements.length);
+  }
+  await client.query(RESTORE_SESSION_STATEMENT_TIMEOUT);
+}
+
+function AsError(cause: unknown): Error {
+  return cause instanceof Error ? cause : new Error(Describe(cause));
+}
+
+async function BackendPid(client: PoolClient): Promise<number> {
+  const result = await client.query<PidRow>(BACKEND_PID_SQL);
+  return result.rows[0].pid;
+}
+
+/**
+ * Runs the index phase on a client of its own; a failure destroys the client, which releases the
+ * session lock with it. A build shutdown stopped settles quietly, and is repaired by the next one.
+ */
+async function RunIndexPhase(
+  schemaName: string,
+  plans: readonly TablePlan[],
+): Promise<void> {
+  const client = await AcquireClient();
+  const build: IndexBuild = { client, pid: 0, isStopping: false };
+  indexBuilds.add(build);
+  try {
+    build.pid = await BackendPid(client);
+    await BuildIndexesLocked(build, schemaName, plans);
+  } catch (err) {
+    client.release(AsError(err));
+    if (build.isStopping) {
+      return;
+    }
+    throw err;
+  } finally {
+    indexBuilds.delete(build);
+  }
+  client.release();
+}
+
+function ReportIndexFailure(schemaName: string, err: unknown): void {
+  Logger.Error(
+    `Building the indexes of schema '${schemaName}' failed; the next registration retries it`,
+    err,
+  );
+}
+
+/**
+ * Converges a schema's secondary indexes, once {@link ConvergeTables} has converged its tables.
+ *
+ * Meant to run in the background: queries never wait for it, and their results never depend on
+ * whether an index exists yet. The answer never rejects — a failure is logged, and whatever it left
+ * behind is repaired by the next registration.
+ *
+ * Every index is built with `CREATE INDEX CONCURRENTLY`, so writes keep flowing while it builds,
+ * and an index a failed build left `INVALID` is dropped and built again. The phase is serialized
+ * across processes by a session advisory lock per schema, taken with a single
+ * `pg_try_advisory_lock`: when another process holds it, that process is already converging the
+ * same indexes and this phase does nothing. It is never awaited, because a backend blocked in
+ * `pg_advisory_lock` holds a snapshot the holder's `CREATE INDEX CONCURRENTLY` would wait out. The
+ * lock is held on a dedicated client with no statement timeout, since a build lasts as long as the
+ * table is large; that client is destroyed on failure and its backend cancelled on disconnect, so
+ * neither leaves the lock held.
+ */
+export function BuildIndexes(
+  schemaId: string,
+  plans: readonly TablePlan[],
+): Promise<void> {
+  const schemaName = SchemaName(schemaId);
+  const phase = RunIndexPhase(schemaName, plans).catch((err: unknown) =>
+    ReportIndexFailure(schemaName, err),
+  );
+  indexPhases.add(phase);
+  void phase.finally(() => indexPhases.delete(phase));
+  return phase;
+}
+
+/** Cancels every running index build and waits for each to hand its client back. */
+async function StopIndexBuilds(): Promise<void> {
+  const running = [...indexBuilds];
+  for (const build of running) {
+    build.isStopping = true;
+  }
+  await Promise.allSettled(
+    running.map((build) => Query(CANCEL_BACKEND_SQL, [build.pid])),
+  );
+  await Promise.allSettled(indexPhases);
+}
+
+RegisterBeforeDisconnect(StopIndexBuilds);
