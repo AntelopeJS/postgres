@@ -40,7 +40,7 @@
     "pg": "^8.22.0"
   },
   "devDependencies": {
-    "@antelopejs/core": "^1.13.3",
+    "@antelopejs/core": "^1.13.4",
     "@antelopejs/tooling-configs": "^0.0.4",
     "@testcontainers/postgresql": "^12.0.4",
     "@types/chai": "^4.3.20",
