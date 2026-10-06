@@ -28,11 +28,12 @@ ajs project modules add @antelopejs-private/postgres
 
 This module implements the Database interface, which provides a standardized database
 abstraction layer. The interface is installed separately to maintain modularity and minimize
-dependencies.
+dependencies: a module that queries the database adds the interface package to its own
+dependencies and imports from it, and this module provides the implementation at runtime.
 
-| Name     | Install command                   |                                                                   |
-| -------- | --------------------------------- | ----------------------------------------------------------------- |
-| Database | `ajs module imports add database` | [Documentation](https://github.com/AntelopeJS/interface-database) |
+| Name     | Install command                           |                                                                   |
+| -------- | ----------------------------------------- | ----------------------------------------------------------------- |
+| Database | `pnpm add @antelopejs/interface-database` | [Documentation](https://github.com/AntelopeJS/interface-database) |
 
 ## Overview
 
