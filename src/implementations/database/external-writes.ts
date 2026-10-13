@@ -120,7 +120,6 @@ function Changed(assignments: ExternalAssignment[]): string[] {
   return [`((${reads.join(", ")}) IS DISTINCT FROM (${incoming.join(", ")}))`];
 }
 
-/** A key column the payload claims, as the row must already hold it: a key that cannot be matches nothing. */
 /**
  * A key field's claim, at the precision a read of it answers — the write-back guard's rule — so the
  * value data-api's edit read back names the row it was read from, however lossy the field's kind.
@@ -138,6 +137,7 @@ function KeyFieldAssertion(
   return `(${read} = ${incoming})`;
 }
 
+/** A key column the payload claims, as the row must already hold it: a key that cannot be matches nothing. */
 function Assertion(asserted: AssertedKey, context: DecodingContext): string {
   const convert = ConversionFor(asserted.descriptor);
   const sql = KeyValue(asserted, context).sql;
