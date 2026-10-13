@@ -98,6 +98,14 @@ const SALES_DEFINITION: SchemaDefinition = {
     fields: { _id: "string", id: "number", label: "string" },
     indexes: {},
   },
+  w_events: {
+    fields: { _id: "string", at: "date", msg: "string" },
+    indexes: {},
+  },
+  w_big: {
+    fields: { _id: "string", id: "number", label: "string" },
+    indexes: {},
+  },
   w_lines: {
     fields: {
       _id: "string",

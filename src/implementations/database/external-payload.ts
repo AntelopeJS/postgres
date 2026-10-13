@@ -42,6 +42,31 @@ export interface ExternalAssignment {
 export interface ExternalPayload {
   assignments: ExternalAssignment[];
   asserted: Map<string, AssertedKey>;
+  keyFields: KeyFieldClaim[];
+}
+
+/**
+ * A key column claimed through its own declared field rather than through `_id`.
+ *
+ * Kept apart from `_id`'s exact text because the field is read at its declared kind: a `date` over
+ * a timestamp key or a `number` over a bigint beyond 2^53 is not the column's text, so it claims the
+ * row a read of it answered — compared at read precision on update and replace — and is written, on
+ * insert, only where `_id` does not already give the column.
+ */
+export interface KeyFieldClaim {
+  field: string;
+  descriptor: ColumnDescriptor;
+  type: SqlType;
+  raw: unknown;
+}
+
+/** A key field's value read as the field's declared kind, decoded where it is used. */
+export function KeyFieldValue(
+  claim: KeyFieldClaim,
+  context: DecodingContext,
+): Compiled {
+  const decoded = DecodeValue(claim.raw, context) as Compiled;
+  return WrittenAs(decoded, claim.type, `Field '${claim.field}'`);
 }
 
 /** A key column's claimed value, with the field that claimed it for the message a conflict raises. */
@@ -186,8 +211,49 @@ function TakeKeyField(
   if (value === undefined || value === null) {
     return;
   }
-  const key = KeyColumn(walk, descriptor.column) as ColumnDescriptor;
-  Claim(walk, { descriptor: key, raw: KeyText(value), claimedBy: name });
+  walk.payload.keyFields.push({
+    field: name,
+    descriptor,
+    type: walk.shape.fields[name].type,
+    raw: value,
+  });
+}
+
+/**
+ * Whether a key field and `_id`'s text name different keys, which only an exact reading can tell:
+ * text as text, a number read losslessly as the same number. A lossy reading proves nothing.
+ */
+function Disagrees(claim: KeyFieldClaim, text: string): boolean {
+  if (claim.type.kind === "text") {
+    return KeyText(claim.raw) !== text;
+  }
+  if (claim.type.kind === "float" && !claim.descriptor.lossy) {
+    return Number(text) !== claim.raw;
+  }
+  return false;
+}
+
+/**
+ * On insert, a key field gives its column only where `_id` does not. Where both give it, they must
+ * agree — checked only when the field is read as exact text, since a lossy reading of the same key
+ * (a date, a bigint read as a number) is not `_id`'s spelling of it and proves nothing either way.
+ */
+function SettleInsertKeys(walk: ExternalWalk): void {
+  walk.payload.keyFields = walk.payload.keyFields.filter((claim) => {
+    const claimed = walk.payload.asserted.get(claim.descriptor.column);
+    if (!claimed) {
+      return true;
+    }
+    if (Disagrees(claim, claimed.raw)) {
+      throw KeyDisagreement(
+        walk,
+        claim.descriptor.column,
+        claimed.claimedBy,
+        claim.field,
+      );
+    }
+    return false;
+  });
 }
 
 /**
@@ -304,10 +370,13 @@ export function SplitExternalPayload(
     path: `${external.schema}.${external.table}`,
     mode,
     context,
-    payload: { assignments: [], asserted: new Map() },
+    payload: { assignments: [], asserted: new Map(), keyFields: [] },
   };
   for (const [name, value] of Object.entries(document)) {
     TakeKey(walk, name, value);
+  }
+  if (mode === "insert") {
+    SettleInsertKeys(walk);
   }
   if (mode === "replace") {
     ClearSilentFields(walk, document);

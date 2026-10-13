@@ -39,6 +39,8 @@ async function Reset(): Promise<void> {
   await Native("DELETE FROM sales.w_accounts");
   await Native("DELETE FROM sales.w_serial");
   await Native("DELETE FROM sales.w_lines");
+  await Native("DELETE FROM sales.w_events");
+  await Native("DELETE FROM sales.w_big");
 }
 
 /** The stored text of a row's columns, as the database's own rendering shows them. */
@@ -268,6 +270,44 @@ describe("writing back what was read from an external relation", () => {
       status: "lead",
     });
   });
+});
+
+describe("editing through a key field read lossily, as data-api's edit sends it", () => {
+  before(async () => {
+    sales = await RegisterSales();
+    await Reset();
+  });
+
+  for (const [table, seed, id, field] of [
+    [
+      "w_events",
+      "INSERT INTO sales.w_events VALUES ('2026-01-01 10:00:00.123456+00', 'a')",
+      "2026-01-01 10:00:00.123456+00",
+      "msg",
+    ],
+    [
+      "w_big",
+      "INSERT INTO sales.w_big VALUES (9007199254740993, 'a')",
+      "9007199254740993",
+      "label",
+    ],
+  ]) {
+    it(`edits ${table}, whose key field is not read as the key's text, and answers 1`, async () => {
+      await Native(seed);
+      const stored = (await Table(table).get(id)) as Row;
+      expect(stored._id).to.equal(id);
+      expect(
+        await Table(table)
+          .get(id)
+          .update({ ...stored, [field]: "b" } as never),
+      ).to.equal(1);
+      expect(
+        await NativeCount(
+          `SELECT count(*) FROM sales.${table} WHERE ${field} = 'b'`,
+        ),
+      ).to.equal(1);
+    });
+  }
 });
 
 describe("selecting the rows an external write changes", () => {

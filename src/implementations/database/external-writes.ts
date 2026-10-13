@@ -24,6 +24,8 @@ import {
   type ExternalAssignment,
   type ExternalPayload,
   type ExternalWriteMode,
+  type KeyFieldClaim,
+  KeyFieldValue,
   KeyValue,
   SplitExternalPayload,
 } from "./external-payload";
@@ -119,6 +121,23 @@ function Changed(assignments: ExternalAssignment[]): string[] {
 }
 
 /** A key column the payload claims, as the row must already hold it: a key that cannot be matches nothing. */
+/**
+ * A key field's claim, at the precision a read of it answers — the write-back guard's rule — so the
+ * value data-api's edit read back names the row it was read from, however lossy the field's kind.
+ */
+function KeyFieldAssertion(
+  claim: KeyFieldClaim,
+  context: DecodingContext,
+): string {
+  const descriptor = claim.descriptor;
+  const read = AsRead(
+    descriptor.value(WriteColumn(descriptor.column)),
+    descriptor,
+  );
+  const incoming = AsRead(KeyFieldValue(claim, context).sql, descriptor);
+  return `(${read} = ${incoming})`;
+}
+
 function Assertion(asserted: AssertedKey, context: DecodingContext): string {
   const convert = ConversionFor(asserted.descriptor);
   const sql = KeyValue(asserted, context).sql;
@@ -224,6 +243,13 @@ function ChecksOf(
         raw: String(asserted.raw),
       });
     }
+    for (const claim of payload.keyFields) {
+      checks.push({
+        path: `${path}.${claim.field}`,
+        descriptor: claim.descriptor,
+        raw: claim.raw,
+      });
+    }
   }
   return checks;
 }
@@ -245,6 +271,7 @@ function ChangeStatement(
     ...[...payload.asserted.values()].map((asserted) =>
       Assertion(asserted, context),
     ),
+    ...payload.keyFields.map((claim) => KeyFieldAssertion(claim, context)),
     ...Changed(assignments.filter((assignment) => !assignment.toDefault)),
   ];
   return {
@@ -330,11 +357,19 @@ function InsertedColumns(
       };
     },
   );
+  const keyFields = payload.keyFields.map((claim) => ({
+    column: claim.descriptor.column,
+    value: Written({
+      field: claim.field,
+      descriptor: claim.descriptor,
+      value: KeyFieldValue(claim, context),
+    }),
+  }));
   const fields = payload.assignments.map((assignment) => ({
     column: assignment.descriptor.column,
     value: Written(assignment),
   }));
-  return [...keyed, ...fields];
+  return [...keyed, ...keyFields, ...fields];
 }
 
 /**

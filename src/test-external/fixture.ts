@@ -109,6 +109,8 @@ export const FIXTURE: readonly string[] = [
     qty int NOT NULL
   )`,
   "CREATE TABLE sales.w_serial (id serial PRIMARY KEY, label text)",
+  "CREATE TABLE sales.w_events (at timestamptz PRIMARY KEY, msg text)",
+  "CREATE TABLE sales.w_big (id bigint PRIMARY KEY, label text)",
   `CREATE TABLE sales.w_lines (
     order_id int NOT NULL, line_no int NOT NULL, qty int, PRIMARY KEY (order_id, line_no)
   )`,
@@ -121,6 +123,8 @@ const WRITABLE_TABLES: readonly string[] = [
   "sales.w_items",
   "sales.w_serial",
   "sales.w_lines",
+  "sales.w_events",
+  "sales.w_big",
 ];
 
 /** What a client grants the account the DMS writes with: rows of the writable tables, and their sequences. */
