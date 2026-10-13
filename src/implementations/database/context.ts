@@ -74,6 +74,11 @@ export class DecodingContext {
     public readonly resolveOrigin?: OriginResolver,
   ) {}
 
+  /** A context compiling a separate statement, with a ledger of its own and the same compilers. */
+  public sibling(): DecodingContext {
+    return new DecodingContext(this.compilers, this.resolveOrigin);
+  }
+
   public nextAlias(): string {
     return `${ALIAS_PREFIX}${this.aliasCounter++}`;
   }

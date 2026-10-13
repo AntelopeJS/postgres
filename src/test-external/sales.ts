@@ -67,6 +67,46 @@ const SALES_DEFINITION: SchemaDefinition = {
     indexes: {},
   },
   daily_signups: { fields: { day: "date", n: "number" }, indexes: {} },
+  w_accounts: {
+    fields: {
+      _id: "string",
+      id: "string",
+      code: "string",
+      email: "string",
+      status: "string",
+      revenue: "number",
+      big: "number",
+      rating: "number",
+      seen: "date",
+      at: "date",
+      raw: "object",
+      tags: "string[]",
+      upper_code: "string",
+    },
+    indexes: {},
+  },
+  w_items: {
+    fields: {
+      _id: "string",
+      sku: "string",
+      account_id: "string",
+      qty: "number",
+    },
+    indexes: {},
+  },
+  w_serial: {
+    fields: { _id: "string", id: "number", label: "string" },
+    indexes: {},
+  },
+  w_lines: {
+    fields: {
+      _id: "string",
+      order_id: "number",
+      line_no: "number",
+      qty: "number",
+    },
+    indexes: {},
+  },
 };
 
 /** Registers the declaration and waits for it, as a generated module's startup does. */

@@ -5,7 +5,7 @@
  */
 export const CLIENT_DATABASE = "antelopejs_external";
 
-export const READER_ROLE = "dms_reader";
+export const CLIENT_ROLE = "dms_client";
 
 export const READER_PASSWORD = "reader";
 
@@ -89,8 +89,47 @@ export const FIXTURE: readonly string[] = [
   `CREATE MATERIALIZED VIEW sales.daily_signups AS
     SELECT signed_on AS day, count(*) AS n FROM sales.accounts GROUP BY signed_on`,
   "CREATE UNIQUE INDEX daily_signups_day ON sales.daily_signups (day)",
+  `CREATE TABLE sales.w_accounts (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    code varchar(5) NOT NULL UNIQUE,
+    email citext,
+    status sales.status NOT NULL DEFAULT 'lead',
+    revenue numeric(12,2) CHECK (revenue >= 0),
+    big bigint,
+    rating real,
+    seen timestamp,
+    at timestamptz NOT NULL DEFAULT now(),
+    raw json,
+    tags text[],
+    upper_code text GENERATED ALWAYS AS (upper(code)) STORED
+  )`,
+  `CREATE TABLE sales.w_items (
+    sku uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_id bigint REFERENCES sales.w_accounts (id),
+    qty int NOT NULL
+  )`,
+  "CREATE TABLE sales.w_serial (id serial PRIMARY KEY, label text)",
+  `CREATE TABLE sales.w_lines (
+    order_id int NOT NULL, line_no int NOT NULL, qty int, PRIMARY KEY (order_id, line_no)
+  )`,
   "ANALYZE",
 ];
+
+/** The tables the external suite writes; every other relation stays readable only. */
+const WRITABLE_TABLES: readonly string[] = [
+  "sales.w_accounts",
+  "sales.w_items",
+  "sales.w_serial",
+  "sales.w_lines",
+];
+
+/** What a client grants the account the DMS writes with: rows of the writable tables, and their sequences. */
+export function WriterGrants(role: string): string[] {
+  return [
+    `GRANT INSERT, UPDATE, DELETE ON ${WRITABLE_TABLES.join(", ")} TO ${role}`,
+    `GRANT USAGE ON ALL SEQUENCES IN SCHEMA sales TO ${role}`,
+  ];
+}
 
 /** What a client grants the account the DMS reads with: the schema and its rows, nothing more. */
 export function ReaderGrants(role: string): string[] {

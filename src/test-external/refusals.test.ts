@@ -61,9 +61,10 @@ describe("what an external relation refuses", () => {
   ];
 
   for (const [stage, write] of WRITES) {
-    it(`refuses ${stage}, naming the stage and the relation, and writes nothing`, async () => {
+    const expected = stage === "atomicMutation" ? stage : "may not write to";
+    it(`refuses ${stage} on a relation the connected role may not write, naming it, and writes nothing`, async () => {
       const message = await Refusal(write);
-      expect(message).to.contain(stage).and.to.contain('"sales"."accounts"');
+      expect(message).to.contain(expected).and.to.contain('"sales"."accounts"');
     });
   }
 

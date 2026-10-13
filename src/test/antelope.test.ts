@@ -9,8 +9,9 @@ import {
   CLIENT_DATABASE,
   FIXTURE,
   READER_PASSWORD,
-  READER_ROLE,
+  CLIENT_ROLE,
   ReaderGrants,
+  WriterGrants,
 } from "../test-external/fixture";
 
 const POSTGRES_IMAGE = "postgres:18-alpine";
@@ -69,15 +70,19 @@ async function ClientDatabase(ownerUrl: string): Promise<string> {
     `DROP DATABASE IF EXISTS ${CLIENT_DATABASE}`,
     `CREATE DATABASE ${CLIENT_DATABASE}`,
     `DO $$ BEGIN
-       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${READER_ROLE}') THEN
-         CREATE ROLE ${READER_ROLE} LOGIN PASSWORD '${READER_PASSWORD}';
+       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${CLIENT_ROLE}') THEN
+         CREATE ROLE ${CLIENT_ROLE} LOGIN PASSWORD '${READER_PASSWORD}';
        END IF;
      END $$`,
   ]);
   const clientOwnerUrl = WithDatabase(ownerUrl, CLIENT_DATABASE);
-  await Run(clientOwnerUrl, [...FIXTURE, ...ReaderGrants(READER_ROLE)]);
+  await Run(clientOwnerUrl, [
+    ...FIXTURE,
+    ...ReaderGrants(CLIENT_ROLE),
+    ...WriterGrants(CLIENT_ROLE),
+  ]);
   process.env.PG_TEST_CLIENT_OWNER_URL = clientOwnerUrl;
-  return WithDatabase(ownerUrl, CLIENT_DATABASE, READER_ROLE);
+  return WithDatabase(ownerUrl, CLIENT_DATABASE, CLIENT_ROLE);
 }
 
 export default defineConfig({

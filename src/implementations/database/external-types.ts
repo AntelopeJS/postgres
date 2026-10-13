@@ -459,3 +459,157 @@ export function IsNumeric(descriptor: ColumnDescriptor): boolean {
     NUMERIC_FAMILIES.includes(descriptor.family)
   );
 }
+
+/** How a written value, already read as the declared kind, reaches the column's own type. */
+type Written = (value: string, descriptor: ColumnDescriptor) => string;
+
+const WrittenBare: Written = (value) => value;
+
+/** An explicit cast where no assignment cast exists: text reaches a uuid or an enum only explicitly. */
+const WrittenCast: Written = (value, descriptor) =>
+  `(${value})::${descriptor.castType}`;
+
+const WrittenAs =
+  (type: string): Written =>
+  (value) =>
+    `(${value})::${type}`;
+
+const WrittenAtUtc: Written = (value) => `(${value} AT TIME ZONE 'UTC')`;
+
+const WrittenUtcDay: Written = (value) =>
+  `((${value} AT TIME ZONE 'UTC'))::date`;
+
+/**
+ * The inverse of {@link READINGS}: how each accepted pairing writes a value back into its column.
+ *
+ * A text value reaches `text`, `varchar(n)`, `char(n)` and `citext` bare, through the assignment cast
+ * that keeps the column's own length and padding — an explicit `::character` would be `char(1)`. Every
+ * other text-read family takes an explicit cast, which validation has already proven will succeed.
+ * Arrays are absent: they are read-only in this version.
+ */
+const WRITINGS: Partial<
+  Record<SqlType["kind"], Partial<Record<NativeFamily, Written>>>
+> = {
+  text: {
+    text: WrittenBare,
+    citext: WrittenBare,
+    bpchar: WrittenBare,
+    uuid: WrittenCast,
+    enum: WrittenCast,
+    rendered: WrittenCast,
+    int: WrittenCast,
+    int8: WrittenCast,
+    numeric: WrittenCast,
+    date: WrittenCast,
+    timestamptz: WrittenCast,
+    timestamp: WrittenCast,
+    bool: WrittenCast,
+  },
+  float: {
+    float8: WrittenBare,
+    float4: WrittenAs("real"),
+    int: WrittenAs("bigint"),
+    int8: WrittenAs("bigint"),
+    numeric: WrittenAs("numeric"),
+  },
+  bool: { bool: WrittenBare },
+  timestamp: {
+    timestamptz: WrittenBare,
+    timestamp: WrittenAtUtc,
+    date: WrittenUtcDay,
+  },
+  json: { jsonb: WrittenBare, json: WrittenAs("json") },
+};
+
+/** How a value is written into this column, or nothing for a column no write may assign. */
+export function WritingFor(descriptor: ColumnDescriptor): Written | undefined {
+  return WRITINGS[descriptor.kind.kind]?.[descriptor.family];
+}
+
+/** A column only the database writes: generated, identity `ALWAYS`, or read-only in this version. */
+export function IsReadOnly(descriptor: ColumnDescriptor): boolean {
+  return (
+    descriptor.generated ||
+    descriptor.identity === IDENTITY_ALWAYS ||
+    WritingFor(descriptor) === undefined
+  );
+}
+
+const IDENTITY_ALWAYS = "a";
+
+/** Why a column is read-only, for the message that refuses a value for it. */
+export function ReadOnlyReason(descriptor: ColumnDescriptor): string {
+  if (descriptor.generated) {
+    return "a generated column";
+  }
+  if (descriptor.identity === IDENTITY_ALWAYS) {
+    return "an identity column GENERATED ALWAYS";
+  }
+  return `a ${descriptor.native} column, read-only in this version`;
+}
+
+/** The largest whole number each integer type holds, which a written number is checked against. */
+const INTEGER_LIMITS: Record<string, string> = {
+  smallint: "32767",
+  integer: "2147483647",
+  bigint: "9223372036854775807",
+};
+
+type Check = (
+  value: string,
+  descriptor: ColumnDescriptor,
+) => string | undefined;
+
+/** Valid input for the column's exact type, typmod included: a length, a precision, an enum label. */
+const InputCheck: Check = (value, descriptor) =>
+  `pg_input_is_valid(${value}, ${QuoteLiteral(descriptor.native)})`;
+
+/** A text column with no typmod accepts any text, so it needs no check. */
+const LengthCheck: Check = (value, descriptor) =>
+  descriptor.native === descriptor.castType
+    ? undefined
+    : InputCheck(value, descriptor);
+
+const WholeNumberCheck: Check = (value, descriptor) => {
+  const limit = INTEGER_LIMITS[descriptor.castType] ?? INTEGER_LIMITS.bigint;
+  return `(${value} = trunc(${value}) AND abs(${value}) <= ${limit})`;
+};
+
+const NumericCheck: Check = (value, descriptor) =>
+  `pg_input_is_valid((${value})::text, ${QuoteLiteral(descriptor.native)})`;
+
+/**
+ * What a written value is checked against before the statement runs, so a value the column cannot
+ * hold is refused naming its field — PostgreSQL's own errors for these name the type, not the column.
+ */
+const CHECKS: Partial<
+  Record<SqlType["kind"], Partial<Record<NativeFamily, Check>>>
+> = {
+  text: {
+    text: LengthCheck,
+    bpchar: LengthCheck,
+    uuid: InputCheck,
+    enum: InputCheck,
+    rendered: InputCheck,
+    int: InputCheck,
+    int8: InputCheck,
+    numeric: InputCheck,
+    date: InputCheck,
+    timestamptz: InputCheck,
+    timestamp: InputCheck,
+    bool: InputCheck,
+  },
+  float: {
+    int: WholeNumberCheck,
+    int8: WholeNumberCheck,
+    numeric: NumericCheck,
+  },
+};
+
+/** The condition a value must meet to be written into this column, or nothing when any value fits. */
+export function CheckFor(
+  value: string,
+  descriptor: ColumnDescriptor,
+): string | undefined {
+  return CHECKS[descriptor.kind.kind]?.[descriptor.family]?.(value, descriptor);
+}
