@@ -28,19 +28,21 @@
     "lint": "oxlint",
     "prepack": "pnpm run build",
     "release": "pnpm run lint && pnpm run test && pnpm run prepack && release-it",
-    "test": "pnpm run build && ajs module test .",
+    "test": "pnpm run build && ajs module test . && pnpm run test:external:run",
+    "test:external": "pnpm run build && pnpm run test:external:run",
+    "test:external:run": "PG_TEST_MODE=external ajs module test . $(for file in dist/test-external/*.test.js; do printf -- '-f %s ' \"$file\"; done)",
     "test:unit": "pnpm run build && mocha \"dist/test/unit/**/*.spec.js\"",
     "typecheck": "tsc --noEmit",
     "format:check": "oxfmt --check .",
     "knip": "knip"
   },
   "dependencies": {
-    "@antelopejs/interface-core": "^0.1.1",
+    "@antelopejs/interface-core": ">=0.1.1 <1.0.0",
     "@antelopejs/interface-database": "^0.1.8",
     "pg": "^8.22.0"
   },
   "devDependencies": {
-    "@antelopejs/core": "^1.13.4",
+    "@antelopejs/core": "^1.14.0",
     "@antelopejs/tooling-configs": "^0.0.8",
     "@testcontainers/postgresql": "^12.0.4",
     "@types/chai": "^4.3.20",

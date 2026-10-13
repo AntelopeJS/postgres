@@ -2,6 +2,11 @@ import assert from "node:assert";
 import { ValidateAtomicMutationTable } from "@antelopejs/interface-database/atomic";
 
 import { Query } from "../../connection";
+import { IsExternal } from "../../config";
+import {
+  ExternalInstanceRefusal,
+  ExternalWriteRefusal,
+} from "./external-refusals";
 import { CHANGES_STAGE } from "./changes";
 import { DecodingContext } from "./context";
 import { CompileSubquery } from "./subquery";
@@ -60,6 +65,18 @@ const LIFECYCLE_HANDLERS: Record<string, LifecycleHandler> = {
 };
 
 /**
+ * The lifecycle stages on an external instance, whose relations have no instances: creating or
+ * destroying one is refused rather than recorded nowhere, and the list of them is empty.
+ */
+const EXTERNAL_LIFECYCLE: Record<string, LifecycleHandler> = {
+  [CREATE_INSTANCE]: (_schemaId, stage) =>
+    Promise.reject(ExternalInstanceRefusal(stage.stage)),
+  [DESTROY_INSTANCE]: (_schemaId, stage) =>
+    Promise.reject(ExternalInstanceRefusal(stage.stage)),
+  listInstances: () => Promise.resolve([]),
+};
+
+/**
  * Dispatches a schema-rooted instance lifecycle query, or declines it synchronously.
  * The map is probed with `Object.hasOwn`, and the gate is awaited here rather than in `RunQuery`.
  */
@@ -74,7 +91,9 @@ function Lifecycle(stages: QueryStage[]): Promise<unknown> | undefined {
   if (!Object.hasOwn(LIFECYCLE_HANDLERS, stage.stage)) {
     return undefined;
   }
-  const handler = LIFECYCLE_HANDLERS[stage.stage];
+  const handler = (IsExternal() ? EXTERNAL_LIFECYCLE : LIFECYCLE_HANDLERS)[
+    stage.stage
+  ];
   const schemaId = stages[0].options?.id;
   assert(typeof schemaId === "string", MISSING_SCHEMA_ID);
   return WaitForSchemaReady(schemaId).then(() => handler(schemaId, stage));
@@ -188,6 +207,12 @@ export async function RunQuery(stages: QueryStage[]): Promise<any> {
   const compiled = await ReadyQuery(stages, QueryContext());
   if (!compiled.split.write) {
     return RunRead(compiled.relation, compiled.context);
+  }
+  if (compiled.root.external) {
+    throw ExternalWriteRefusal(
+      compiled.root.external,
+      compiled.split.write.stage,
+    );
   }
   return RunWrite(
     WriteTargetOf(compiled.root, compiled.relation),

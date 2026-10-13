@@ -107,3 +107,23 @@ A group's callback accepts `map`, `distinct`, `count`, `sum`, `avg`, `min` and `
 Both suffixes name the common cause rather than the only one. `construct()` clears the
 configuration and leaves no pool when it fails to reach the server, so these are also what a query
 answers after a _failed_ startup, and what one answers after `destroy()`.
+
+## External mode
+
+See [External mode](./external-mode.md).
+
+| What you did                                                                   | Message                                                                                                                                                                              |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Set `schemaPrefix`, `migrations` or a `change*` option with `mode: "external"` | `{options} cannot be set with mode "external": an external instance owns no schemas, runs no DDL and keeps no change log`                                                            |
+| Declared a table the database does not have                                    | `Table '{schema}.{table}' reads "{schema}"."{table}", which the database does not have`                                                                                              |
+| Declared a table the connected role cannot read                                | `Table '{schema}.{table}' reads "{schema}"."{table}", which the connected role cannot SELECT from`                                                                                   |
+| Declared a field its relation has no column for                                | `Field '{schema}.{table}.{field}' reads column "{field}", which "{schema}"."{table}" does not have`                                                                                  |
+| Declared a type the column cannot be read as                                   | `Field '{path}' is declared {type}, but column "{column}" is {native type}: declare it as {types}`                                                                                   |
+| Declared `_id` on a relation with no key                                       | `Field '{path}._id' aliases the relation's key, but "{schema}"."{table}" has no primary key and no unique index over NOT NULL columns; remove it`                                    |
+| Read a named instance                                                          | `"{schema}"."{table}" is an external relation and has no instances, so instance '{id}' names nothing: read it through the default instance`                                          |
+| `get`, `getAll` without an index, or `_id` named, on a relation with no key    | `"{schema}"."{table}" has no primary key and no unique index over NOT NULL columns, so its rows have no _id and cannot be read by key: filter on a field, or getAll by a field name` |
+| A write stage                                                                  | `The '{stage}' stage writes, and "{schema}"."{table}" is an external relation: external tables are read-only in this version`                                                        |
+| `changes()`                                                                    | `changes() needs the adapter's change log, which "{schema}"."{table}" does not have: it is an external relation, and the adapter installs nothing on it`                             |
+| `createInstance` / `destroyInstance`                                           | `The '{stage}' stage manages instances, and an external instance's relations have none: read them through the default instance`                                                      |
+
+Registration errors fail the whole schema: every query on it answers the same message.

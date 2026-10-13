@@ -100,21 +100,34 @@ function Applied(func: string, argument: string, distinct = false): string {
   return `${func}(${distinct ? DEDUPED : ""}${argument})`;
 }
 
+/**
+ * What a numeric aggregate reduces: the column itself where it is of an exact numeric type that
+ * reads as a number, so `sum` over a `numeric` or a `bigint` adds exactly and converts its result
+ * once, and otherwise the operand read as a number.
+ */
+function Summed(operand: Compiled): string {
+  return operand.native?.numeric ? operand.native.sql : Numeric(operand).sql;
+}
+
 /** ReQL's sum of an empty stream is 0, where a bare `sum` over zero rows is NULL. */
 export const Total: Aggregation = (operand, distinct) =>
-  AsFloat(
-    `COALESCE(${Applied(SUM, Numeric(operand).sql, distinct)}, ${EMPTY_SUM})`,
-  );
+  AsFloat(`COALESCE(${Applied(SUM, Summed(operand), distinct)}, ${EMPTY_SUM})`);
 
 export const Mean: Aggregation = (operand, distinct) =>
-  AsFloat(Applied(AVERAGE, Numeric(operand).sql, distinct));
+  AsFloat(Applied(AVERAGE, Summed(operand), distinct));
+
+/** The operand an ordering reduces: a numeric column itself where it has one, as {@link Summed}. */
+function Ordered(operand: Compiled): Compiled {
+  if (operand.native?.numeric) {
+    return { sql: operand.native.sql, type: operand.type };
+  }
+  return ORDERED_KINDS[operand.type.kind] ? operand : Numeric(operand);
+}
 
 /** Both orderings share one rule and one cast — see {@link Minimum}. */
 function Extremum(func: string): Aggregation {
   return (operand, distinct) => {
-    const ordered = ORDERED_KINDS[operand.type.kind]
-      ? operand
-      : Numeric(operand);
+    const ordered = Ordered(operand);
     const applied = Applied(func, ordered.sql, distinct);
     return ordered.type.kind === "float"
       ? AsFloat(applied)

@@ -8,9 +8,11 @@ import { type Compiled, QualifiedColumn } from "./sql";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { ID_COLUMN, INSTANCE_COLUMN, type QueryStage } from "./utils";
 import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
+import { KeylessRefusal } from "./external-refusals";
 import {
   Prepare,
   type Relation,
+  type TableOrigin,
   RequireOrigin,
   ScanColumns,
   SINGLE_ROW,
@@ -18,6 +20,9 @@ import {
 } from "./relation";
 
 const NO_KEYS = "FALSE";
+const EQUALITY = "=";
+const AT_LEAST = ">=";
+const BELOW = "<";
 const SINGLE_FIELD = 1;
 const CONTAINS = "@>";
 
@@ -44,12 +49,35 @@ function Selected(
   indexId: string | undefined,
 ): KeySelection {
   const prepared = Prepare(relation, WHERE_BLOCKERS, context);
-  RequireOrigin(prepared);
+  RequireKey(RequireOrigin(prepared), indexId);
   const columns =
     indexId === undefined
       ? [prepared.source.field(ID_COLUMN)]
       : ScanColumns(prepared, indexId);
-  return { relation: prepared, columns, indexId, stage, context };
+  return {
+    relation: prepared,
+    columns: columns.map(Addressed),
+    indexId,
+    stage,
+    context,
+  };
+}
+
+/** Refuses reading by `_id` a relation that has no key to alias, rather than matching nothing. */
+function RequireKey(origin: TableOrigin, indexId: string | undefined): void {
+  const external = origin.shape.external;
+  const byKey = indexId === undefined || indexId === ID_COLUMN;
+  if (external && !external.key && byKey) {
+    throw KeylessRefusal(external);
+  }
+}
+
+/**
+ * A key column as the stage compares it: the bare column of an external relation, so its index
+ * serves the match, keeping the native operand that converts each key into its type.
+ */
+function Addressed(column: Compiled): Compiled {
+  return column.native ? { ...column, sql: column.native.sql } : column;
 }
 
 function IndexOption(stage: QueryStage): string | undefined {
@@ -73,13 +101,15 @@ function KeyValue(
   key: unknown,
   column: Compiled,
   index: number,
+  operator = EQUALITY,
 ): string {
   const value = RequireOperand(
     DecodeValue(key, selection.context),
     selection.stage,
     index,
   );
-  return StoredAs(value, column.type).sql;
+  const stored = StoredAs(value, column.type);
+  return column.native ? column.native.bind(stored.sql, operator) : stored.sql;
 }
 
 /** An array at the top level is always a list of keys, which is what the varargs form means. */
@@ -226,15 +256,17 @@ const BetweenStage: PipelineStage = (relation, stage, context) => {
     stage.args[FIRST_OPERAND],
     column,
     FIRST_OPERAND,
+    AT_LEAST,
   );
   const high = KeyValue(
     selection,
     stage.args[SECOND_OPERAND],
     column,
     SECOND_OPERAND,
+    BELOW,
   );
-  selection.relation.where.push(`(${column.sql} >= ${low})`);
-  selection.relation.where.push(`(${column.sql} < ${high})`);
+  selection.relation.where.push(`(${column.sql} ${AT_LEAST} ${low})`);
+  selection.relation.where.push(`(${column.sql} ${BELOW} ${high})`);
   return selection.relation;
 };
 

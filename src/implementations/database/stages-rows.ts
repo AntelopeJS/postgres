@@ -104,8 +104,12 @@ function SortName(stage: QueryStage): string {
 const OrderByStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, ORDER_BLOCKERS, context);
   const descending = stage.options?.direction === DESCENDING;
-  const terms = ScanColumns(prepared, SortName(stage)).map(
-    (column): OrderTerm => ({ sql: column.sql, descending }),
+  const terms = ScanColumns(prepared, SortName(stage)).flatMap(
+    (column): OrderTerm[] =>
+      (column.native?.order ?? [column.sql]).map((sql) => ({
+        sql,
+        descending,
+      })),
   );
   prepared.orderBy.unshift(...terms);
   return prepared;

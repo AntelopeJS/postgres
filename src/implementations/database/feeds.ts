@@ -2,6 +2,7 @@ import type { Changes } from "@antelopejs/interface-database/common";
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 
 import { Logger } from "../../logger";
+import { ExternalFeedRefusal } from "./external-refusals";
 import { ReviveValue } from "./result";
 import type { SqlType } from "./types";
 import { QuoteIdentifier } from "./sql";
@@ -460,9 +461,13 @@ function TargetOf(stages: QueryStage[]): FeedTarget {
 async function Open(state: FeedState, stages: QueryStage[]): Promise<void> {
   const target = TargetOf(stages);
   await WaitForSchemaReady(target.schemaId);
+  const origin = state.env.origin(target.schemaId, target.tableId);
+  if (origin.shape.external) {
+    throw ExternalFeedRefusal(origin.shape.external);
+  }
   const plan = CompileFeed(
     Between(stages),
-    state.env.origin(target.schemaId, target.tableId),
+    origin,
     `${EVENT}.${OLD_ROW_COLUMN}`,
     `${EVENT}.${NEW_ROW_COLUMN}`,
   );

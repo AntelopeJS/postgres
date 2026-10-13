@@ -7,6 +7,7 @@ getting a first query running; everything below is the detail.
 | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Storage and schema](./storage.md)        | What a registered schema becomes in the database, the field-type table, what reaches an index, and how registration converges                      |
 | [Configuration](./configuration.md)       | Every option `construct` accepts                                                                                                                   |
+| [External mode](./external-mode.md)       | Reading tables the module did not create, in a database it does not own                                                                            |
 | [Change feeds](./change-feeds.md)         | `changes()`, its ordering guarantee, its retention contract and its blind spots                                                                    |
 | [Errors and refusals](./errors.md)        | Everything the module refuses, with the message it refuses by                                                                                      |
 | [Behaviour worth knowing](./behaviour.md) | Things that answer rather than throw, where the answer may surprise you — including where this backend differs from the MongoDB and RethinkDB ones |

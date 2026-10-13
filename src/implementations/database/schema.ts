@@ -6,6 +6,8 @@ import type {
 } from "@antelopejs/interface-database/schema";
 
 import { Logger } from "../../logger";
+import { IsExternal } from "../../config";
+import { DescribeExternalSchema } from "./external-schema";
 import { ServesCrossInstance } from "./ddl";
 import { BuildIndexes, ConvergeTables } from "./migrate";
 import { ParseSchema, type SchemaShape, type TableShape } from "./fields";
@@ -71,12 +73,37 @@ function SchemaScanNotices(
   return notices;
 }
 
+const NoScan: CrossInstanceScanNotice = () => {};
+
+/** An external table has no instances to scan across, so nothing ever warns about one. */
+function QuietNotices(schema: SchemaDefinition): TableScanNotices {
+  const notices: TableScanNotices = {};
+  for (const tableId of Object.keys(schema)) {
+    notices[tableId] = NoScan;
+  }
+  return notices;
+}
+
+/** Reads each parsed table's shape off the catalog instead of converging it. */
+async function InitializeExternal(
+  schemaId: string,
+  schema: SchemaDefinition,
+  parsed: SchemaShape,
+) {
+  shapes[schemaId] = await DescribeExternalSchema(schemaId, schema, parsed);
+  scanNotices[schemaId] = QuietNotices(schema);
+}
+
 /**
  * Parses the schema and converges its tables; the secondary indexes then converge in the
  * background, tracked in `indexing`, so the readiness gate never waits on an index build.
  */
 async function initialize(schemaId: string, schema: SchemaDefinition) {
   const shape = ParseSchema(schemaId, schema);
+  if (IsExternal()) {
+    await InitializeExternal(schemaId, schema, shape);
+    return;
+  }
   shapes[schemaId] = shape;
   scanNotices[schemaId] = SchemaScanNotices(schemaId, schema, shape);
   const plans = await ConvergeTables(schemaId, schema, shape);
