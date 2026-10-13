@@ -1,8 +1,8 @@
 # External mode
 
 `mode: "external"` points the module at tables that already exist, in a database it does not own,
-and reads them. It is for describing an existing database to AntelopeJS, typically a schema written
-by inspecting the client's catalog, and for nothing that would change that database.
+and reads and writes their rows. It is for describing an existing database to AntelopeJS, typically
+a schema written by inspecting the client's catalog. It never changes that database's structure.
 
 ```typescript
 {
@@ -68,11 +68,40 @@ materialized view, a foreign table — is read without `_id`. Queries, counts an
 `get`, `getAll` without an index and `_id` itself are refused, and declaring `_id` on it fails
 registration.
 
+## Writing
+
+`insert`, `update`, `replace` and `delete` work on every relation that has a key (above). A relation
+without one is read-only.
+
+- A payload names declared fields only: any other key, `_internal` included, is refused by name
+- `_id` and the key columns say which row is written, and are never assigned: an `update` whose `_id`
+  names another row writes nothing and answers 0. On `insert` they are the new row's key
+- Generated columns, identity columns `GENERATED ALWAYS` and array columns are left to the database:
+  a value for one is ignored by `update` and `replace` (so a row read and written back whole works)
+  and refused by `insert`
+- A field an `insert` leaves out takes the column's `DEFAULT`; a field `replace` leaves out takes its
+  `DEFAULT` too, or NULL when it has none; `update` clears a field given as `undefined` or `null`
+- Every value is checked against its column's exact type before anything is written, and one that
+  does not fit — a malformed uuid, an unknown enum label, a string too long for `varchar(n)`, a
+  number beyond `numeric(p,s)`, a fraction for an integer — refuses the write, naming the field
+- A column keeps its stored value when the written value equals what a read of it answers, so a row
+  read and written back whole loses nothing a read could not spell: a `bigint` beyond 2^53 read as a
+  number, microseconds, duplicate keys in `json`. A write that changes nothing changes no row and
+  answers 0
+- `insert` answers each new row's `_id` in input order, keys the database generates included
+- A constraint the database enforces surfaces as an `ExternalWriteError` whose `kind` is `missing`,
+  `duplicate`, `reference`, `referenced`, `check` or `forbidden`, with the field or the constraint
+  it is about
+
+Triggers, cascades and other writers on the client's side are theirs: nothing reports what they
+change.
+
 ## What is refused
 
 Every one of these fails with a message naming what was refused:
 
-- writes: `insert`, `update`, `replace`, `delete`, `atomicMutation`
+- writes to a relation without a key, and `atomicMutation`
+- `update` with an expression mapper (`update(row => …)`)
 - `changes()`
 - a named instance, `createInstance` and `destroyInstance`; `listInstances` is empty. External
   tables have no instances: the default instance and `CROSS_INSTANCE` both read every row
@@ -82,14 +111,17 @@ that lacks it.
 
 ## The account to connect with
 
-Give the module an account that can read and do nothing else:
+Give the module an account that can read, and write the rows it should, and nothing else:
 
 ```sql
-CREATE ROLE dms_reader LOGIN PASSWORD '…';
-GRANT USAGE ON SCHEMA sales TO dms_reader;
-GRANT SELECT ON ALL TABLES IN SCHEMA sales TO dms_reader;
+CREATE ROLE dms_client LOGIN PASSWORD '…';
+GRANT USAGE ON SCHEMA sales TO dms_client;
+GRANT SELECT ON ALL TABLES IN SCHEMA sales TO dms_client;
+GRANT INSERT, UPDATE, DELETE ON sales.orders, sales.customers TO dms_client;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA sales TO dms_client;
 ```
 
-The module never needs more, and a module wired by mistake to an owned instance on this URL then
-fails at its first `CREATE` instead of changing the client's database. Set `statementTimeoutMs`
+A write to a table it was not granted fails as `forbidden`. The module never needs more, and a
+module wired by mistake to an owned instance on this URL then fails at its first `CREATE` instead of
+changing the client's database. Set `statementTimeoutMs`
 too: these are someone else's production tables.
