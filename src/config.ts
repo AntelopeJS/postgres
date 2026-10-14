@@ -21,6 +21,16 @@ export type MigrationMode = "safe" | "destructive";
  */
 export type Mode = "owned" | "external";
 
+/** Whether an external instance answers `@antelopejs/interface-database-catalog`. */
+export interface CatalogOptions {
+  /**
+   * Force the catalog on or off. Unset, it follows the project's development mode: on under
+   * `ajs project dev` and `ajs project run`, off under `ajs project start`. The catalog describes
+   * and profiles the client's database for a generator, which is development work.
+   */
+  enabled?: boolean;
+}
+
 /**
  * Module configuration, as accepted by `construct`.
  */
@@ -74,6 +84,8 @@ export interface Options {
    * and this is what bounds the failure of a listener connection that dies without erroring.
    */
   changePollIntervalMs?: number;
+  /** The catalog an external instance answers. See {@link CatalogOptions}. */
+  catalog?: CatalogOptions;
 }
 
 export interface ResolvedOptions {
@@ -88,6 +100,7 @@ export interface ResolvedOptions {
   changeRetentionMs: number;
   changeBatchSize: number;
   changePollIntervalMs: number;
+  catalog: CatalogOptions;
 }
 
 const DEFAULT_URL = "postgres://postgres@localhost:5432/antelopejs";
@@ -209,6 +222,7 @@ export function SetOptions(options?: Options): ResolvedOptions {
       options?.changePollIntervalMs,
       DEFAULT_CHANGE_POLL_INTERVAL_MS,
     ),
+    catalog: options?.catalog ?? {},
   };
   return resolved;
 }

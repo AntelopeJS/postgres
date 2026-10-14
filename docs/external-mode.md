@@ -133,3 +133,40 @@ A write to a table it was not granted fails as `forbidden`. The module never nee
 module wired by mistake to an owned instance on this URL then fails at its first `CREATE` instead of
 changing the client's database. Set `statementTimeoutMs`
 too: these are someone else's production tables.
+
+## The catalog
+
+An external instance also implements `@antelopejs/interface-database-catalog`, which describes and
+profiles the database for a generator: relations, columns, keys, references, row estimates, and
+aggregates over the data. It answers with this module's own registration rules, so a relation it
+calls mappable registers, and the declarations it lists for a column are the ones registration
+accepts.
+
+It is a development tool. It answers under `ajs project dev` and `ajs project run`, and refuses under
+`ajs project start` unless enabled explicitly:
+
+```typescript
+{
+    mode: "external",
+    url: "…",
+    catalog: { enabled: true },
+}
+```
+
+An owned instance refuses it.
+
+**Profiles never write and never wait long.**
+
+- Every profile runs in one `READ ONLY` transaction, whatever the connected role may write, with a
+  5 s statement timeout and a 1 s lock timeout per measure.
+- A measure that times out answers `{ status: "timeout" }`, and the rest of the profile stands.
+- A relation estimated above one million rows is sampled with `TABLESAMPLE SYSTEM`. A view above
+  that size is read up to its first 100,000 rows.
+- Calls run one at a time.
+
+**Profiles answer aggregates, not rows.**
+
+- Text columns answer no minimum or maximum.
+- A value is named only as a category of a column with at most 25 distinct values, and only if
+  it is counted at least 5 times.
+- `pg_stats` is not read for values.

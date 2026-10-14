@@ -114,8 +114,29 @@ export const FIXTURE: readonly string[] = [
   `CREATE TABLE sales.w_lines (
     order_id int NOT NULL, line_no int NOT NULL, qty int, PRIMARY KEY (order_id, line_no)
   )`,
+  "COMMENT ON TABLE sales.accounts IS 'Customer accounts'",
+  "COMMENT ON COLUMN sales.accounts.name IS 'Display name'",
+  "CREATE TABLE sales.people (id int PRIMARY KEY, name text, ssn text)",
+  "INSERT INTO sales.people SELECT g, 'Person ' || g, lpad(g::text, 9, '0') FROM generate_series(1, 100) g",
+  `CREATE TABLE sales.invoices (
+    id int PRIMARY KEY, kind text NOT NULL, account_ref bigint, broken_ref bigint, issued_on date
+  )`,
+  `INSERT INTO sales.invoices
+    SELECT g, CASE WHEN g <= 2 THEN 'disputed' ELSE (ARRAY['paid', 'open', 'void'])[1 + g % 3] END,
+      1 + (g % 20000), CASE WHEN g % 4 = 0 THEN 900000 + g ELSE 1 + g END,
+      date '2025-01-01' + (g % 400)
+    FROM generate_series(1, 1000) g`,
   "ANALYZE",
+  `CREATE TABLE sales.big_events (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, kind text NOT NULL, at timestamptz NOT NULL
+  ) WITH (autovacuum_enabled = false)`,
+  `INSERT INTO sales.big_events (kind, at)
+    SELECT (ARRAY['click', 'view', 'buy'])[1 + g % 3], timestamptz '2025-01-01' + (g || ' seconds')::interval
+    FROM generate_series(1, 1100000) g`,
 ];
+
+/** Rows of the never-analyzed table, which only the live-tuple counter knows the size of. */
+export const BIG_EVENTS_ROWS = 1_100_000;
 
 /** The tables the external suite writes; every other relation stays readable only. */
 const WRITABLE_TABLES: readonly string[] = [
@@ -140,5 +161,7 @@ export function ReaderGrants(role: string): string[] {
   return [
     `GRANT USAGE ON SCHEMA sales TO ${role}`,
     `GRANT SELECT ON ALL TABLES IN SCHEMA sales TO ${role}`,
+    `REVOKE SELECT ON sales.people FROM ${role}`,
+    `GRANT SELECT (id, name) ON sales.people TO ${role}`,
   ];
 }

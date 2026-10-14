@@ -50,6 +50,8 @@ function Catalog(column: NativeColumn): CatalogColumn {
     hasDefault: false,
     generated: false,
     identity: "",
+    comment: null,
+    enumLabels: null,
   };
 }
 
