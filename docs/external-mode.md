@@ -11,6 +11,14 @@ a schema written by inspecting the client's catalog. It never changes that datab
 }
 ```
 
+`url` is required: an external instance without one, or with an empty one, refuses to construct,
+rather than falling back to the owned mode's default. Projects normally set it through
+`envOverrides`, so the credentials stay out of the repository:
+
+```typescript
+envOverrides: { ERP_DATABASE_URL: "modules.postgres-erp.config.url" },
+```
+
 A project that needs both kinds of table runs two instances of this module, one owned and one
 external, and pins each consumer to one through `importOverrides`.
 

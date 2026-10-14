@@ -16,7 +16,8 @@ export type MigrationMode = "safe" | "destructive";
  *   bookkeeping beside them.
  * - `external`: the tables already exist in a database the adapter does not own. Schema, table and
  *   field names are the database's own, read verbatim; registration reads the catalog and never
- *   runs DDL; nothing is written. See `docs/external-mode.md`.
+ *   runs DDL; rows are read and written, never the structure. `url` is required. See
+ *   `docs/external-mode.md`.
  */
 export type Mode = "owned" | "external";
 
@@ -161,11 +162,24 @@ function ResolveMode(options?: Options): Mode {
   return mode;
 }
 
+function ResolveUrl(mode: Mode, options?: Options): string {
+  if (options?.url !== undefined && options.url.trim() !== "") {
+    return options.url;
+  }
+  if (mode === "external") {
+    throw new Error(
+      `mode "external" needs a non-empty config.url; set it through the project's envOverrides`,
+    );
+  }
+  return DEFAULT_URL;
+}
+
 export function SetOptions(options?: Options): ResolvedOptions {
   const mode = ResolveMode(options);
+  const url = ResolveUrl(mode, options);
   resolved = {
     mode,
-    url: options?.url ?? DEFAULT_URL,
+    url,
     pool: options?.pool ?? {},
     schemaPrefix: options?.schemaPrefix ?? DEFAULT_SCHEMA_PREFIX,
     migrations: options?.migrations ?? DEFAULT_MIGRATIONS,

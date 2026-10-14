@@ -121,6 +121,23 @@ describe("SetOptions", () => {
     });
   }
 
+  it("refuses external mode without a url, naming the option", () => {
+    expect(() => SetOptions({ mode: "external" })).to.throw("config.url");
+  });
+
+  it("refuses external mode with a blank url, as an unset variable in .env leaves it", () => {
+    expect(() => SetOptions({ mode: "external", url: "" })).to.throw("config.url");
+    expect(() => SetOptions({ mode: "external", url: "  " })).to.throw("config.url");
+  });
+
+  it("falls back to the default url in owned mode", () => {
+    WithOptions({}, () => {
+      expect(GetOptions().url).to.equal(
+        "postgres://postgres@localhost:5432/antelopejs",
+      );
+    });
+  });
+
   it("accepts an external mode with only the options that apply to it", () => {
     WithOptions(
       {
