@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.1.4
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.1.3...v0.1.4)
+
+### 🚀 Enhancements
+
+- External mode ([#18](https://github.com/AntelopeJS/postgres/pull/18))
+
+### 📖 Documentation
+
+- Fix the outdated CLI commands in the README ([#16](https://github.com/AntelopeJS/postgres/pull/16))
+
+### ❤️ Contributors
+
+- Thomas ([@Thomasims](http://github.com/Thomasims))
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.1.3
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.1.2...v0.1.3)
