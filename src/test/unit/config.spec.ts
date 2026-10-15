@@ -126,8 +126,12 @@ describe("SetOptions", () => {
   });
 
   it("refuses external mode with a blank url, as an unset variable in .env leaves it", () => {
-    expect(() => SetOptions({ mode: "external", url: "" })).to.throw("config.url");
-    expect(() => SetOptions({ mode: "external", url: "  " })).to.throw("config.url");
+    expect(() => SetOptions({ mode: "external", url: "" })).to.throw(
+      "config.url",
+    );
+    expect(() => SetOptions({ mode: "external", url: "  " })).to.throw(
+      "config.url",
+    );
   });
 
   it("falls back to the default url in owned mode", () => {
