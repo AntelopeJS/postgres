@@ -52,6 +52,19 @@ export function WriteTargetOf(
 export interface WriteStatement {
   sql: string;
   ids?: string[];
+  /**
+   * A `SELECT` of boolean checks to run before the statement, with its own parameters, and the
+   * message each failing column refuses the write with. External relations only.
+   */
+  validation?: WriteValidation;
+  /** The statement answers the written rows' `_id`s, in input order, rather than a count. */
+  returnsIds?: boolean;
+}
+
+export interface WriteValidation {
+  sql: string;
+  params: unknown[];
+  failures: string[];
 }
 
 /**

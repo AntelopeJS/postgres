@@ -8,10 +8,17 @@ import {
   INSTANCE_COLUMN,
 } from "./utils";
 import {
+  type ColumnDescriptor,
+  ConversionFor,
+  IsNumeric,
+} from "./external-types";
+import {
   type Compiled,
+  type NativeOperand,
   JSON_NULL,
   JsonKey,
   QualifiedColumn,
+  QuoteIdentifier,
   QuoteLiteral,
 } from "./sql";
 import {
@@ -33,6 +40,11 @@ export interface RowSource {
   dynamicField(key: Compiled, def?: Compiled): Compiled;
   toJson(): Compiled;
   shape(): SqlShape | undefined;
+  /**
+   * A condition true exactly when the row is there, for a source a `LEFT JOIN` may miss. Absent,
+   * `_id` being non-null is the test, which holds for every row of a table the adapter owns.
+   */
+  presence?(): string;
 }
 
 export interface DocumentMember extends Compiled {
@@ -229,9 +241,11 @@ export class NullableRowSource implements RowSource {
 
   public toJson(): Compiled {
     const document = this.inner.toJson();
-    const present = this.inner.field(ID_COLUMN).sql;
+    const present =
+      this.inner.presence?.() ??
+      `${this.inner.field(ID_COLUMN).sql} IS NOT NULL`;
     return {
-      sql: `(CASE WHEN ${present} IS NOT NULL THEN ${document.sql} END)`,
+      sql: `(CASE WHEN ${present} THEN ${document.sql} END)`,
       type: document.type,
     };
   }
@@ -276,5 +290,185 @@ export class JsonRowSource implements RowSource {
 
   public shape(): SqlShape | undefined {
     return ShapeOf(this.value.type);
+  }
+}
+
+/**
+ * The names a row of an external relation answers with, `_id` first when it has a key.
+ *
+ * The one owner of that list: the select list a row-mode read renders and the document a value-mode
+ * read builds have to name the same members, or a nested read addresses a column its subselect
+ * never selected.
+ */
+export function ExternalNames(shape: TableShape): string[] {
+  const declared = Object.keys(shape.fields);
+  return shape.external?.key ? [ID_COLUMN, ...declared] : declared;
+}
+
+/** A composite `_id`, which a well-formed key spells as one JSON array of the parts' text. */
+function JsonKeyOf(other: string): string {
+  return `((CASE WHEN pg_input_is_valid(${other}, 'jsonb') THEN ${other} END)::jsonb)`;
+}
+
+/**
+ * One part of a composite `_id`, as text, and only from an array of exactly the key's width.
+ * The `CASE`s are nested rather than joined by `AND`, which SQL does not promise to evaluate in
+ * order: `jsonb_array_length` raises on anything but an array.
+ */
+function KeyPart(document: string, position: number, width: number): string {
+  const part = `(${document} ->> ${position})`;
+  const sized = `(CASE WHEN jsonb_array_length(${document}) = ${width} THEN ${part} END)`;
+  return `(CASE WHEN jsonb_typeof(${document}) = 'array' THEN ${sized} END)`;
+}
+
+type ColumnOf = (column: string) => string;
+
+const Unconverted = (other: string): string => other;
+
+/**
+ * A composite key compared as the row of its columns, which its primary key index serves, against
+ * a `_id` decoded part by part, each part converted to its column's type under its own guard. A
+ * malformed `_id` — not json, not an array, the wrong width, a part its column cannot hold — has a
+ * NULL part, and a row with a NULL part matches nothing.
+ */
+function CompositeOperand(
+  key: ColumnDescriptor[],
+  column: ColumnOf,
+): NativeOperand {
+  const columns = key.map((part) => column(part.column));
+  const conversions = key.map((part) => ConversionFor(part) ?? Unconverted);
+  return {
+    sql: `ROW(${columns.join(", ")})`,
+    order: columns,
+    bind: (other, operator) => {
+      const document = JsonKeyOf(other);
+      const parts = conversions.map((convert, position) =>
+        convert(KeyPart(document, position, key.length), operator),
+      );
+      return `ROW(${parts.join(", ")})`;
+    },
+    numeric: false,
+    type: `record(${key.map((part) => part.castType).join(", ")})`,
+  };
+}
+
+const ABSENT_TEXT: Compiled = { sql: "NULL::text", type: TEXT };
+
+const ABSENT_VALUE: Compiled = { sql: "NULL::jsonb", type: OPAQUE };
+
+/**
+ * Where an external row source reads its columns from.
+ *
+ * - `table`: the relation itself, each declared field through its descriptor's value expression.
+ * - `output`: a subselect over it, whose select list already holds every value under its field name.
+ */
+export type ExternalReads = "table" | "output";
+
+/**
+ * Field access over a relation the adapter did not create, from the descriptors registration built.
+ *
+ * Every declared field is its column read as the declared kind, and `_id` is the key read as text:
+ * one column's value, or the key's parts as a JSON array for a composite key. `_instance`, an
+ * undeclared key and, on a keyless relation, `_id` read as absent; there is no overflow column, so
+ * the document is the declared fields and `_id`, and nothing else.
+ */
+export class ExternalRowSource implements RowSource {
+  public constructor(
+    private readonly alias: string,
+    private readonly table: TableShape,
+    private readonly reads: ExternalReads,
+  ) {}
+
+  private column(name: string): string {
+    return QualifiedColumn(this.alias, name);
+  }
+
+  private key(): Compiled {
+    const key = this.table.external?.key;
+    if (!key) {
+      return ABSENT_TEXT;
+    }
+    if (this.reads === "output") {
+      return { sql: this.column(ID_COLUMN), type: TEXT };
+    }
+    if (key.length === 1) {
+      return this.native(key[0]);
+    }
+    const parts = key.map((part) => part.value(this.column(part.column)));
+    return {
+      sql: `(jsonb_build_array(${parts.join(", ")}))::text`,
+      type: TEXT,
+      native: CompositeOperand(key, (column) => this.column(column)),
+    };
+  }
+
+  /** A column read through its descriptor, carrying the bare column for comparisons that can use it. */
+  private native(descriptor: ColumnDescriptor): Compiled {
+    const column = this.column(descriptor.column);
+    const value: Compiled = {
+      sql: descriptor.value(column),
+      type: descriptor.kind,
+    };
+    const conversion = ConversionFor(descriptor);
+    if (!conversion) {
+      return value;
+    }
+    const native: NativeOperand = {
+      sql: column,
+      order: [column],
+      bind: conversion,
+      numeric: IsNumeric(descriptor),
+      type: descriptor.castType,
+    };
+    return { ...value, native };
+  }
+
+  private declared(name: string): Compiled {
+    const spec = this.table.fields[name];
+    if (this.reads === "output" || !spec.native) {
+      return { sql: this.column(name), type: spec.type };
+    }
+    return { ...this.native(spec.native), type: spec.type };
+  }
+
+  public field(name: string, def?: Compiled): Compiled {
+    if (name === ID_COLUMN) {
+      return Defaulted(this.key(), def, KeySubject(name));
+    }
+    if (Object.hasOwn(this.table.fields, name)) {
+      return Defaulted(this.declared(name), def, KeySubject(name));
+    }
+    return WithDefault(
+      name === INSTANCE_COLUMN ? ABSENT_TEXT : ABSENT_VALUE,
+      def,
+    );
+  }
+
+  public dynamicField(key: Compiled, def?: Compiled): Compiled {
+    const document = this.toJson().sql;
+    return WithDefault(
+      { sql: `(${document} -> ${Cast(key, TEXT).sql})`, type: OPAQUE },
+      def,
+    );
+  }
+
+  private members(): DocumentMember[] {
+    return ExternalNames(this.table).map((name) => ({
+      name,
+      ...this.field(name),
+    }));
+  }
+
+  public toJson(): Compiled {
+    return BuildDocument(this.members());
+  }
+
+  public shape(): SqlShape {
+    return MemberShape(this.members());
+  }
+
+  /** The whole-row value, which is SQL NULL on a missed row and only then, whatever its columns hold. */
+  public presence(): string {
+    return `(${QuoteIdentifier(this.alias)} IS DISTINCT FROM NULL)`;
   }
 }

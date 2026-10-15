@@ -82,7 +82,7 @@ function Comparison(
   other: Compiled,
   operator: string,
 ): Compiled {
-  const pair = UnifyOperands(value, other);
+  const pair = UnifyOperands(value, other, operator);
   return {
     sql: `(${pair.left.sql} ${operator} ${pair.right.sql})`,
     type: BOOL,
@@ -105,9 +105,19 @@ function Distinguishable(value: Compiled, other: Compiled): CompiledPair {
 /**
  * Compares two values for inequality, keeping a row whose operand is null or absent.
  * `<>` is NULL whenever either side is, so `IS DISTINCT FROM` is the total spelling.
+ *
+ * Against a converted operand it is the complement of equality instead: the conversion answers
+ * NULL for a value the column's type cannot hold, and `IS DISTINCT FROM NULL` would then drop every
+ * row whose column is NULL — rows that are as unequal to that value as any other.
  */
 const Distinct: Equality = (value, other) => {
   const pair = Distinguishable(value, other);
+  if (pair.converted) {
+    return {
+      sql: `((${pair.left.sql} ${EQUAL} ${pair.right.sql}) IS NOT TRUE)`,
+      type: BOOL,
+    };
+  }
   return {
     sql: `(${pair.left.sql} ${DISTINCT_FROM} ${pair.right.sql})`,
     type: BOOL,

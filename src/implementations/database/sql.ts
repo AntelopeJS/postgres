@@ -3,6 +3,27 @@ import { IsJsonBacked, PhysicalType, type SqlType } from "./types";
 export interface Compiled {
   sql: string;
   type: SqlType;
+  /** The column underneath, in its own type, where `sql` reads it converted (external relations only). */
+  native?: NativeOperand;
+}
+
+/**
+ * A column of a relation the adapter did not create, as a comparison can use it without converting
+ * it — which is what keeps the database's own indexes serving the comparison.
+ *
+ * `sql` is the bare column, or a row of them for a composite key, and `order` the columns a sort
+ * names one by one. `bind` converts the other operand, already read as the column's declared kind,
+ * into the column's own type for `operator`, guarded so that a value the type cannot hold matches
+ * nothing rather than failing the statement. `numeric` says an aggregate may read the column
+ * directly, which an exact type such as `numeric` or `bigint` needs to sum without drifting.
+ */
+export interface NativeOperand {
+  sql: string;
+  order: string[];
+  bind: (other: string, operator: string) => string;
+  numeric: boolean;
+  /** The column's type as `format_type` spells it; two operands of one type compare bare. */
+  type: string;
 }
 
 /**

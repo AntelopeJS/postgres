@@ -9,6 +9,9 @@ import {
   AliasedColumns,
   ColumnRowSource,
   type DocumentMember,
+  type ExternalReads,
+  ExternalNames,
+  ExternalRowSource,
   JsonRowSource,
   LoggedColumns,
   type RowSource,
@@ -190,8 +193,18 @@ export function ScanColumns(
   return IndexColumns(relation, name);
 }
 
+/** An external relation's select list: each member read as its value, under its own name. */
+function ExternalColumns(relation: Relation, shape: TableShape): string[] {
+  return ExternalNames(shape).map(
+    (name) => `${relation.source.field(name).sql} AS ${QuoteIdentifier(name)}`,
+  );
+}
+
 function RowColumns(relation: Relation): string[] {
   const origin = RequireOrigin(relation);
+  if (origin.shape.external) {
+    return ExternalColumns(relation, origin.shape);
+  }
   const declared = DeclaredColumns(origin.shape);
   const columns = PhysicalOrder(
     ID_COLUMN,
@@ -344,15 +357,34 @@ export function Render(relation: Relation): string {
   return clauses.filter((clause) => clause !== undefined).join(" ");
 }
 
+function TableSource(
+  alias: string,
+  origin: TableOrigin,
+  reads: ExternalReads,
+): RowSource {
+  if (origin.shape.external) {
+    return new ExternalRowSource(alias, origin.shape, reads);
+  }
+  return new ColumnRowSource(AliasedColumns(alias), origin.shape);
+}
+
+/**
+ * A row-mode relation over a table, or over a subselect that selected one's rows.
+ *
+ * `reads` matters only for an external relation, whose subselect already holds every value under
+ * its field name rather than the native column a table read converts; a table the adapter owns
+ * keeps its physical names through a subselect, so it reads both alike.
+ */
 export function TableRelation(
   from: string,
   alias: string,
   origin: TableOrigin,
+  reads: ExternalReads = "table",
 ): Relation {
   return NewRelation({
     from,
     alias,
-    source: new ColumnRowSource(AliasedColumns(alias), origin.shape),
+    source: TableSource(alias, origin, reads),
     origin,
   });
 }
@@ -430,7 +462,7 @@ export function Nested(relation: Relation, context: DecodingContext): Relation {
   const projection = relation.projection;
   const wrapped = projection
     ? ValueRelation(from, alias, projection.type)
-    : TableRelation(from, alias, RequireOrigin(relation));
+    : TableRelation(from, alias, RequireOrigin(relation), "output");
   wrapped.single = relation.single;
   wrapped.absent = relation.absent;
   return wrapped;

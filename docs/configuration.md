@@ -4,6 +4,7 @@ Every option `construct` accepts, and what each one does.
 
 ```typescript
 {
+    mode: "owned",                      // "owned" (default) or "external"
     url: "postgres://postgres@localhost:5432/antelopejs",  // PostgreSQL connection string
     migrations: "safe",                 // "safe" (default) or "destructive"
     schemaPrefix: "",                   // Prefix for generated PostgreSQL schema names
@@ -37,6 +38,9 @@ The module uses the `pg` driver and delegates pooling to `pg.Pool`:
   stored text value read as a date resolves the same way regardless of server settings
 - `statementTimeoutMs` becomes the connection's `statement_timeout`. Schema convergence deliberately
   runs with it disabled, since one `CREATE INDEX` can legitimately outlast a per-query budget
+- `mode: "external"` serves tables that already exist in a database the module does not own —
+  see [External mode](./external-mode.md). It refuses `schemaPrefix`, `migrations` and the three
+  `change*` options by name, since none of them applies there
 - `migrations` controls how far registration may go — see
   [Schema convergence](./storage.md#schema-convergence)
 - `schemaPrefix` is useful when several applications share one database

@@ -2,19 +2,36 @@ import assert from "node:assert";
 import { ValidateAtomicMutationTable } from "@antelopejs/interface-database/atomic";
 
 import { Query } from "../../connection";
+import { IsExternal } from "../../config";
+import {
+  ExternalInstanceRefusal,
+  ExternalWriteRefusal,
+} from "./external-refusals";
 import { CHANGES_STAGE } from "./changes";
+import type { ExternalRelation } from "./fields";
+import { ExternalWriteFailure, InvalidValues } from "./external-errors";
 import { DecodingContext } from "./context";
 import { CompileSubquery } from "./subquery";
 import { CompileExpression } from "./expression";
 import { DecodeRow, ReviveValue } from "./result";
 import { ApplyStages, CompileRelation } from "./pipeline";
 import { GetTableNames, WaitForSchemaReady } from "./schema";
-import { type WriteTarget, WriteTargetOf } from "./writes-shared";
+import {
+  type WriteStatement,
+  type WriteTarget,
+  WriteTargetOf,
+  type WriteValidation,
+} from "./writes-shared";
 import { CompileWrite, SplitWrite, type WriteSplit } from "./writes";
 import { ATOMIC_MUTATION, ExecuteAtomicWrite } from "./writes-atomic";
 import { CloseOneFeed, IsRegisteredFeed, ReadFeedEvent } from "./feeds";
 import { CreateInstance, DestroyInstance, ListInstances } from "./instances";
-import { CREATE_INSTANCE, DESTROY_INSTANCE, type QueryStage } from "./utils";
+import {
+  CREATE_INSTANCE,
+  DESTROY_INSTANCE,
+  ID_COLUMN,
+  type QueryStage,
+} from "./utils";
 import { CloseOneCursor, type CursorRequest, ReadCursorRow } from "./cursors";
 import {
   OUTPUT_COLUMN,
@@ -60,6 +77,18 @@ const LIFECYCLE_HANDLERS: Record<string, LifecycleHandler> = {
 };
 
 /**
+ * The lifecycle stages on an external instance, whose relations have no instances: creating or
+ * destroying one is refused rather than recorded nowhere, and the list of them is empty.
+ */
+const EXTERNAL_LIFECYCLE: Record<string, LifecycleHandler> = {
+  [CREATE_INSTANCE]: (_schemaId, stage) =>
+    Promise.reject(ExternalInstanceRefusal(stage.stage)),
+  [DESTROY_INSTANCE]: (_schemaId, stage) =>
+    Promise.reject(ExternalInstanceRefusal(stage.stage)),
+  listInstances: () => Promise.resolve([]),
+};
+
+/**
  * Dispatches a schema-rooted instance lifecycle query, or declines it synchronously.
  * The map is probed with `Object.hasOwn`, and the gate is awaited here rather than in `RunQuery`.
  */
@@ -74,7 +103,9 @@ function Lifecycle(stages: QueryStage[]): Promise<unknown> | undefined {
   if (!Object.hasOwn(LIFECYCLE_HANDLERS, stage.stage)) {
     return undefined;
   }
-  const handler = LIFECYCLE_HANDLERS[stage.stage];
+  const handler = (IsExternal() ? EXTERNAL_LIFECYCLE : LIFECYCLE_HANDLERS)[
+    stage.stage
+  ];
   const schemaId = stages[0].options?.id;
   assert(typeof schemaId === "string", MISSING_SCHEMA_ID);
   return WaitForSchemaReady(schemaId).then(() => handler(schemaId, stage));
@@ -144,8 +175,53 @@ async function RunWrite(
   if (stage.stage === ATOMIC_MUTATION) {
     return ExecuteAtomicWrite(statement.sql, context.params.all());
   }
-  const result = await Query(statement.sql, context.params.all());
-  return statement.ids ?? result.rowCount ?? NO_ROWS;
+  const external = target.origin.shape.external;
+  if (!external) {
+    const result = await Query(statement.sql, context.params.all());
+    return statement.ids ?? result.rowCount ?? NO_ROWS;
+  }
+  return RunExternalWrite(statement, external, context);
+}
+
+/** Refuses the write, naming every field, when any value failed its check; runs nothing otherwise. */
+async function Validate(
+  validation: WriteValidation | undefined,
+): Promise<void> {
+  if (!validation) {
+    return;
+  }
+  const result = await Query<Record<string, boolean>>(
+    validation.sql,
+    validation.params,
+  );
+  const row = result.rows[0] ?? {};
+  const failed = validation.failures.filter(
+    (_, index) => row[`c${index}`] !== true,
+  );
+  if (failed.length > 0) {
+    throw InvalidValues(failed);
+  }
+}
+
+/**
+ * A write to an external relation: its values checked first, its keys answered off `RETURNING`,
+ * and a constraint the database enforces reported as what it is rather than as a SQLSTATE.
+ */
+async function RunExternalWrite(
+  statement: WriteStatement,
+  external: ExternalRelation,
+  context: DecodingContext,
+): Promise<unknown> {
+  await Validate(statement.validation);
+  try {
+    const result = await Query<ResultRow>(statement.sql, context.params.all());
+    if (statement.returnsIds) {
+      return result.rows.map((row) => row[ID_COLUMN]);
+    }
+    return result.rowCount ?? NO_ROWS;
+  } catch (err) {
+    throw ExternalWriteFailure(err, external);
+  }
 }
 
 /** The one production construction of a compiling context, fresh per statement. */
@@ -188,6 +264,15 @@ export async function RunQuery(stages: QueryStage[]): Promise<any> {
   const compiled = await ReadyQuery(stages, QueryContext());
   if (!compiled.split.write) {
     return RunRead(compiled.relation, compiled.context);
+  }
+  if (
+    compiled.root.external &&
+    compiled.split.write.stage === ATOMIC_MUTATION
+  ) {
+    throw ExternalWriteRefusal(
+      compiled.root.external,
+      compiled.split.write.stage,
+    );
   }
   return RunWrite(
     WriteTargetOf(compiled.root, compiled.relation),

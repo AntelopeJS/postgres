@@ -2,6 +2,7 @@ import assert from "node:assert";
 
 import type { QueryStage } from "./utils";
 import { InsertWrite } from "./writes-insert";
+import { EXTERNAL_WRITES, IsExternalTarget } from "./external-writes";
 import type { DecodingContext } from "./context";
 import { ATOMIC_MUTATION, AtomicWrite } from "./writes-atomic";
 import { DeleteWrite, ReplaceWrite, UpdateWrite } from "./writes-identity";
@@ -106,5 +107,12 @@ export function CompileWrite(
     Object.hasOwn(WRITE_STAGES, stage.stage),
     `Unsupported write stage '${stage.stage}'`,
   );
+  if (IsExternalTarget(target)) {
+    assert(
+      Object.hasOwn(EXTERNAL_WRITES, stage.stage),
+      `The '${stage.stage}' stage is not supported on an external relation`,
+    );
+    return EXTERNAL_WRITES[stage.stage](target, stage, context);
+  }
   return WRITE_STAGES[stage.stage].compile(target, stage, context);
 }

@@ -107,3 +107,35 @@ A group's callback accepts `map`, `distinct`, `count`, `sum`, `avg`, `min` and `
 Both suffixes name the common cause rather than the only one. `construct()` clears the
 configuration and leaves no pool when it fails to reach the server, so these are also what a query
 answers after a _failed_ startup, and what one answers after `destroy()`.
+
+## External mode
+
+See [External mode](./external-mode.md).
+
+| What you did                                                                   | Message                                                                                                                                                                              |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Set `schemaPrefix`, `migrations` or a `change*` option with `mode: "external"` | `{options} cannot be set with mode "external": an external instance owns no schemas, runs no DDL and keeps no change log`                                                            |
+| Declared a table the database does not have                                    | `Table '{schema}.{table}' reads "{schema}"."{table}", which the database does not have`                                                                                              |
+| Declared a table the connected role cannot read                                | `Table '{schema}.{table}' reads "{schema}"."{table}", which the connected role cannot SELECT from`                                                                                   |
+| Declared a field its relation has no column for                                | `Field '{schema}.{table}.{field}' reads column "{field}", which "{schema}"."{table}" does not have`                                                                                  |
+| Declared a type the column cannot be read as                                   | `Field '{path}' is declared {type}, but column "{column}" is {native type}: declare it as {types}`                                                                                   |
+| Declared `_id` on a relation with no key                                       | `Field '{path}._id' aliases the relation's key, but "{schema}"."{table}" has no primary key and no unique index over NOT NULL columns; remove it`                                    |
+| Read a named instance                                                          | `"{schema}"."{table}" is an external relation and has no instances, so instance '{id}' names nothing: read it through the default instance`                                          |
+| `get`, `getAll` without an index, or `_id` named, on a relation with no key    | `"{schema}"."{table}" has no primary key and no unique index over NOT NULL columns, so its rows have no _id and cannot be read by key: filter on a field, or getAll by a field name` |
+| A write to a relation with no key                                              | `"{schema}"."{table}" has no primary key and no unique index over NOT NULL columns, so its rows have no _id and cannot be read by key: …`                                            |
+| `atomicMutation`                                                               | `The 'atomicMutation' stage is not supported on "{schema}"."{table}", an external relation: its contract tells a missing field from a NULL one, which a column cannot`               |
+| A payload key that is not a declared field                                     | `Payload key '{key}' is not a field of '{schema}.{table}': … only its declared fields can be written`                                                                                |
+| A value for a generated, identity ALWAYS or array column on `insert`           | `Field '{path}' cannot be given a value: it is {why}, which the database fills`                                                                                                      |
+| `_id` and a key field disagreeing                                              | `Payload of '{schema}.{table}' claims two values for key column "{column}", through '{first}' and '{second}'`                                                                        |
+| A value its column cannot hold (`ExternalWriteError`, kind `invalid`)          | `Field '{path}' cannot hold {value}: the column is {type}`, one per field, joined by `; `                                                                                            |
+| `NOT NULL` (kind `missing`)                                                    | `Field '{column}' of "{schema}"."{table}" is required`                                                                                                                               |
+| Unique (kind `duplicate`)                                                      | `A row of "{schema}"."{table}" already has this value of unique "{constraint}": Key (…)=(…) already exists.`                                                                         |
+| Foreign key (kind `reference` / `referenced`)                                  | `A referenced row does not exist for "{constraint}" …` / `The row of … is still referenced through "{constraint}" …`                                                                 |
+| Check (kind `check`)                                                           | `The row breaks check "{constraint}" of "{schema}"."{table}"`                                                                                                                        |
+| No grant (kind `forbidden`)                                                    | `The connected role may not write to "{schema}"."{table}": {database message}`                                                                                                       |
+| `changes()`                                                                    | `changes() needs the adapter's change log, which "{schema}"."{table}" does not have: it is an external relation, and the adapter installs nothing on it`                             |
+| `createInstance` / `destroyInstance`                                           | `The '{stage}' stage manages instances, and an external instance's relations have none: read them through the default instance`                                                      |
+
+Registration errors fail the whole schema: every query on it answers the same message. No layer
+maps an `ExternalWriteError` to an HTTP status today, so a client sees it as a failed write carrying
+this message.

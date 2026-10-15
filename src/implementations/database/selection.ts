@@ -5,7 +5,8 @@ import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 import { TEXT } from "./types";
 import { IndexFields } from "./ddl";
 import { IsPlainObject } from "./value";
-import { TableReference } from "./identifier";
+import type { ExternalRelation } from "./fields";
+import { QualifiedName, TableReference } from "./identifier";
 import type { DecodingContext } from "./context";
 import { type Compiled, Param, QualifiedColumn } from "./sql";
 import { type Relation, type TableOrigin, TableRelation } from "./relation";
@@ -41,6 +42,8 @@ export interface RootSelection {
   relation: Relation;
   rest: QueryStage[];
   instance: InstanceScope;
+  /** The relation the query reads, when the adapter did not create it. */
+  external?: ExternalRelation;
 }
 
 /**
@@ -116,6 +119,36 @@ function InstancePredicate(alias: string, value: Compiled): string {
   return `(${QualifiedColumn(alias, INSTANCE_COLUMN)} = ${value.sql})`;
 }
 
+function NamedInstance(external: ExternalRelation, id: unknown): Error {
+  return new Error(
+    `${QualifiedName(external.schema, external.table)} is an external relation and has no instances, so instance '${String(id)}' names nothing: read it through the default instance`,
+  );
+}
+
+/**
+ * The scope of a read over a relation the adapter did not create, which has no instances: the
+ * default instance and `CROSS_INSTANCE` both read every row, and a named instance is refused rather
+ * than answered with rows nobody scoped to it.
+ */
+function RefuseNamedInstance(external: ExternalRelation, id: unknown): void {
+  const unscoped = [undefined, null, CROSS_INSTANCE, DEFAULT_INSTANCE_ID];
+  if (!unscoped.includes(id as never)) {
+    throw NamedInstance(external, id);
+  }
+}
+
+/** An external relation's root: its own names, verbatim, and no instance to filter on. */
+function ExternalRoot(
+  origin: TableOrigin,
+  external: ExternalRelation,
+  instanceId: unknown,
+  context: DecodingContext,
+): Relation {
+  RefuseNamedInstance(external, instanceId);
+  const from = QualifiedName(external.schema, external.table);
+  return TableRelation(from, context.nextAlias(), origin);
+}
+
 /**
  * Consumes the `schema` / `instance` / `table` prefix every table query opens with, and returns
  * the base relation alongside the pipeline stages that follow it.
@@ -130,22 +163,30 @@ export function BuildRoot(
   const resolve = context.resolveOrigin ?? RegisteredOrigin;
   const schemaId = RootId(schema);
   const tableId = RootId(table);
+  const origin = resolve(schemaId, tableId);
+  const rest = stages.slice(ROOT_STAGES.length);
+  const external = origin.shape.external;
+  if (external) {
+    const relation = ExternalRoot(
+      origin,
+      external,
+      instance.options?.id,
+      context,
+    );
+    return { relation, rest, instance: CROSS_INSTANCE, external };
+  }
   const alias = context.nextAlias();
   const relation = TableRelation(
     TableReference(schemaId, tableId),
     alias,
-    resolve(schemaId, tableId),
+    origin,
   );
   const scope = RootInstanceScope(instance.options?.id, context);
   relation.crossInstance = scope === CROSS_INSTANCE;
   if (scope !== CROSS_INSTANCE) {
     relation.where.push(InstancePredicate(alias, scope));
   }
-  return {
-    relation,
-    rest: stages.slice(ROOT_STAGES.length),
-    instance: scope,
-  };
+  return { relation, rest, instance: scope };
 }
 
 /** The ids found so far, beside the objects already walked, carried through one collection. */

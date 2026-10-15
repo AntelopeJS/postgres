@@ -1,4 +1,9 @@
-import { type Compiled, JSON_NULL, QuoteLiteral } from "./sql";
+import {
+  type Compiled,
+  JSON_NULL,
+  type NativeOperand,
+  QuoteLiteral,
+} from "./sql";
 import {
   ArrayOf,
   IsJsonBacked,
@@ -15,6 +20,12 @@ export interface CompiledPair {
   left: Compiled;
   right: Compiled;
   type: SqlType;
+  /**
+   * One side is an external column kept bare and the other was converted into its type, so the
+   * converted side is NULL wherever the value has no spelling in that type rather than where the
+   * value itself is absent. An inequality has to read that NULL as "not equal", not as "both null".
+   */
+  converted?: boolean;
 }
 
 /**
@@ -197,9 +208,76 @@ export function UnifyAll(types: SqlType[]): SqlType {
   );
 }
 
-export function UnifyOperands(left: Compiled, right: Compiled): CompiledPair {
+/**
+ * The two operands of a comparison at their common type.
+ *
+ * A column of an external relation carries its bare self beside its converted value (see
+ * `NativeOperand`). When it meets an operand of its own declared kind, the column stays bare and
+ * that operand is converted to the column's type for `operator` instead, which is what lets the
+ * database's own index serve the comparison; two such columns of one native type compare bare.
+ * Anything else compares by value, as every owned column does.
+ */
+export function UnifyOperands(
+  left: Compiled,
+  right: Compiled,
+  operator = EQUALITY,
+): CompiledPair {
   const type = Unify(left.type, right.type);
-  return { left: Cast(left, type), right: Cast(right, type), type };
+  const pair = { left: Cast(left, type), right: Cast(right, type), type };
+  return NativePair(left, right, pair, operator);
+}
+
+const EQUALITY = "=";
+
+/** The operator as seen from the other side, for a native column on the right. */
+const MIRRORED: Record<string, string> = {
+  ">": "<",
+  "<": ">",
+  ">=": "<=",
+  "<=": ">=",
+};
+
+function NativeSide(native: NativeOperand, type: SqlType): Compiled {
+  return { sql: native.sql, type };
+}
+
+function NativePair(
+  left: Compiled,
+  right: Compiled,
+  pair: CompiledPair,
+  operator: string,
+): CompiledPair {
+  const type = pair.type;
+  if (left.native && right.native) {
+    if (left.native.type !== right.native.type) {
+      return pair;
+    }
+    return {
+      left: NativeSide(left.native, type),
+      right: NativeSide(right.native, type),
+      type,
+    };
+  }
+  if (left.native && type.kind === left.type.kind) {
+    const converted = left.native.bind(pair.right.sql, operator);
+    return {
+      left: NativeSide(left.native, type),
+      right: { sql: converted, type },
+      type,
+      converted: true,
+    };
+  }
+  if (right.native && type.kind === right.type.kind) {
+    const mirrored = MIRRORED[operator] ?? operator;
+    const converted = right.native.bind(pair.left.sql, mirrored);
+    return {
+      left: { sql: converted, type },
+      right: NativeSide(right.native, type),
+      type,
+      converted: true,
+    };
+  }
+  return pair;
 }
 
 /**

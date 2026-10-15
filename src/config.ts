@@ -10,9 +10,23 @@ import type { PoolConfig } from "pg";
 export type MigrationMode = "safe" | "destructive";
 
 /**
+ * Whose tables an instance serves.
+ *
+ * - `owned`: the adapter creates and converges the tables it is given, and keeps its own
+ *   bookkeeping beside them.
+ * - `external`: the tables already exist in a database the adapter does not own. Schema, table and
+ *   field names are the database's own, read verbatim; registration reads the catalog and never
+ *   runs DDL; rows are read and written, never the structure. `url` is required. See
+ *   `docs/external-mode.md`.
+ */
+export type Mode = "owned" | "external";
+
+/**
  * Module configuration, as accepted by `construct`.
  */
 export interface Options {
+  /** Whose tables this instance serves. Defaults to `owned`. */
+  mode?: Mode;
   /** PostgreSQL connection string. */
   url?: string;
   /** Additional `pg.Pool` options, merged over the connection string. */
@@ -63,6 +77,7 @@ export interface Options {
 }
 
 export interface ResolvedOptions {
+  mode: Mode;
   url: string;
   pool: PoolConfig;
   schemaPrefix: string;
@@ -76,6 +91,21 @@ export interface ResolvedOptions {
 }
 
 const DEFAULT_URL = "postgres://postgres@localhost:5432/antelopejs";
+const DEFAULT_MODE: Mode = "owned";
+const MODES: readonly Mode[] = ["owned", "external"];
+
+/**
+ * The options that configure what only an owned instance does: its own schema names, its DDL, and
+ * its change log. An external instance refuses them by name rather than ignoring them, since an
+ * option accepted and never applied reads as one that took effect.
+ */
+const OWNED_ONLY_OPTIONS: readonly (keyof Options)[] = [
+  "schemaPrefix",
+  "migrations",
+  "changeRetentionMs",
+  "changeBatchSize",
+  "changePollIntervalMs",
+];
 const DEFAULT_MIGRATIONS: MigrationMode = "safe";
 const DEFAULT_SCHEMA_PREFIX = "";
 const DEFAULT_CURSOR_BATCH_SIZE = 100;
@@ -112,9 +142,44 @@ function PositiveSafeInteger(
   return supplied;
 }
 
+function ResolveMode(options?: Options): Mode {
+  const mode = options?.mode ?? DEFAULT_MODE;
+  if (!MODES.includes(mode)) {
+    throw new Error(
+      `mode must be one of ${MODES.join(", ")}, received ${String(mode)}`,
+    );
+  }
+  if (mode === "external") {
+    const refused = OWNED_ONLY_OPTIONS.filter(
+      (option) => options?.[option] !== undefined,
+    );
+    if (refused.length > 0) {
+      throw new Error(
+        `${refused.join(", ")} cannot be set with mode "external": an external instance owns no schemas, runs no DDL and keeps no change log`,
+      );
+    }
+  }
+  return mode;
+}
+
+function ResolveUrl(mode: Mode, options?: Options): string {
+  if (options?.url !== undefined && options.url.trim() !== "") {
+    return options.url;
+  }
+  if (mode === "external") {
+    throw new Error(
+      `mode "external" needs a non-empty config.url; set it through the project's envOverrides`,
+    );
+  }
+  return DEFAULT_URL;
+}
+
 export function SetOptions(options?: Options): ResolvedOptions {
+  const mode = ResolveMode(options);
+  const url = ResolveUrl(mode, options);
   resolved = {
-    url: options?.url ?? DEFAULT_URL,
+    mode,
+    url,
     pool: options?.pool ?? {},
     schemaPrefix: options?.schemaPrefix ?? DEFAULT_SCHEMA_PREFIX,
     migrations: options?.migrations ?? DEFAULT_MIGRATIONS,
@@ -153,6 +218,11 @@ export function GetOptions(): ResolvedOptions {
     throw new Error(NOT_CONFIGURED);
   }
   return resolved;
+}
+
+/** Whether the configured instance serves tables it does not own. */
+export function IsExternal(): boolean {
+  return GetOptions().mode === "external";
 }
 
 export function ClearOptions() {

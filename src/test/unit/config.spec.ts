@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
 import { WithOptions } from "./spec-fixture";
-import { GetOptions, type Options, SetOptions } from "../../config";
+import { GetOptions, type Mode, type Options, SetOptions } from "../../config";
 
 const DEFAULT_CURSOR_BATCH_SIZE = 100;
 const DEFAULT_CURSOR_IDLE_TIMEOUT_MS = 60_000;
@@ -39,6 +39,14 @@ const REFUSED: readonly unknown[] = [
   "100",
   null,
   {},
+];
+
+const EXTERNAL_REFUSED: readonly Options[] = [
+  { schemaPrefix: "app_" },
+  { migrations: "safe" },
+  { changeRetentionMs: 1000 },
+  { changeBatchSize: 10 },
+  { changePollIntervalMs: 1000 },
 ];
 
 function Setting(option: ValidatedOption, value: unknown): Options {
@@ -90,6 +98,59 @@ describe("SetOptions", () => {
         expect(options.schemaPrefix).to.equal("app_");
         expect(options.migrations).to.equal("destructive");
         expect(options.statementTimeoutMs).to.equal(0);
+      },
+    );
+  });
+
+  it("serves owned tables when no mode is given", () => {
+    WithOptions({}, () => {
+      expect(GetOptions().mode).to.equal("owned");
+    });
+  });
+
+  it("refuses a mode it does not know", () => {
+    expect(() => SetOptions({ mode: "readonly" as Mode })).to.throw("readonly");
+  });
+
+  for (const refused of EXTERNAL_REFUSED) {
+    const [option] = Object.keys(refused);
+    it(`refuses ${option} in external mode, naming it`, () => {
+      expect(() => SetOptions({ ...refused, mode: "external" })).to.throw(
+        option,
+      );
+    });
+  }
+
+  it("refuses external mode without a url, naming the option", () => {
+    expect(() => SetOptions({ mode: "external" })).to.throw("config.url");
+  });
+
+  it("refuses external mode with a blank url, as an unset variable in .env leaves it", () => {
+    expect(() => SetOptions({ mode: "external", url: "" })).to.throw(
+      "config.url",
+    );
+    expect(() => SetOptions({ mode: "external", url: "  " })).to.throw(
+      "config.url",
+    );
+  });
+
+  it("falls back to the default url in owned mode", () => {
+    WithOptions({}, () => {
+      expect(GetOptions().url).to.equal(
+        "postgres://postgres@localhost:5432/antelopejs",
+      );
+    });
+  });
+
+  it("accepts an external mode with only the options that apply to it", () => {
+    WithOptions(
+      {
+        mode: "external",
+        url: "postgres://reader@client/erp",
+        statementTimeoutMs: 5000,
+      },
+      () => {
+        expect(GetOptions().mode).to.equal("external");
       },
     );
   });
