@@ -155,6 +155,22 @@ It is a development tool. It answers under `ajs project dev` and `ajs project ru
 
 An owned instance refuses it.
 
+Each consumer reaches the catalog through a connection on its own module entry, and two consumers
+of the same database give theirs the same id:
+
+```typescript
+"dms-builder": {
+    importOverrides: [
+        { interface: "@antelopejs/interface-database-catalog", source: "postgres-erp", id: "erp" },
+    ],
+},
+"dms-ai": {
+    importOverrides: [
+        { interface: "@antelopejs/interface-database-catalog", source: "postgres-erp", id: "erp" },
+    ],
+},
+```
+
 **Profiles never write and never wait long.**
 
 - Every profile runs in one `READ ONLY` transaction, whatever the connected role may write, with a
