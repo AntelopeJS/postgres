@@ -363,6 +363,14 @@ describe("a sample of rows", function () {
     expect(sample.rows).to.have.length(5);
   });
 
+  it("reads inside a read-only transaction", async () => {
+    const sample = await SampleRows({
+      relation: "sales.v_transaction",
+      limit: 1,
+    });
+    expect(sample.rows).to.deep.equal([[{ text: "on", truncated: false }]]);
+  });
+
   it("refuses a relation the role can read only in part", async () => {
     let refused: Error | undefined;
     try {
