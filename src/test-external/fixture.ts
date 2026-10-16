@@ -118,6 +118,11 @@ export const FIXTURE: readonly string[] = [
   "COMMENT ON COLUMN sales.accounts.name IS 'Display name'",
   "CREATE TABLE sales.people (id int PRIMARY KEY, name text, ssn text)",
   "INSERT INTO sales.people SELECT g, 'Person ' || g, lpad(g::text, 9, '0') FROM generate_series(1, 100) g",
+  "CREATE TABLE sales.attachments (id int PRIMARY KEY, note text, body bytea)",
+  `INSERT INTO sales.attachments VALUES
+    (1, repeat('n', 300), decode('00010203', 'hex')),
+    (2, 'short', NULL),
+    (3, NULL, decode('ff', 'hex'))`,
   `CREATE TABLE sales.invoices (
     id int PRIMARY KEY, kind text NOT NULL, account_ref bigint, broken_ref bigint, issued_on date
   )`,

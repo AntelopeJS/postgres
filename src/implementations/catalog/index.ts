@@ -8,6 +8,8 @@ import type {
   RelationDescription,
   RelationProfile,
   RelationSummary,
+  RowSample,
+  SampleRequest,
 } from "@antelopejs/interface-database-catalog";
 
 import { GetOptions, IsExternal } from "../../config";
@@ -22,6 +24,7 @@ import {
 import { Sequentially } from "../database/external-measures";
 import { ProfileRelation } from "../database/external-profile";
 import { CheckColumnReference } from "../database/external-reference";
+import { SampleRelationRows } from "../database/external-rows";
 
 const OWNED_REFUSAL =
   "the catalog describes a database an external instance was pointed at; this instance owns its tables";
@@ -82,4 +85,9 @@ export async function CheckReference(
 ): Promise<Measure<ReferenceMatch>> {
   await Guard();
   return CheckColumnReference(check);
+}
+
+export async function SampleRows(request: SampleRequest): Promise<RowSample> {
+  await Guard();
+  return SampleRelationRows(request);
 }

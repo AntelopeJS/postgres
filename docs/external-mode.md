@@ -186,3 +186,10 @@ of the same database give theirs the same id:
 - A value is named only as a category of a column with at most 25 distinct values, and only if
   it is counted at least 5 times.
 - `pg_stats` is not read for values.
+
+**A sample of rows is for a person.** `SampleRows` is the one catalog function that answers row
+values, for a person to look at, never for a generator or a model.
+
+- At most 20 rows, every value as text cut at 200 characters, and a binary value as its length.
+- It reads in the same `READ ONLY` transaction and with the same timeouts as a profile, and
+  samples a relation above one million rows the same way.
