@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.2.0
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.1.4...v0.2.0)
+
+### 🚀 Enhancements
+
+- ⚠️  Publish as @antelopejs/postgres on public npm ([#21](https://github.com/AntelopeJS/postgres/pull/21))
+
+### 📖 Documentation
+
+- Streamline agent guidance and preserve repository contracts ([#20](https://github.com/AntelopeJS/postgres/pull/20))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Publish as @antelopejs/postgres on public npm ([#21](https://github.com/AntelopeJS/postgres/pull/21))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.1.4
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.1.3...v0.1.4)
