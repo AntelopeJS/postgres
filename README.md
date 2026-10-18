@@ -131,7 +131,7 @@ pnpm lint
 pnpm format:check
 pnpm knip
 pnpm test:unit      # fast loop: this repository's unit specs, no Docker
-pnpm test           # unit specs, then the conformance and external-mode suites against PostgreSQL
+pnpm test           # everything, against PostgreSQL: unit specs, conformance and external-mode suites
 ```
 
 `pnpm test` provisions PostgreSQL with Testcontainers, so it needs a Docker daemon. Besides this
