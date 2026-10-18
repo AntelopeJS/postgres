@@ -8,10 +8,6 @@
     "release": true,
     "releaseName": "v${version}"
   },
-  "npm": {
-    "publish": true,
-    "skipChecks": true
-  },
   "hooks": {
     "before:init": ["pnpm lint"],
     "after:bump": "git add CHANGELOG.md"
@@ -20,5 +16,9 @@
     "release-it-changelogen": {
       "disableVersion": true
     }
+  },
+  "npm": {
+    "publish": true,
+    "skipChecks": true
   }
 }

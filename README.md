@@ -1,41 +1,82 @@
-# @antelopejs-private/postgres
+# @antelopejs/postgres
 
 <div align="center">
-<a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue?style=for-the-badge&labelColor=000000"></a>
+<a href="https://www.npmjs.com/package/@antelopejs/postgres"><img alt="npm" src="https://img.shields.io/npm/v/@antelopejs/postgres?style=for-the-badge&labelColor=000000&color=000000"></a>
+<a href="./LICENSE"><img alt="License" src="https://img.shields.io/npm/l/@antelopejs/postgres?style=for-the-badge&labelColor=000000&color=000000"></a>
 <a href="https://discord.gg/sjK28QHrA7"><img src="https://img.shields.io/badge/Discord-18181B?logo=discord&style=for-the-badge&color=000000" alt="Discord"></a>
-<a href="https://antelopejs.com/modules/postgres"><img src="https://img.shields.io/badge/Docs-18181B?style=for-the-badge&color=000000" alt="Documentation"></a>
+<a href="https://interfaces.antelopejs.com/docs/database"><img src="https://img.shields.io/badge/Docs-18181B?style=for-the-badge&color=000000" alt="Documentation"></a>
 </div>
 
-A PostgreSQL module that implements the Database interface for AntelopeJS, mapping schema
-definitions onto real relational tables with native column types and indexes.
-
-## Installation
-
-Configure the private registry in your project's `.npmrc` and authenticate with an AntelopeJS registry token:
-
-```ini
-@antelopejs-private:registry=https://npm.antelopejs.cloud/
-//npm.antelopejs.cloud/:_authToken=${NPM_ANTELOPE_TOKEN}
-```
-
-Set `NPM_ANTELOPE_TOKEN` in your environment, then install the module:
-
-```bash
-ajs project modules add @antelopejs-private/postgres
-```
+The PostgreSQL backend of AntelopeJS: it runs the database interface's queries on PostgreSQL with the [`pg`](https://github.com/brianc/node-postgres) driver, mapping schema definitions onto real relational tables with native column types and indexes. It can also serve tables that already exist in a database it does not own.
 
 ## Interfaces
 
-This module implements the Database interface, which provides a standardized database
-abstraction layer. The interface is installed separately to maintain modularity and minimize
-dependencies: a module that queries the database adds the interface package to its own
-dependencies and imports from it, and this module provides the implementation at runtime.
+| Interface                                                                            | Documentation                                               |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| [`@antelopejs/interface-database`](https://github.com/AntelopeJS/interface-database) | [Database](https://interfaces.antelopejs.com/docs/database) |
 
-| Name     | Install command                           |                                                                   |
-| -------- | ----------------------------------------- | ----------------------------------------------------------------- |
-| Database | `pnpm add @antelopejs/interface-database` | [Documentation](https://github.com/AntelopeJS/interface-database) |
+Schemas, tables, queries, change feeds and atomic mutations are documented on the database interface pages.
 
-## Overview
+## Install
+
+```bash
+ajs project modules add @antelopejs/postgres
+```
+
+The command writes the module's default configuration: `postgres://postgres@localhost:5432/antelopejs`, with `migrations: "safe"`.
+
+**Requires PostgreSQL 16 or later.** The adapter uses `pg_input_is_valid` so that a text or jsonb
+value which is not a parseable date yields `null` instead of aborting the whole statement. It is
+the only construct used above PostgreSQL 9.5.
+
+## Configuration
+
+```typescript [antelope.config.ts]
+import { defineConfig } from "@antelopejs/interface-core/config";
+
+export default defineConfig({
+  name: "my-project",
+  modules: {
+    postgres: {
+      source: {
+        type: "package",
+        package: "@antelopejs/postgres",
+        version: "^0.2.0",
+      },
+      config: {
+        url: "postgres://postgres@localhost:5432/my-project",
+        migrations: "safe",
+        pool: { max: 10 },
+      },
+    },
+  },
+  envOverrides: {
+    POSTGRES_URL: "modules.postgres.config.url",
+  },
+});
+```
+
+| Key            | Description                                                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`         | `"owned"` (default) creates and converges the tables; `"external"` serves existing tables without changing them.                                              |
+| `url`          | PostgreSQL connection string.                                                                                                                                 |
+| `migrations`   | `"safe"` (default) only adds columns and indexes; `"destructive"` also alters and drops them. See [Schema convergence](./docs/storage.md#schema-convergence). |
+| `schemaPrefix` | Prefix for generated PostgreSQL schema names, for several applications sharing one database.                                                                  |
+| `pool`         | Optional [`pg.Pool`](https://node-postgres.com/apis/pool) options, merged over the URL.                                                                       |
+
+Cursor, statement-timeout and change-feed tuning are in [docs/configuration.md](./docs/configuration.md).
+
+## Quick start
+
+In the module that stores data, add the database interface:
+
+```bash
+pnpm add @antelopejs/interface-database
+```
+
+Then follow the [database interface guide](https://framework.antelopejs.com/docs/guides/database) to declare a schema and query it. The same code runs on [`@antelopejs/mongodb`](https://github.com/AntelopeJS/mongodb) and [`@antelopejs/rethinkdb`](https://github.com/AntelopeJS/rethinkdb); [Behaviour worth knowing](./docs/behaviour.md) records where the backends differ.
+
+## Storage layout
 
 Unlike the document-store backends, this module treats schema field declarations as real
 DDL: each AntelopeJS schema becomes a PostgreSQL schema, each table a real table, and each
@@ -53,31 +94,32 @@ over a declared field reaches its btree index.
 value which is not a parseable date yields `null` instead of aborting the whole statement. It is
 the only construct used above PostgreSQL 9.5.
 
-## Configuration
-
-```typescript
-{
-    url: "postgres://postgres@localhost:5432/antelopejs",  // PostgreSQL connection string
-    migrations: "safe",                 // "safe" (default) or "destructive"
-    schemaPrefix: "",                   // Prefix for generated PostgreSQL schema names
-    pool: { max: 10 }                   // Optional pg.Pool options, merged over the URL
-}
-```
-
-Cursor and change-feed tuning, and what each option does, is in
-[docs/configuration.md](./docs/configuration.md).
-
 ## Documentation
+
+- [Database](https://interfaces.antelopejs.com/docs/database): the `@antelopejs/interface-database` contract this module implements
+- [Configuration](https://framework.antelopejs.com/docs/concepts/configuration): module sources, `config` blocks and config variables in `antelope.config.ts`
+
+This repository documents what is specific to the PostgreSQL backend:
 
 |                                                |                                                                                                                                                    |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Storage and schema](./docs/storage.md)        | What a registered schema becomes in the database, the field-type table, what reaches an index, and how registration converges                      |
 | [Configuration](./docs/configuration.md)       | Every option `construct` accepts                                                                                                                   |
+| [External mode](./docs/external-mode.md)       | Reading tables the module did not create, in a database it does not own                                                                            |
 | [Change feeds](./docs/change-feeds.md)         | `changes()`, its ordering guarantee, its retention contract and its blind spots                                                                    |
 | [Errors and refusals](./docs/errors.md)        | Everything the module refuses, with the message it refuses by                                                                                      |
 | [Behaviour worth knowing](./docs/behaviour.md) | Things that answer rather than throw, where the answer may surprise you — including where this backend differs from the MongoDB and RethinkDB ones |
 
-## Development
+## Compatibility
+
+| Package                          | Supported range  |
+| -------------------------------- | ---------------- |
+| `@antelopejs/interface-database` | `^0.1.8`         |
+| `@antelopejs/interface-core`     | `>=0.1.1 <1.0.0` |
+
+The module is developed and tested against `@antelopejs/core` `^1.14.0` on Node.js 22 and 24, with the `pg` driver `^8.22.0` and PostgreSQL 18.
+
+## Contributing
 
 **Node 22 or later is required to develop or test this module**, though the published module itself
 runs on any version its `pg` dependency supports. The floor comes from `testcontainers`, a
@@ -85,21 +127,26 @@ devDependency whose bundled `undici` calls `worker_threads.markAsUncloneable`, a
 
 ```bash
 pnpm install
-pnpm build
-pnpm run test:unit   # fast loop: this repo's own specs, no Docker
-pnpm test            # full conformance run, provisions PostgreSQL via testcontainers
+pnpm lint
+pnpm format:check
+pnpm knip
+pnpm test:unit      # fast loop: this repository's unit specs, no Docker
+pnpm test           # everything, against PostgreSQL: unit specs, conformance and external-mode suites
 ```
 
-To test against an existing server instead of a container, set `PG_TEST_URL`:
+`pnpm test` provisions PostgreSQL with Testcontainers, so it needs a Docker daemon. Besides this
+repository's own tests, it runs the shared conformance suite of `@antelopejs/interface-database`,
+discovered from `antelopeJs.implements`.
+
+To test against an existing server instead of a container, set `PG_TEST_URL`. It must point to a
+disposable instance: the external suite drops and recreates a fixture database and may create a role.
 
 ```bash
 PG_TEST_URL=postgres://postgres:postgres@localhost:5432/antelopejs_test pnpm test
 ```
 
-`pnpm test` needs a Docker daemon. No test cases live in this repo: the suite ships in the interface
-package and is discovered automatically from `antelopeJs.implements`, so building and booting the
-module is all that is needed to exercise it.
+Read the [contribution guidelines](CONTRIBUTING.md) before opening a pull request.
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+[Apache-2.0](LICENSE)
