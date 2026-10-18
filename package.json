@@ -1,7 +1,7 @@
 {
-  "name": "@antelopejs-private/postgres",
+  "name": "@antelopejs/postgres",
   "version": "0.1.4",
-  "description": "PostgreSQL module that implements the Database interface of antelopejs",
+  "description": "PostgreSQL backend for AntelopeJS, implementing the Database interface on relational tables with native column types and indexes",
   "keywords": [
     "antelopejs",
     "database",
@@ -9,6 +9,10 @@
     "postgresql",
     "sql"
   ],
+  "homepage": "https://interfaces.antelopejs.com/docs/database",
+  "bugs": {
+    "url": "https://github.com/AntelopeJS/postgres/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -19,7 +23,8 @@
   ],
   "main": "dist/index.js",
   "publishConfig": {
-    "registry": "https://npm.antelopejs.cloud/"
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "rimraf dist && tsc",
@@ -28,10 +33,11 @@
     "lint": "oxlint",
     "prepack": "pnpm run build",
     "release": "pnpm run lint && pnpm run test && pnpm run prepack && release-it",
-    "test": "pnpm run build && ajs module test . && pnpm run test:external:run",
+    "test": "pnpm run build && pnpm run test:unit:run && ajs module test . && pnpm run test:external:run",
     "test:external": "pnpm run build && pnpm run test:external:run",
     "test:external:run": "PG_TEST_MODE=external ajs module test . $(for file in dist/test-external/*.test.js; do printf -- '-f %s ' \"$file\"; done)",
-    "test:unit": "pnpm run build && mocha \"dist/test/unit/**/*.spec.js\"",
+    "test:unit": "pnpm run build && pnpm run test:unit:run",
+    "test:unit:run": "mocha \"dist/test/unit/**/*.spec.js\"",
     "typecheck": "tsc --noEmit",
     "format:check": "oxfmt --check .",
     "knip": "knip"
