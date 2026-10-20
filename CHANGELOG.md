@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.2.1
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.0...v0.2.1)
+
+### 🚀 Enhancements
+
+- **external:** Describe and profile the database through interface-database-catalog ([#19](https://github.com/AntelopeJS/postgres/pull/19))
+- **external:** Sample a few rows of a relation through the catalog ([#23](https://github.com/AntelopeJS/postgres/pull/23))
+
+### 🤖 CI
+
+- Add a checks job aggregating the node matrix ([#22](https://github.com/AntelopeJS/postgres/pull/22))
+
+### ❤️ Contributors
+
+- Thomas 
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.2.0
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.1.4...v0.2.0)
