@@ -12,7 +12,11 @@ import {
   type CatalogRelation,
   ReadRelation,
 } from "./external-catalog";
-import { type ColumnDescriptor, Describe, DescribeKey } from "./external-types";
+import {
+  type ColumnDescriptor,
+  Describe,
+  DescribeKeyColumns,
+} from "./external-types";
 import type {
   ExternalRelation,
   FieldSpec,
@@ -108,21 +112,6 @@ function DescribeFields(
   return fields;
 }
 
-/** The key's columns described for `_id`, or nothing when any of them cannot serve as one. */
-function DescribeKeyColumns(
-  relation: CatalogRelation,
-  columns: Map<string, CatalogColumn>,
-): ColumnDescriptor[] | undefined {
-  const described = (relation.key ?? []).map((name) => {
-    const column = columns.get(name);
-    return column ? DescribeKey(column) : undefined;
-  });
-  if (described.length === 0 || described.some((key) => !key)) {
-    return undefined;
-  }
-  return described as ColumnDescriptor[];
-}
-
 function ReportKeyless(declared: DeclaredTable): void {
   Logger.Info(
     `${NativeName(declared)} has no primary key and no unique index over NOT NULL columns usable as one, so the rows of '${PathOf(declared)}' answer no ${ID_COLUMN}: it can be queried, but not read by key`,
@@ -134,7 +123,7 @@ function KeyFor(
   relation: CatalogRelation,
   columns: Map<string, CatalogColumn>,
 ): ColumnDescriptor[] | undefined {
-  const key = DescribeKeyColumns(relation, columns);
+  const key = DescribeKeyColumns(relation.key, columns);
   if (key) {
     return key;
   }

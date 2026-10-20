@@ -6,7 +6,7 @@ import { QuoteLiteral } from "./sql";
  * The native types the adapter tells apart, each standing for the PostgreSQL types it reads alike.
  * A column whose type is in none of them is refused at registration, whatever it is declared as.
  */
-type NativeFamily =
+export type NativeFamily =
   | "text"
   | "citext"
   | "bpchar"
@@ -205,7 +205,7 @@ export interface ColumnDescriptor {
 }
 
 /** The family a type belongs to, with enums and arrays recognised by kind rather than by name. */
-function FamilyOf(column: CatalogColumn): NativeFamily | undefined {
+export function FamilyOf(column: CatalogColumn): NativeFamily | undefined {
   if (column.typtype === ENUM_TYPTYPE) {
     return "enum";
   }
@@ -215,7 +215,7 @@ function FamilyOf(column: CatalogColumn): NativeFamily | undefined {
   return FAMILY_BY_TYPE[column.typname];
 }
 
-function ElementFamily(column: CatalogColumn): NativeFamily | undefined {
+export function ElementFamily(column: CatalogColumn): NativeFamily | undefined {
   if (!column.element) {
     return undefined;
   }
@@ -235,7 +235,7 @@ function ArrayReading(
   return reading ? { value: AsJsonArray, lossy: reading.lossy } : undefined;
 }
 
-function ReadingOf(
+export function ReadingOf(
   kind: SqlType,
   family: NativeFamily | undefined,
   column: CatalogColumn,
@@ -331,6 +331,24 @@ export function DescribeKey(
     generated: column.generated,
     identity: column.identity,
   };
+}
+
+/**
+ * The key's columns described for `_id`, or nothing when there is no key or any of its columns
+ * cannot serve as one.
+ */
+export function DescribeKeyColumns(
+  key: string[] | undefined,
+  columns: Map<string, CatalogColumn>,
+): ColumnDescriptor[] | undefined {
+  const described = (key ?? []).map((name) => {
+    const column = columns.get(name);
+    return column ? DescribeKey(column) : undefined;
+  });
+  if (described.length === 0 || described.some((part) => !part)) {
+    return undefined;
+  }
+  return described as ColumnDescriptor[];
 }
 
 /** Converts the other operand of a comparison, read as the declared kind, to the column's type. */

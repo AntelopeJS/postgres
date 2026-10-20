@@ -23,6 +23,11 @@ let container: StartedPostgreSqlContainer | undefined;
 interface ModuleSettings {
   url: string;
   mode?: string;
+  catalog?: CatalogSettings;
+}
+
+interface CatalogSettings {
+  enabled: boolean;
 }
 
 function moduleConfig(config: ModuleSettings) {
@@ -103,6 +108,7 @@ export default defineConfig({
       return moduleConfig({
         url: await ClientDatabase(url),
         mode: EXTERNAL_MODE,
+        catalog: { enabled: true },
       });
     },
     async cleanup() {

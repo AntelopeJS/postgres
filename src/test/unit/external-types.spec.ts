@@ -2,6 +2,7 @@ import { expect } from "chai";
 
 import { ParseFieldType } from "../../implementations/database/fields";
 import type { CatalogColumn } from "../../implementations/database/external-catalog";
+import { AcceptedDeclarations } from "../../implementations/database/external-declarations";
 import {
   Describe,
   DescribeKey,
@@ -43,6 +44,8 @@ function Column(type: NativeType): CatalogColumn {
     hasDefault: false,
     generated: false,
     identity: "",
+    comment: null,
+    enumLabels: null,
   };
 }
 
@@ -215,6 +218,62 @@ describe("external column readings", () => {
         .and.to.match(hint);
     });
   }
+});
+
+describe("declarations a catalog offers for a column", () => {
+  const types = [...ACCEPTED, ...REFUSED].map((entry) => entry.type);
+
+  for (const type of types) {
+    const label = type.native ?? type.typname;
+
+    it(`offers only declarations registration takes over ${label}, with their losses`, () => {
+      for (const offered of AcceptedDeclarations(Column(type))) {
+        const described = DescribeDeclared(offered.declared, type);
+        expect(described.lossy).to.equal(offered.lossy);
+      }
+    });
+  }
+
+  for (const { declared, type } of REFUSED) {
+    it(`never offers ${String(declared)} over ${type.typname}, which registration refuses`, () => {
+      const offered = AcceptedDeclarations(Column(type)).map(
+        (entry) => entry.declared,
+      );
+      expect(offered).to.not.include(declared);
+    });
+  }
+
+  it("proposes number over a bigint, and offers string beside it", () => {
+    const offered = AcceptedDeclarations(Column({ typname: "int8" })).map(
+      (entry) => entry.declared,
+    );
+    expect(offered[0]).to.equal("number");
+    expect(offered).to.include("string");
+  });
+
+  it("proposes date over a timestamp and string over an enum", () => {
+    expect(
+      AcceptedDeclarations(Column({ typname: "timestamp" }))[0].declared,
+    ).to.equal("date");
+    expect(
+      AcceptedDeclarations(Column({ typname: "status", typtype: "e" }))[0]
+        .declared,
+    ).to.equal("string");
+  });
+
+  it("proposes the element's kind for an array", () => {
+    expect(
+      AcceptedDeclarations(
+        Column({ typname: "_int4", element: "int4", ...ARRAY }),
+      )[0].declared,
+    ).to.equal("number[]");
+  });
+
+  it("offers nothing over a type no field type reads", () => {
+    expect(AcceptedDeclarations(Column({ typname: "bytea" }))).to.deep.equal(
+      [],
+    );
+  });
 });
 
 describe("external key columns", () => {

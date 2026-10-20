@@ -17,9 +17,12 @@ export interface CatalogColumn {
   hasDefault: boolean;
   generated: boolean;
   identity: string;
+  comment: string | null;
+  /** An enum's labels in their sort order, after resolving a domain to its base type. */
+  enumLabels: string[] | null;
 }
 
-interface CatalogIndex {
+export interface CatalogIndex {
   name: string;
   primary: boolean;
   unique: boolean;
@@ -51,7 +54,7 @@ interface RelationRow {
   readable: boolean;
 }
 
-const RELATION_KINDS = "('r', 'p', 'v', 'm', 'f')";
+export const RELATION_KINDS = "('r', 'p', 'v', 'm', 'f')";
 
 const RELATION_SQL = `
   SELECT c.oid, c.relkind AS kind, has_table_privilege(c.oid, 'SELECT') AS readable
@@ -63,7 +66,11 @@ const COLUMNS_SQL = `
   SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS native,
     b.typname, format_type(b.oid, NULL) AS "castType", b.typtype, b.typcategory AS category,
     e.typname AS element, a.attnotnull AS "notNull", a.atthasdef AS "hasDefault",
-    a.attgenerated <> '' AS generated, a.attidentity AS identity
+    a.attgenerated <> '' AS generated, a.attidentity AS identity,
+    col_description(a.attrelid, a.attnum) AS comment,
+    CASE WHEN b.typtype = 'e' THEN ARRAY(
+      SELECT l.enumlabel::text FROM pg_enum l WHERE l.enumtypid = b.oid ORDER BY l.enumsortorder
+    ) END AS "enumLabels"
   FROM pg_attribute a
   JOIN pg_type t ON t.oid = a.atttypid
   JOIN pg_type b ON b.oid = CASE WHEN t.typtype = 'd' THEN t.typbasetype ELSE t.oid END
@@ -104,7 +111,7 @@ function ByKeyPreference(left: CatalogIndex, right: CatalogIndex): number {
 }
 
 /** The primary key, else the preferred candidate key, else nothing. */
-function KeyOf(indexes: CatalogIndex[]): CatalogIndex | undefined {
+export function KeyOf(indexes: CatalogIndex[]): CatalogIndex | undefined {
   const primary = indexes.find((index) => index.primary);
   if (primary) {
     return primary;
@@ -122,6 +129,14 @@ function ServingIndexes(indexes: CatalogIndex[]): string[][] {
  * Reads a relation's columns, key and indexes out of `pg_catalog`, or nothing when the schema has
  * no relation of that name. Only the catalog is read, which a role with `USAGE` on the schema may.
  */
+export async function ReadColumns(oid: number): Promise<CatalogColumn[]> {
+  return (await Query<CatalogColumn>(COLUMNS_SQL, [oid])).rows;
+}
+
+export async function ReadIndexes(oid: number): Promise<CatalogIndex[]> {
+  return (await Query<CatalogIndex>(INDEXES_SQL, [oid])).rows;
+}
+
 export async function ReadRelation(
   schemaName: string,
   relationName: string,
@@ -134,15 +149,15 @@ export async function ReadRelation(
     return undefined;
   }
   const relation = found.rows[0];
-  const columns = await Query<CatalogColumn>(COLUMNS_SQL, [relation.oid]);
-  const indexes = await Query<CatalogIndex>(INDEXES_SQL, [relation.oid]);
-  const key = KeyOf(indexes.rows);
+  const columns = await ReadColumns(relation.oid);
+  const indexes = await ReadIndexes(relation.oid);
+  const key = KeyOf(indexes);
   return {
     kind: relation.kind,
     readable: relation.readable,
-    columns: columns.rows,
+    columns,
     key: key?.columns,
     keyName: key?.name,
-    indexes: ServingIndexes(indexes.rows),
+    indexes: ServingIndexes(indexes),
   };
 }

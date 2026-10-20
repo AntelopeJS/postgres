@@ -3,7 +3,7 @@ import { ImplementInterface } from "@antelopejs/interface-core";
 import { IsExternal, type Options } from "./config";
 import { Connect, Disconnect } from "./connection";
 
-export type { MigrationMode, Mode, Options } from "./config";
+export type { CatalogOptions, MigrationMode, Mode, Options } from "./config";
 
 export async function construct(options?: Options) {
   await Connect(options);
@@ -18,6 +18,10 @@ export async function construct(options?: Options) {
   void ImplementInterface(
     await import("@antelopejs/interface-database/schema"),
     await import("./implementations/database/schema"),
+  );
+  void ImplementInterface(
+    await import("@antelopejs/interface-database-catalog"),
+    await import("./implementations/catalog"),
   );
 }
 

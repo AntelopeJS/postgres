@@ -44,6 +44,7 @@
   "dependencies": {
     "@antelopejs/interface-core": ">=0.1.1 <1.0.0",
     "@antelopejs/interface-database": "^0.1.8",
+    "@antelopejs/interface-database-catalog": ">=0.0.1 <1.0.0",
     "pg": "^8.22.0"
   },
   "devDependencies": {
@@ -69,7 +70,8 @@
   "packageManager": "pnpm@10.6.5",
   "antelopeJs": {
     "implements": [
-      "@antelopejs/interface-database"
+      "@antelopejs/interface-database",
+      "@antelopejs/interface-database-catalog"
     ],
     "defaultConfig": {
       "url": "postgres://postgres@localhost:5432/antelopejs",
