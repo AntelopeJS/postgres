@@ -1,7 +1,7 @@
 {
-  "name": "@antelopejs-private/postgres",
-  "version": "0.1.4",
-  "description": "PostgreSQL module that implements the Database interface of antelopejs",
+  "name": "@antelopejs/postgres",
+  "version": "0.2.0",
+  "description": "PostgreSQL backend for AntelopeJS, implementing the Database interface on relational tables with native column types and indexes",
   "keywords": [
     "antelopejs",
     "database",
@@ -9,6 +9,10 @@
     "postgresql",
     "sql"
   ],
+  "homepage": "https://interfaces.antelopejs.com/docs/database",
+  "bugs": {
+    "url": "https://github.com/AntelopeJS/postgres/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -19,7 +23,8 @@
   ],
   "main": "dist/index.js",
   "publishConfig": {
-    "registry": "https://npm.antelopejs.cloud/"
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "rimraf dist && tsc",
