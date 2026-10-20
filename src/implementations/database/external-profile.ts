@@ -136,7 +136,8 @@ async function Inbound(references: Reference[]): Promise<InboundProfile[]> {
   );
 }
 
-async function NamedRow(relation: string): Promise<RelationRow> {
+/** The relation, refused when it does not exist or the connected role cannot read it. */
+export async function NamedRow(relation: string): Promise<RelationRow> {
   const [row] = await ReadNamedRelationRows([relation]);
   if (!row) {
     throw new Error(

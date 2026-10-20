@@ -6,6 +6,7 @@ import {
   ListRelations,
   Profile,
   type RelationDescription,
+  SampleRows,
   type RelationProfile,
   type RelationSummary,
 } from "@antelopejs/interface-database-catalog";
@@ -294,6 +295,90 @@ describe("a profile of an external relation", function () {
     expect(
       await NativeCount(`SELECT count(*) FROM sales.w_big WHERE id = ${id}`),
     ).to.equal(0);
+  });
+});
+
+describe("a sample of rows", function () {
+  this.timeout(60_000);
+
+  it("answers every value as text, cut at 200 characters", async () => {
+    const sample = await SampleRows({
+      relation: "sales.attachments",
+      columns: ["id", "note"],
+      limit: 20,
+    });
+    expect(sample.columns).to.deep.equal(["id", "note"]);
+    expect(sample.sample).to.equal(null);
+    const byId = new Map(
+      sample.rows.map((row) => [JSON.stringify(row[0]), row[1]]),
+    );
+    expect(
+      byId.get(JSON.stringify({ text: "1", truncated: false })),
+    ).to.deep.equal({
+      text: "n".repeat(200),
+      truncated: true,
+    });
+    expect(
+      byId.get(JSON.stringify({ text: "2", truncated: false })),
+    ).to.deep.equal({
+      text: "short",
+      truncated: false,
+    });
+    expect(byId.get(JSON.stringify({ text: "3", truncated: false }))).to.equal(
+      null,
+    );
+  });
+
+  it("answers a binary value by its length only", async () => {
+    const sample = await SampleRows({
+      relation: "sales.attachments",
+      columns: ["body"],
+      limit: 20,
+    });
+    expect(sample.rows.map((row) => row[0])).to.have.deep.members([
+      { bytes: 4 },
+      null,
+      { bytes: 1 },
+    ]);
+  });
+
+  it("answers at most the rows asked for, and refuses more than 20", async () => {
+    const sample = await SampleRows({ relation: "sales.accounts", limit: 3 });
+    expect(sample.rows).to.have.length(3);
+    let refused: Error | undefined;
+    try {
+      await SampleRows({ relation: "sales.accounts", limit: 21 });
+    } catch (error) {
+      refused = error as Error;
+    }
+    expect(refused?.message).to.match(/from 1 to 20 rows/);
+  });
+
+  it("samples a relation above the threshold, and says so", async () => {
+    const sample = await SampleRows({
+      relation: "sales.big_events",
+      limit: 5,
+    });
+    expect(sample.sample).to.not.equal(null);
+    expect(sample.rows).to.have.length(5);
+  });
+
+  it("reads inside a read-only transaction", async () => {
+    const sample = await SampleRows({
+      relation: "sales.v_transaction",
+      limit: 1,
+    });
+    expect(sample.rows).to.deep.equal([[{ text: "on", truncated: false }]]);
+  });
+
+  it("refuses a relation the role can read only in part", async () => {
+    let refused: Error | undefined;
+    try {
+      await SampleRows({ relation: "sales.people", limit: 5 });
+    } catch (error) {
+      refused = error as Error;
+    }
+    expect(refused?.message).to.match(/cannot be read/);
   });
 });
 
