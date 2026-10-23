@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.2
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.1...v0.2.2)
+
+### 🚀 Enhancements
+
+- **database:** Unique indexes and DuplicateKeyError ([#24](https://github.com/AntelopeJS/postgres/pull/24))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli <rizzitelli.antony@pm.me>
+
 ## v0.2.1
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.0...v0.2.1)
