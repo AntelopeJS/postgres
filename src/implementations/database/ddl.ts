@@ -56,11 +56,18 @@ export interface ColumnPlan {
   readonly declared?: DeclaredField;
 }
 
+/**
+ * One physical index. `isUnique` is set on the instance-prefixed index of a `unique` declaration
+ * only: its key leads with `_instance`, so the constraint holds within each instance, which is the
+ * contract. The unprefixed `crossInstance` twin is never unique, since rows of different instances
+ * may share a key.
+ */
 export interface IndexPlan {
   readonly id: string;
   readonly name: string;
   readonly method: IndexMethod;
   readonly keys: readonly string[];
+  readonly isUnique: boolean;
   readonly signature: string;
 }
 
@@ -121,6 +128,11 @@ const GIN: IndexMethod = "gin";
 const SIGNATURE_VENDOR = "antelopejs";
 const SIGNATURE_VERSION = "1";
 const SIGNATURE_PREFIX = `${SIGNATURE_VENDOR}:${SIGNATURE_VERSION}`;
+/**
+ * Marks a unique index's signature, so adding or removing the flag reads as drift and the index is
+ * rebuilt. A non-unique signature carries no marker and stays what earlier versions wrote.
+ */
+const UNIQUE_SIGNATURE_MARKER = "unique:";
 
 /**
  * The columns a row's identity is the primary key of, in the order the constraint declares them.
@@ -219,19 +231,22 @@ function PhysicalIndex(
   name: string,
   method: IndexMethod,
   keys: readonly string[],
+  isUnique = false,
 ): IndexPlan {
+  const marker = isUnique ? UNIQUE_SIGNATURE_MARKER : "";
   return {
     id,
     name,
     method,
     keys,
-    signature: `${SIGNATURE_PREFIX}:${method}:${keys.join(",")}`,
+    isUnique,
+    signature: `${SIGNATURE_PREFIX}:${method}:${marker}${keys.join(",")}`,
   };
 }
 
 /**
  * A btree index leads with `_instance`; a `crossInstance` one also gets an unprefixed twin.
- * GIN is keyed on the column alone, so it already serves both kinds of read.
+ * GIN is keyed on the column alone, so it already serves both kinds of read — and cannot be unique.
  */
 function BuildIndexPlans(
   tableId: string,
@@ -245,11 +260,18 @@ function BuildIndexPlans(
     IndexKey(indexId, field, specs[position]),
   );
   const name = IndexName(tableId, indexId);
+  const isUnique = index.unique === true;
   if (IsElementWise(index, specs)) {
+    if (isUnique) {
+      throw new Error(
+        `Index '${indexId}' on table '${tableId}' is unique and multi over an array field, whose elements PostgreSQL cannot hold unique; drop one of the two flags`,
+      );
+    }
     return [PhysicalIndex(indexId, name, GIN, keys)];
   }
   const instanceKey = QuoteIdentifier(INSTANCE_COLUMN);
-  const scoped = PhysicalIndex(indexId, name, BTREE, [instanceKey, ...keys]);
+  const scopedKeys = [instanceKey, ...keys];
+  const scoped = PhysicalIndex(indexId, name, BTREE, scopedKeys, isUnique);
   if (index.crossInstance !== true) {
     return [scoped];
   }
@@ -374,8 +396,9 @@ export function CreateIndexSql(
 ): string[] {
   const target = QualifiedName(schemaName, plan.table);
   const reference = QualifiedName(schemaName, name);
+  const kind = index.isUnique ? "UNIQUE INDEX" : "INDEX";
   return [
-    `CREATE INDEX CONCURRENTLY ${QuoteIdentifier(name)} ON ${target} USING ${index.method} (${index.keys.join(", ")})`,
+    `CREATE ${kind} CONCURRENTLY ${QuoteIdentifier(name)} ON ${target} USING ${index.method} (${index.keys.join(", ")})`,
     `COMMENT ON INDEX ${reference} IS ${QuoteLiteral(index.signature)}`,
   ];
 }

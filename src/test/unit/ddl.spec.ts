@@ -237,6 +237,44 @@ describe("BuildTablePlan", () => {
       index.signature,
     );
   });
+
+  it("builds a unique index keyed by instance, with a marked signature", () => {
+    const plan = PlanFor("t", {
+      fields: { email: "string" },
+      indexes: { email: { unique: true } },
+    });
+    const [index] = plan.indexes;
+    expect(index.isUnique).to.equal(true);
+    expect(index.signature).to.equal(
+      `antelopejs:1:btree:unique:"_instance","email"`,
+    );
+    expect(CreateIndexSql("shop", plan, index)[0]).to.equal(
+      `CREATE UNIQUE INDEX CONCURRENTLY "t_email" ON "shop"."t" USING btree ("_instance", "email")`,
+    );
+  });
+
+  it("keeps the __g twin of a unique index non-unique", () => {
+    const plan = PlanFor("t", {
+      fields: { email: "string" },
+      indexes: { email: { unique: true, crossInstance: true } },
+    });
+    const [scoped, unscoped] = plan.indexes;
+    expect(scoped.isUnique).to.equal(true);
+    expect(unscoped.name).to.equal("t_email__g");
+    expect(unscoped.isUnique).to.equal(false);
+    expect(CreateIndexSql("shop", plan, unscoped)[0]).to.match(
+      /^CREATE INDEX CONCURRENTLY/,
+    );
+  });
+
+  it("refuses a unique index over an array field's elements", () => {
+    expect(() =>
+      BuildOne({
+        fields: { tags: "string[]" },
+        indexes: { tags: { multi: true, unique: true } },
+      }),
+    ).to.throw(/unique and multi over an array field/);
+  });
 });
 
 describe("ServesCrossInstance", () => {
@@ -688,6 +726,33 @@ describe("PlanTable", () => {
     expect(out.indexStatements).to.deep.equal([
       `DROP INDEX CONCURRENTLY IF EXISTS "shop"."vehicles_price__g"`,
     ]);
+  });
+
+  it("rebuilds an index whose unique flag was added, then removed", () => {
+    const unique = PlanFor("vehicles", {
+      fields: vehicles.fields,
+      indexes: { ...vehicles.indexes, price: { unique: true } },
+    });
+    const added = PlanTable(
+      SCHEMA,
+      unique,
+      Existing(FULL_COLUMNS, SignedIndexes(VEHICLES_PLAN)),
+      SAFE,
+    );
+    expect(added.indexStatements[0]).to.equal(
+      `CREATE UNIQUE INDEX CONCURRENTLY "vehicles_price__next" ON ${VEHICLES_TARGET} USING btree ("_instance", "price")`,
+    );
+    expect(added.indexStatements).to.contain(RENAME_PRICE_REPLACEMENT);
+    const removed = PlanTable(
+      SCHEMA,
+      VEHICLES_PLAN,
+      Existing(FULL_COLUMNS, SignedIndexes(unique)),
+      SAFE,
+    );
+    expect(
+      StartsAt(removed.indexStatements, CREATE_PRICE_REPLACEMENT),
+    ).to.equal(0);
+    expect(removed.indexStatements).to.contain(RENAME_PRICE_REPLACEMENT);
   });
 
   it("leaves a hand-made index alone", () => {

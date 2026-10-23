@@ -15,7 +15,12 @@ import { CompileSubquery } from "./subquery";
 import { CompileExpression } from "./expression";
 import { DecodeRow, ReviveValue } from "./result";
 import { ApplyStages, CompileRelation } from "./pipeline";
-import { GetTableNames, WaitForSchemaReady } from "./schema";
+import { DuplicateKeyFailure } from "./duplicate-key";
+import {
+  GetTableNames,
+  WaitForSchemaReady,
+  WaitForUniqueIndexes,
+} from "./schema";
 import {
   type WriteStatement,
   type WriteTarget,
@@ -162,6 +167,7 @@ async function RunRead(
 /**
  * Executes a terminal write and answers what its stage promised.
  * `insert` answers its keys in input order; everything else answers the rows it matched.
+ * A managed write waits for the unique indexes it is checked against, see `WaitForUniqueIndexes`.
  */
 async function RunWrite(
   target: WriteTarget,
@@ -172,15 +178,29 @@ async function RunWrite(
   if (!statement.sql) {
     return statement.ids ?? NO_ROWS;
   }
+  const external = target.origin.shape.external;
+  if (external) {
+    return RunExternalWrite(statement, external, context);
+  }
+  await WaitForUniqueIndexes(target.origin.schemaId);
+  try {
+    return await RunManagedWrite(statement, stage, context);
+  } catch (err) {
+    throw await DuplicateKeyFailure(err, target.origin);
+  }
+}
+
+/** A write to a table the adapter manages, before its failure is reported. */
+async function RunManagedWrite(
+  statement: WriteStatement,
+  stage: QueryStage,
+  context: DecodingContext,
+): Promise<unknown> {
   if (stage.stage === ATOMIC_MUTATION) {
     return ExecuteAtomicWrite(statement.sql, context.params.all());
   }
-  const external = target.origin.shape.external;
-  if (!external) {
-    const result = await Query(statement.sql, context.params.all());
-    return statement.ids ?? result.rowCount ?? NO_ROWS;
-  }
-  return RunExternalWrite(statement, external, context);
+  const result = await Query(statement.sql, context.params.all());
+  return statement.ids ?? result.rowCount ?? NO_ROWS;
 }
 
 /** Refuses the write, naming every field, when any value failed its check; runs nothing otherwise. */
