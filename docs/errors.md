@@ -79,6 +79,20 @@ overwrite an array with a single miss.
 | A write read through a cursor                                 | `The '{stage}' stage writes, so it cannot be read through a cursor`                                                                                          |
 | An inserted document whose `_id` is not a string              | `An inserted document's '_id' must be a string, received {type}`                                                                                             |
 
+### Duplicate keys
+
+A write that would give a second row of an instance the key of a unique index throws the
+interface's `DuplicateKeyError`; recognise it with `IsDuplicateKeyError(error)`.
+
+| What you did                                                        | `index`          | `fields`                      |
+| ------------------------------------------------------------------- | ---------------- | ----------------------------- |
+| `insert` of an `_id` the instance already holds, without `conflict` | `"_id"`          | `["_id"]`                     |
+| `insert`, `update` or `replace` clashing on an index `unique: true` | the index's name | its `fields`, or `[the name]` |
+
+Under `conflict: "update"` or `"replace"` an existing `_id` is upserted rather than refused; a clash
+on a unique secondary index is still refused. A batch `insert` is one statement, so a duplicate
+anywhere in it stores none of its rows.
+
 `replace({})` is _not_ refused: it names every column it did not name, so it is a well-formed
 statement that empties the row. `update({})` writes nothing at all.
 

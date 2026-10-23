@@ -87,6 +87,13 @@ A declared index becomes a real index, and the operations that can use one do:
   `CROSS_INSTANCE` read of that index. Without the flag such a read stays correct but cannot use the
   index well, and the first `getAll`, `between` or `orderBy` naming the index under
   `CROSS_INSTANCE` logs one warning per index per process. A plain `filter` never warns.
+- **`unique: true` makes the `_instance`-prefixed index a `UNIQUE` one**, so the key is unique
+  within each instance and two instances may share it. The `__g` twin of a `crossInstance` index is
+  never unique. Rows missing a field of the key hold NULL there and never conflict. A unique `multi`
+  index over an array field is refused at registration, since GIN cannot be unique. A schema that
+  declares a unique index makes its writes wait for its index phase, so no write can store a
+  duplicate before the index exists; reads never wait. A write the index refuses throws
+  `DuplicateKeyError`, see [Errors](./errors.md#duplicate-keys).
 - **`multi` maps to GIN** over a single jsonb-backed field, making `@>`, `?`, `?|` and `?&`
   index-reachable. A GIN index is keyed on the column alone, with no leading `_instance`, so it
   already serves both kinds of read and `crossInstance` changes nothing for it. `multi` on a scalar
@@ -113,8 +120,13 @@ Registration reconciles the declared schema against what is actually in the data
 | Index missing                          | `CREATE INDEX CONCURRENTLY`          | same                  |
 | Index left `INVALID` by a failed build | `DROP` + `CREATE`, both concurrently | same                  |
 | Index definition changed               | build replacement, then swap         | same                  |
+| `unique` added or removed              | build replacement, then swap         | same                  |
 | Adapter-owned index no longer declared | `DROP INDEX CONCURRENTLY`            | same                  |
 | Index this adapter did not create      | left alone                           | left alone            |
+
+Adding `unique` to an index over rows that already share a key fails the replacement's build: the
+failure is logged, the previous index keeps serving, the index phase stops there, and the next
+registration tries again. Remove the duplicates, then restart.
 
 A type mismatch is fatal under `safe` because it is otherwise a _query-time_ failure, silent until
 the first read. Dropping an index loses no data, which is why the index rows need no opt-in.

@@ -22,6 +22,7 @@ const shapes: Record<string, SchemaShape> = {};
 const scanNotices: Record<string, TableScanNotices> = {};
 const ready: Record<string, Promise<void>> = {};
 const indexing: Record<string, Promise<void>> = {};
+const guardedWrites = new Set<string>();
 
 function UnservedScanWarning(
   schemaId: string,
@@ -108,6 +109,16 @@ async function initialize(schemaId: string, schema: SchemaDefinition) {
   scanNotices[schemaId] = SchemaScanNotices(schemaId, schema, shape);
   const plans = await ConvergeTables(schemaId, schema, shape);
   indexing[schemaId] = BuildIndexes(schemaId, plans);
+  guardedWrites.delete(schemaId);
+  if (DeclaresUniqueIndex(schema)) {
+    guardedWrites.add(schemaId);
+  }
+}
+
+function DeclaresUniqueIndex(schema: SchemaDefinition): boolean {
+  return Object.values(schema).some((table) =>
+    Object.values(table.indexes ?? {}).some((index) => index.unique === true),
+  );
 }
 
 /**
@@ -139,6 +150,7 @@ export const Schemas = {
         delete definitions[schemaId];
         delete shapes[schemaId];
         delete scanNotices[schemaId];
+        guardedWrites.delete(schemaId);
       }
       throw err;
     });
@@ -152,6 +164,7 @@ export const Schemas = {
     delete scanNotices[schemaId];
     delete ready[schemaId];
     delete indexing[schemaId];
+    guardedWrites.delete(schemaId);
   },
 };
 
@@ -234,5 +247,20 @@ export async function WaitForIndexes(schemaId: string): Promise<void> {
   await WaitForSchemaReady(schemaId);
   if (Object.hasOwn(indexing, schemaId)) {
     await indexing[schemaId];
+  }
+}
+
+/**
+ * Settles once a write to the schema can rely on its unique indexes, which is when its background
+ * index phase has settled — immediately for a schema that declares none.
+ *
+ * Reads never wait for the index phase, since an index only changes how fast they run. A unique
+ * index changes what a write is allowed to store, so a write that ran before it is built could
+ * store the duplicate it exists to refuse; writes to such a schema wait instead, and only for the
+ * one phase each registration starts.
+ */
+export async function WaitForUniqueIndexes(schemaId: string): Promise<void> {
+  if (guardedWrites.has(schemaId)) {
+    await WaitForIndexes(schemaId);
   }
 }
