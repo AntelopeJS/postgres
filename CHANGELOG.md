@@ -4,6 +4,14 @@
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.1...v0.2.2)
 
+### Upgrade notes
+
+- Implements `@antelopejs/interface-database` `>=0.1.11 <0.2.0` (unique indexes and `DuplicateKeyError`) ([#24](https://github.com/AntelopeJS/postgres/pull/24)).
+- `unique: true` creates the instance-led btree index `UNIQUE` (unique per instance); the `crossInstance` `__g` companion never is. `unique` together with `multi` (GIN) is refused at registration.
+- Flipping `unique` rebuilds the index through the `__next` swap. Non-unique index signatures are unchanged, so existing indexes are not rebuilt.
+- **Behavior change:** SQLSTATE 23505 on managed-table writes now throws `DuplicateKeyError` with the declared index name and fields, or `("_id", ["_id"])` for the primary key. Other violations are rethrown unchanged; external mode keeps `ExternalWriteError`.
+- Writes to a schema declaring a unique index wait for that index to be built. Adding `unique` over rows that already share a key fails the rebuild (logged) and the old index keeps serving.
+
 ### 🚀 Enhancements
 
 - **database:** Unique indexes and DuplicateKeyError ([#24](https://github.com/AntelopeJS/postgres/pull/24))
