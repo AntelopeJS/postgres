@@ -9,14 +9,6 @@ The PostgreSQL implementation of `@antelopejs/interface-database` and `@antelope
 - `src/test/*.test.ts` are the integration suites `ajs module test` runs against a real PostgreSQL; `src/test/unit/*.spec.ts` are database-free unit suites. `src/test-external/` holds the external-mode suites and the client fixture they read.
 - `docs/` holds the user documentation linked from `README.md`.
 
-## Documentation placement
-
-A stated fact (a measurement, a constraint, a reason a shape was chosen) gets one owner, and every other site references it.
-
-- A private function gets at most two lines of TSDoc.
-- Anything longer goes on the module's exported map or type, where a reader looking for the family's reasoning arrives.
-- An exported function documents its own contract.
-
 ## Versioning
 
 - `@antelopejs/interface-database` stays capped below the next minor (`>=0.1.11 <0.2.0`), because a new minor can add required handlers.
@@ -25,9 +17,8 @@ A stated fact (a measurement, a constraint, a reason a shape was chosen) gets on
 
 ## Tests
 
-- Node 22 or later is needed to develop or test: the `testcontainers` devDependency calls `worker_threads.markAsUncloneable`, which Node 20 lacks. CI runs only the `.nvmrc` version.
-- `pnpm test` (and so `pnpm run checks`) builds `dist` once, then runs `ajs module test .` with the test project in `src/test/antelope.test.ts` (every suite in `dist/test`, unit specs included), then the external-mode suites in `dist/test-external` with `PG_TEST_MODE=external`. Both need Docker: they start a `postgres:18-alpine` container through Testcontainers.
-- `PG_TEST_URL` replaces the container with an existing server. It must target a disposable instance: the external suite drops and recreates a fixture database and may create a role.
+- README "Contributing" owns the Node floor and the `PG_TEST_URL` safety rule; read it before running database tests. CI runs only the `.nvmrc` version.
+- `pnpm test` (and so `pnpm run checks`) builds `dist` once, then runs `ajs module test .` with the test project in `src/test/antelope.test.ts`: every suite in `dist/test` (unit specs included) plus the shared conformance suites of the implemented interfaces. It then runs the external-mode suites in `dist/test-external` with `PG_TEST_MODE=external`. Both runs need Docker: they start a `postgres:18-alpine` container through Testcontainers unless `PG_TEST_URL` is set.
 - `pnpm test:unit` runs only the database-free unit specs with Mocha; `pnpm test:external` runs only the external-mode suites. Neither is needed after `checks`, which already runs both.
 
 <!-- antelopejs-guardrails:start -->
