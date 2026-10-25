@@ -11,6 +11,8 @@ permissions:
 jobs:
   ci:
     uses: AntelopeJS/.github/.github/workflows/ci-node.yml@v1
+    with:
+      node-versions: "[22, 24]"
 
   checks:
     if: always()
