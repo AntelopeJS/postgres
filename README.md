@@ -117,7 +117,7 @@ This repository documents what is specific to the PostgreSQL backend:
 | `@antelopejs/interface-database` | `^0.1.8`         |
 | `@antelopejs/interface-core`     | `>=0.1.1 <1.0.0` |
 
-The module is developed and tested against `@antelopejs/core` `^1.14.0` on Node.js 22 and 24, with the `pg` driver `^8.22.0` and PostgreSQL 18.
+The module is developed and tested against `@antelopejs/core` `^1.14.0` on Node.js 24 (the `.nvmrc` version CI runs), with the `pg` driver `^8.22.0` and PostgreSQL 18.
 
 ## Contributing
 
