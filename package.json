@@ -30,7 +30,7 @@
     "build": "rimraf dist && tsc",
     "format": "oxfmt .",
     "lint:fix": "oxlint --fix",
-    "lint": "oxlint",
+    "lint": "oxlint && antelopejs-check-interface-ranges",
     "prepack": "pnpm run build",
     "release": "pnpm run lint && pnpm run test && pnpm run prepack && release-it",
     "test": "pnpm run build && ajs module test . && pnpm run test:external:run",
@@ -51,7 +51,7 @@
   "dependencies": {
     "@antelopejs/interface-core": ">=0.1.1 <1.0.0",
     "@antelopejs/interface-database": ">=0.1.11 <0.2.0",
-    "@antelopejs/interface-database-catalog": ">=0.0.3 <1.0.0",
+    "@antelopejs/interface-database-catalog": ">=0.0.3 <0.1.0",
     "pg": "^8.22.0"
   },
   "devDependencies": {
