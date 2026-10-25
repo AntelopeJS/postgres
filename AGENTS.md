@@ -11,7 +11,7 @@ The PostgreSQL implementation of `@antelopejs/interface-database` and `@antelope
 
 ## Versioning
 
-- `@antelopejs/interface-database` stays capped below the next minor (`>=0.1.11 <0.2.0`), because a new minor can add required handlers.
+- Both implemented interfaces stay capped below the next minor (`interface-database` `>=0.1.11 <0.2.0`, `interface-database-catalog` `>=0.0.3 <0.1.0`), because a new minor can add required handlers. `pnpm lint` enforces it with `antelopejs-check-interface-ranges`.
 - When a dependency range changes, update the compatibility table in `README.md` too.
 - A release that needs action from users gets an `### Upgrade notes` section in `CHANGELOG.md`, above the generated entries.
 

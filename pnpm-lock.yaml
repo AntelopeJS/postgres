@@ -15,7 +15,7 @@ importers:
         specifier: '>=0.1.11 <0.2.0'
         version: 0.1.11(@antelopejs/interface-core@0.2.0)
       '@antelopejs/interface-database-catalog':
-        specifier: '>=0.0.3 <1.0.0'
+        specifier: '>=0.0.3 <0.1.0'
         version: 0.0.3(@antelopejs/interface-core@0.2.0)
       pg:
         specifier: ^8.22.0
