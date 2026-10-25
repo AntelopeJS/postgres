@@ -9,43 +9,12 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # 22 is the floor: testcontainers' bundled undici calls
-        # worker_threads.markAsUncloneable, which Node 20 does not have at any
-        # patch level. 24 is the current LTS line developers actually run.
-        node-version: ["22", "24"]
-    env:
-      COREPACK_DEFAULT_TO_LATEST: 0
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: pnpm
-      - name: Validate pull request title
-        if: github.event_name == 'pull_request'
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          echo "$PR_TITLE" | grep -Eq '^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?!?: .+'
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm prepack
-      - run: pnpm lint
-      - run: pnpm format:check
-      - run: pnpm knip
-      - run: pnpm test
+  ci:
+    uses: AntelopeJS/.github/.github/workflows/ci-node.yml@v1
 
-  # The check the branch rulesets require. The matrix above reports as
-  # `test (22)` and `test (24)`, so this job is green only when every
-  # leg succeeded.
   checks:
     if: always()
-    needs: [test]
+    needs: [ci]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
