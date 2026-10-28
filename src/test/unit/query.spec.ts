@@ -252,7 +252,10 @@ async function Refusal(work: Promise<unknown>): Promise<Error> {
   try {
     await work;
   } catch (err) {
-    return err as Error;
+    if (!(err instanceof Error)) {
+      throw err;
+    }
+    return err;
   }
   throw new Error(NEVER_REFUSED);
 }

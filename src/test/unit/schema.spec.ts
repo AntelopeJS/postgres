@@ -19,7 +19,10 @@ async function Rejection(promise: Promise<unknown>): Promise<Error> {
   try {
     await promise;
   } catch (err) {
-    return err as Error;
+    if (!(err instanceof Error)) {
+      throw err;
+    }
+    return err;
   }
   throw new Error("expected the promise to reject");
 }

@@ -224,17 +224,21 @@ const SHAPES: Record<string, TableShape> = {
   [PROFILES_TABLE_ID]: PROFILES,
 };
 
-const INDEXES: Record<string, string[]> = {
+const INDEXES = {
   byNameAge: ["name", "age"],
   byNameSkills: ["name", "skills"],
-};
+} satisfies Record<string, string[]>;
+
+function IsIndexKey(name: string): name is keyof typeof INDEXES {
+  return Object.hasOwn(INDEXES, name);
+}
 
 /** The stubbed {@link OriginResolver} a pipeline spec compiles against, registry and all. */
 const StubOrigin: OriginResolver = (schemaId, tableId) => ({
   schemaId,
   tableId,
   shape: Object.hasOwn(SHAPES, tableId) ? SHAPES[tableId] : PEOPLE,
-  index: (name) => (Object.hasOwn(INDEXES, name) ? INDEXES[name] : [name]),
+  index: (name) => (IsIndexKey(name) ? INDEXES[name] : [name]),
 });
 
 export function NewTable(): Relation {
@@ -311,7 +315,7 @@ function NewSubqueryContext(): StubContext {
   return CountingContext(CompileSubquery);
 }
 
-function Table<Name extends keyof Directory & string>(
+function Table<Name extends keyof Directory>(
   tableId: Name,
   instanceId: InstanceId | undefined,
 ) {

@@ -30,13 +30,7 @@ function Rows(rows: unknown[]): QueryResult {
 }
 
 /** A client that records what it was asked and answers from a per-statement table. */
-function Recording(
-  answer: Answer,
-  fail?: (sql: string) => boolean,
-): {
-  client: ClientBase;
-  statements: Statement[];
-} {
+function Recording(answer: Answer, fail?: (sql: string) => boolean) {
   const statements: Statement[] = [];
   const client = {
     query: (sql: string, params: unknown[] = NOTHING) => {

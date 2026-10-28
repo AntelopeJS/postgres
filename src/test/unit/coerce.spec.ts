@@ -13,7 +13,6 @@ import {
   BOOL,
   FLOAT,
   JsonOf,
-  type JsonType,
   OPAQUE,
   TEXT,
   TIMESTAMP,
@@ -125,7 +124,7 @@ describe("Widen", () => {
   it("does not treat a key inherited from Object.prototype as a collision", () => {
     const widened = Widen(JsonOf({ a: TEXT }), JsonOf({ toString: FLOAT }));
     expect(widened.kind).to.equal("json");
-    expect((widened as JsonType).shape?.toString).to.equal(FLOAT);
+    expect(widened).to.have.nested.property("shape.toString", FLOAT);
   });
 });
 

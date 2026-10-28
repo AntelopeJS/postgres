@@ -65,9 +65,7 @@ function Field({ column, declared }: Declared) {
 }
 
 function Key(columns: NativeColumn[]): ColumnDescriptor[] {
-  return columns.map(
-    (column) => DescribeKey(Catalog(column)) as ColumnDescriptor,
-  );
+  return columns.flatMap((column) => DescribeKey(Catalog(column)) ?? []);
 }
 
 const ID: NativeColumn = { name: "id", typname: "int8", castType: "bigint" };
@@ -117,9 +115,13 @@ const SHAPES: Record<string, TableShape> = {
   },
 };
 
-type Tables = Record<string, Record<string, unknown>>;
+interface Tables {
+  accounts: { _id: string; score: number; revenue: number };
+  contacts: { account_id: string };
+  order_lines: { line_no: number };
+}
 
-function Table(tableId: string) {
+function Table<K extends keyof Tables>(tableId: K) {
   const schema = new SchemaInstance<Tables>(
     QueryStage("schema", { id: "sales" }),
   );

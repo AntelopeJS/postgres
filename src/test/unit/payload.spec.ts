@@ -61,7 +61,7 @@ interface SplitResult {
 }
 
 function Split(
-  document: Record<string, unknown>,
+  document: Parameters<typeof SplitPayload>[0],
   options: PayloadOptions = TARGETED,
 ): SplitResult {
   const context = NewContext();

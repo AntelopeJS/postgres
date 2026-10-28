@@ -68,7 +68,7 @@ const SHAPELESS: TableOrigin = {
 };
 
 /** Answers each statement in turn, recording what it was asked; the last answer repeats. */
-function Reader(answers: Answer[]): { read: FeedEnvironment; asked: Asked[] } {
+function Reader(answers: Answer[]) {
   const asked: Asked[] = [];
   const read: FeedReader = (sql, params) => {
     asked.push({ sql, params });
@@ -97,7 +97,7 @@ function Reader(answers: Answer[]): { read: FeedEnvironment; asked: Asked[] } {
 }
 
 /** One side of an event as the laterals answer it: what it projected, and whether it matched. */
-function Side(doc: unknown, matched = true) {
+function Side<Doc>(doc: Doc, matched = true) {
   return { doc, matched };
 }
 
@@ -278,10 +278,12 @@ describe("a change feed's events", () => {
     ]);
     await Feed(async (reqId) => {
       const step = await Step(reqId, read);
-      const value = step.value as Record<string, unknown>;
-      expect(value.changeType).to.equal("added");
-      expect(value).to.not.have.property("oldValue");
-      expect(value.newValue).to.deep.equal({ _id: "a", car: "Renault" });
+      expect(step.value).to.have.property("changeType", "added");
+      expect(step.value).to.not.have.property("oldValue");
+      expect(step.value).to.have.deep.property("newValue", {
+        _id: "a",
+        car: "Renault",
+      });
     });
   });
 
@@ -295,10 +297,9 @@ describe("a change feed's events", () => {
     ]);
     await Feed(async (reqId) => {
       const step = await Step(reqId, read);
-      const value = step.value as Record<string, unknown>;
-      expect(value.changeType).to.equal("removed");
-      expect(value).to.not.have.property("newValue");
-      expect(value.oldValue).to.deep.equal({ _id: "a" });
+      expect(step.value).to.have.property("changeType", "removed");
+      expect(step.value).to.not.have.property("newValue");
+      expect(step.value).to.have.deep.property("oldValue", { _id: "a" });
     });
   });
 
@@ -318,10 +319,15 @@ describe("a change feed's events", () => {
     ]);
     await Feed(async (reqId) => {
       const step = await Step(reqId, read);
-      const value = step.value as Record<string, unknown>;
-      expect(value.changeType).to.equal("modified");
-      expect(value.oldValue).to.deep.equal({ _id: "a", price: 1 });
-      expect(value.newValue).to.deep.equal({ _id: "a", price: 2 });
+      expect(step.value).to.have.property("changeType", "modified");
+      expect(step.value).to.have.deep.property("oldValue", {
+        _id: "a",
+        price: 1,
+      });
+      expect(step.value).to.have.deep.property("newValue", {
+        _id: "a",
+        price: 2,
+      });
     });
   });
 
@@ -341,9 +347,14 @@ describe("a change feed's events", () => {
     ]);
     await Feed(async (reqId) => {
       const step = await Step(reqId, read);
-      const value = step.value as Record<string, unknown>;
-      expect(value.oldValue).to.deep.equal({ _id: "a", price: 50 });
-      expect(value.newValue).to.deep.equal({ _id: "a", price: 200 });
+      expect(step.value).to.have.deep.property("oldValue", {
+        _id: "a",
+        price: 50,
+      });
+      expect(step.value).to.have.deep.property("newValue", {
+        _id: "a",
+        price: 200,
+      });
     });
   });
 
@@ -361,12 +372,8 @@ describe("a change feed's events", () => {
     await Feed(async (reqId) => {
       const one = await Step(reqId, read);
       const two = await Step(reqId, read);
-      expect(
-        (one.value as { newValue: { _id: string } }).newValue._id,
-      ).to.equal("first");
-      expect(
-        (two.value as { newValue: { _id: string } }).newValue._id,
-      ).to.equal("second");
+      expect(one.value).to.have.nested.property("newValue._id", "first");
+      expect(two.value).to.have.nested.property("newValue._id", "second");
     });
   });
 });

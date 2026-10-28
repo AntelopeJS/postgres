@@ -45,12 +45,15 @@ describe("ParseFieldType", () => {
 
   it("detects an io-ts codec structurally", () => {
     const codec = {
+      _A: undefined,
+      _O: undefined,
+      _I: undefined,
       name: "X",
       is: () => true,
-      encode: (v: never) => v,
-      decode: (v: unknown) => v,
-    };
-    const parsed = ParseFieldType(codec as unknown as FieldType, "t.status");
+      encode: (v) => v,
+      decode: (v) => v,
+    } satisfies Extract<FieldType, { is: unknown }>;
+    const parsed = ParseFieldType(codec, "t.status");
     expect(parsed.type).to.equal(OPAQUE);
     expect(parsed.codec).to.equal(codec);
   });

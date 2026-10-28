@@ -23,9 +23,7 @@ describe("ReviveValue", () => {
   it("revives an ISO string at a timestamp leaf", () => {
     const out = ReviveValue("2003-01-01T00:00:00+00:00", TIMESTAMP);
     expect(out).to.be.a("date");
-    expect((out as Date).getTime()).to.equal(
-      new Date("2003-01-01T00:00:00Z").getTime(),
-    );
+    expect(out).to.deep.equal(new Date("2003-01-01T00:00:00Z"));
   });
 
   it("passes a Date through untouched", () => {
@@ -43,43 +41,38 @@ describe("ReviveValue", () => {
         extra: 1,
       },
       type,
-    ) as Record<string, unknown>;
-    expect(out.at).to.be.a("date");
-    expect(out.tags).to.deep.equal(["a"]);
-    expect(out.blob).to.deep.equal({ nested: "x" });
-    expect(out.extra).to.equal(1);
+    );
+    expect(out).to.have.property("at").that.is.a("date");
+    expect(out).to.have.deep.property("tags", ["a"]);
+    expect(out).to.have.deep.property("blob", { nested: "x" });
+    expect(out).to.have.property("extra", 1);
   });
 
   it("revives ISO strings inside a jsonb array of timestamps", () => {
     const out = ReviveValue(
       ["2020-01-01T00:00:00Z", "2021-06-02T12:30:00Z"],
       ArrayOf(TIMESTAMP),
-    ) as Date[];
+    );
     expect(out).to.be.an("array").of.length(2);
-    expect(out[0]).to.be.a("date");
-    expect(out[0].getTime()).to.equal(
-      new Date("2020-01-01T00:00:00Z").getTime(),
-    );
-    expect(out[1].getTime()).to.equal(
-      new Date("2021-06-02T12:30:00Z").getTime(),
-    );
+    expect(out).to.have.nested.property("[0]").that.is.a("date");
+    expect(out).to.deep.equal([
+      new Date("2020-01-01T00:00:00Z"),
+      new Date("2021-06-02T12:30:00Z"),
+    ]);
   });
 
   it("does not mutate the value it revives", () => {
     const value = { at: "2020-01-01T00:00:00Z" };
-    const out = ReviveValue(value, JsonOf({ at: TIMESTAMP })) as Record<
-      string,
-      unknown
-    >;
+    const out = ReviveValue(value, JsonOf({ at: TIMESTAMP }));
     expect(value.at).to.equal("2020-01-01T00:00:00Z");
     expect(out).to.not.equal(value);
-    expect(out.at).to.be.a("date");
+    expect(out).to.have.property("at").that.is.a("date");
   });
 
   it("revives epoch milliseconds at a timestamp leaf", () => {
     const out = ReviveValue(1712345678000, TIMESTAMP);
     expect(out).to.be.a("date");
-    expect((out as Date).getTime()).to.equal(1712345678000);
+    expect(out).to.deep.equal(new Date(1712345678000));
   });
 
   it("leaves an unparseable timestamp untouched", () => {
@@ -160,8 +153,6 @@ describe("DecodeRow", () => {
     expect(out._id).to.equal("b");
     expect(out.car).to.equal("Renault");
     expect(out.manufactured).to.be.a("date");
-    expect((out.manufactured as Date).getTime()).to.equal(
-      new Date("1998-04-05T00:00:00Z").getTime(),
-    );
+    expect(out.manufactured).to.deep.equal(new Date("1998-04-05T00:00:00Z"));
   });
 });

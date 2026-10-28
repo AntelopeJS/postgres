@@ -1,22 +1,21 @@
 {
   "rules": {
-    "anti-slop/no-chained-type-assertions": 34,
-    "anti-slop/no-known-value-widening": 21,
+    "anti-slop/no-chained-type-assertions": 33,
+    "anti-slop/no-known-value-widening": 16,
     "anti-slop/no-runtime-typeof": 42,
     "anti-slop/no-shape-in-symbol-names": 390,
-    "anti-slop/no-unknown-parameters": 58,
+    "anti-slop/no-unknown-parameters": 56,
     "anti-slop/no-unknown-returns": 10,
-    "anti-slop/no-unsafe-dictionary-type": 36,
-    "anti-slop/require-safety-comment-for-type-assertion": 153,
+    "anti-slop/no-unsafe-dictionary-type": 28,
+    "anti-slop/require-safety-comment-for-type-assertion": 135,
     "eslint/max-lines-per-function": 5,
-    "typescript/no-redundant-type-constituents": 1,
-    "typescript/unbound-method": 2
+    "typescript/unbound-method": 1
   },
   "oversizeFiles": {
     "src/implementations/database/ddl.ts": 22826,
     "src/implementations/database/relation.ts": 20741,
     "src/test/unit/cursors.spec.ts": 39237,
-    "src/test/unit/ddl.spec.ts": 28508,
+    "src/test/unit/ddl.spec.ts": 28499,
     "src/test/unit/expression-array.spec.ts": 25323,
     "src/test/unit/expression.spec.ts": 24271,
     "src/test/unit/pipeline-group.spec.ts": 20242,
