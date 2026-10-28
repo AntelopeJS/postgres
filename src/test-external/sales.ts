@@ -3,6 +3,8 @@ import {
   type SchemaDefinition,
 } from "@antelopejs/interface-database/schema";
 
+import type { QueryResultRow } from "pg";
+
 import { Query } from "../connection";
 import { WaitForSchemaReady } from "../implementations/database/schema";
 
@@ -117,8 +119,14 @@ const SALES_DEFINITION: SchemaDefinition = {
   },
 };
 
+type SalesScalar = string | number | boolean | Date | null;
+
+type SalesValue = SalesScalar | SalesScalar[] | Record<string, SalesScalar>;
+
+export type SalesRow = { _id?: string } & Record<string, SalesValue>;
+
 /** Registers the declaration and waits for it, as a generated module's startup does. */
-export type SalesTables = Record<string, Record<string, unknown>>;
+export type SalesTables = Record<string, SalesRow>;
 
 export async function RegisterSales(): Promise<Schema<SalesTables>> {
   const schema = new Schema<SalesTables>(SALES, SALES_DEFINITION);
@@ -127,11 +135,11 @@ export async function RegisterSales(): Promise<Schema<SalesTables>> {
 }
 
 /** The answer a native query over the same rows gives, which is what every read is held to. */
-export async function Native<T>(
+export async function Native<T extends QueryResultRow>(
   sql: string,
   params: unknown[] = [],
 ): Promise<T[]> {
-  return (await Query(sql, params)).rows as T[];
+  return (await Query<T>(sql, params)).rows;
 }
 
 export async function NativeCount(

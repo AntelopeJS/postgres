@@ -31,7 +31,8 @@ async function Refusal(definition: SchemaDefinition): Promise<string> {
   try {
     await Register(definition);
   } catch (err) {
-    return (err as Error).message;
+    if (!(err instanceof Error)) throw err;
+    return err.message;
   }
   throw new Error("registration was expected to fail");
 }

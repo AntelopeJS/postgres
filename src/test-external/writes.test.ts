@@ -13,9 +13,13 @@ import {
   CompileRelation,
 } from "../implementations/database/pipeline";
 import type { ExternalWriteError } from "../implementations/database/external-errors";
-import { Native, NativeCount, RegisterSales, type SalesTables } from "./sales";
-
-type Row = Record<string, unknown>;
+import {
+  Native,
+  NativeCount,
+  RegisterSales,
+  type SalesRow as Row,
+  type SalesTables,
+} from "./sales";
 
 let sales: Schema<SalesTables>;
 
@@ -23,8 +27,8 @@ function Table(tableId: string) {
   return sales.instance().table(tableId);
 }
 
-async function Failure(
-  work: () => PromiseLike<unknown>,
+async function Failure<T>(
+  work: () => PromiseLike<T>,
 ): Promise<ExternalWriteError> {
   try {
     await work();
@@ -70,9 +74,9 @@ describe("inserting into an external relation", () => {
 
   it("answers the database's generated keys in input order, each reading back its own row", async () => {
     const labels = Array.from({ length: 1000 }, (_, n) => `label-${999 - n}`);
-    const ids = (await Table("w_serial").insert(
+    const ids = await Table("w_serial").insert(
       labels.map((label) => ({ label })),
-    )) as string[];
+    );
     expect(ids).to.have.length(1000);
     const rows = await Native<{ id: string; label: string }>(
       "SELECT id::text AS id, label FROM sales.w_serial",
@@ -82,8 +86,8 @@ describe("inserting into an external relation", () => {
   });
 
   it("fills an omitted column with its DEFAULT and answers an identity key as _id", async () => {
-    const [id] = (await Table("w_accounts").insert({ code: "d1" })) as string[];
-    const row = (await Table("w_accounts").get(id)) as Row;
+    const [id] = await Table("w_accounts").insert({ code: "d1" });
+    const row = await Table("w_accounts").get(id);
     expect(row).to.include({
       _id: id,
       id,
@@ -95,17 +99,17 @@ describe("inserting into an external relation", () => {
   });
 
   it("answers a key the database generates by default, and a list then shows the row under it", async () => {
-    const [account] = (await Table("w_accounts").insert({
+    const [account] = await Table("w_accounts").insert({
       code: "d2",
-    })) as string[];
-    const [sku] = (await Table("w_items").insert({
+    });
+    const [sku] = await Table("w_items").insert({
       account_id: account,
       qty: 3,
-    })) as string[];
+    });
     expect(sku).to.match(/^[0-9a-f-]{36}$/);
-    const listed = (await Table("w_items").filter((row) =>
+    const listed = await Table("w_items").filter((row) =>
       row.key("account_id").eq(account),
-    )) as Row[];
+    );
     expect(listed.map((row) => row._id)).to.deep.equal([sku]);
   });
 
@@ -141,11 +145,9 @@ describe("inserting into an external relation", () => {
     ["a value for an array column", { code: "x7", tags: ["t"] }, "read-only"],
     ["an undeclared key", { code: "x8", nickname: "n" }, "nickname"],
     ["an _internal key", { code: "x9", _internal: {} }, "_internal"],
-  ] as [string, Row, string][]) {
+  ] satisfies [string, Row, string][]) {
     it(`refuses ${description}, writing nothing`, async () => {
-      const failure = await Failure(() =>
-        Table("w_accounts").insert(document as never),
-      );
+      const failure = await Failure(() => Table("w_accounts").insert(document));
       expect(failure.message).to.contain(named);
       expect(
         await NativeCount(
@@ -184,18 +186,18 @@ describe("values an external column cannot hold", () => {
     await Reset();
   });
 
-  for (const [table, document, field] of [
+  const INVALID_VALUES: [string, Row, string][] = [
     ["w_accounts", { code: "v1", status: "archived" }, "status"],
     ["w_accounts", { code: "toolong" }, "code"],
     ["w_accounts", { code: "v2", revenue: 1e12 }, "revenue"],
     ["w_items", { sku: "nope", qty: 1 }, "sku"],
     ["w_serial", { id: 5.5, label: "v3" }, "id"],
     ["w_lines", { order_id: 1, line_no: 1, qty: 1.5 }, "qty"],
-  ] as [string, Row, string][]) {
+  ];
+
+  for (const [table, document, field] of INVALID_VALUES) {
     it(`refuses ${JSON.stringify(document[field])} for ${table}.${field} before writing, naming the field`, async () => {
-      const failure = await Failure(() =>
-        Table(table).insert(document as never),
-      );
+      const failure = await Failure(() => Table(table).insert(document));
       expect(failure.kind).to.equal("invalid");
       expect(failure.message).to.contain(`sales.${table}.${field}`);
       expect(await NativeCount(`SELECT count(*) FROM sales.${table}`)).to.equal(
@@ -214,23 +216,19 @@ describe("writing back what was read from an external relation", () => {
   it("changes no byte of what a lossy read cannot spell, and counts no changed row", async () => {
     const id = await Seeded("r1");
     const before = await Stored(id);
-    const stored = (await Table("w_accounts").get(id)) as Row;
-    expect(
-      await Table("w_accounts")
-        .get(id)
-        .update(stored as never),
-    ).to.equal(0);
+    const stored = await Table("w_accounts").get(id);
+    expect(await Table("w_accounts").get(id).update(stored)).to.equal(0);
     expect(await Stored(id)).to.deep.equal(before);
   });
 
   it("writes the one field an edit changed and keeps every other stored value", async () => {
     const id = await Seeded("r2");
     const before = await Stored(id);
-    const stored = (await Table("w_accounts").get(id)) as Row;
+    const stored = await Table("w_accounts").get(id);
     expect(
       await Table("w_accounts")
         .get(id)
-        .update({ ...stored, code: "r2b" } as never),
+        .update({ ...stored, code: "r2b" }),
     ).to.equal(1);
     expect(await Stored(id)).to.deep.equal({
       ...before,
@@ -294,12 +292,12 @@ describe("editing through a key field read lossily, as data-api's edit sends it"
   ]) {
     it(`edits ${table}, whose key field is not read as the key's text, and answers 1`, async () => {
       await Native(seed);
-      const stored = (await Table(table).get(id)) as Row;
+      const stored = await Table(table).get(id);
       expect(stored._id).to.equal(id);
       expect(
         await Table(table)
           .get(id)
-          .update({ ...stored, [field]: "b" } as never),
+          .update({ ...stored, [field]: "b" }),
       ).to.equal(1);
       expect(
         await NativeCount(
@@ -370,13 +368,13 @@ describe("selecting the rows an external write changes", () => {
     const client = await AcquireClient();
     try {
       await client.query("SET enable_seqscan = off");
-      const plan = await client.query(
+      const plan = await client.query<{ "QUERY PLAN": string }>(
         `EXPLAIN ${statement.sql}`,
         context.params.all(),
       );
-      expect(
-        plan.rows.map((row: Row) => row["QUERY PLAN"]).join("\n"),
-      ).to.contain("w_accounts_pkey");
+      expect(plan.rows.map((row) => row["QUERY PLAN"]).join("\n")).to.contain(
+        "w_accounts_pkey",
+      );
     } finally {
       await client.query("RESET enable_seqscan");
       client.release();
@@ -423,9 +421,7 @@ describe("what the database refuses on a write to an external relation", () => {
   });
 
   it("reports a missing required field, naming it", async () => {
-    const failure = await Failure(() =>
-      Table("w_items").insert({ qty: null } as never),
-    );
+    const failure = await Failure(() => Table("w_items").insert({ qty: null }));
     expect(failure.kind).to.equal("missing");
     expect(failure.fields).to.deep.equal(["qty"]);
   });
@@ -438,9 +434,9 @@ describe("what the database refuses on a write to an external relation", () => {
   });
 
   it("reports deleting a row that is still referenced", async () => {
-    const [account] = (await Table("w_accounts").insert({
+    const [account] = await Table("w_accounts").insert({
       code: "e2",
-    })) as string[];
+    });
     await Table("w_items").insert({ account_id: account, qty: 1 });
     const failure = await Failure(() =>
       Table("w_accounts").get(account).delete(),
