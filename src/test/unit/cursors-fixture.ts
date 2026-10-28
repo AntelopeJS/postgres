@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import type { PoolClient } from "pg";
+import { Client, type PoolClient } from "pg";
 
 import type { Options } from "../../config";
 import { WithOptions } from "./spec-fixture";
@@ -126,7 +126,7 @@ export function StubClient(
   failing?: string,
 ): PoolClient {
   let isReleased = false;
-  const stub = {
+  return Object.assign(new Client(), {
     query: (sql: string, values?: unknown[]) => {
       log.statements.push(sql);
       log.bound.push(values ?? NO_VALUES);
@@ -161,8 +161,7 @@ export function StubClient(
       isReleased = true;
       log.whenReleased?.();
     },
-  };
-  return stub as unknown as PoolClient;
+  });
 }
 
 export function Decode(rows: ResultRow[]): unknown[] {
@@ -247,7 +246,10 @@ export async function Rejection(read: Promise<unknown>): Promise<Error> {
   try {
     await read;
   } catch (err) {
-    return err as Error;
+    if (err instanceof Error) {
+      return err;
+    }
+    throw err;
   }
   throw new Error(NEVER_REJECTED);
 }
@@ -310,20 +312,28 @@ export async function CapturingTimers(
 ): Promise<void> {
   const realSet = globalThis.setTimeout;
   const realClear = globalThis.clearTimeout;
-  globalThis.setTimeout = ((handler: never, ms: never, ...rest: never[]) => {
-    const timer = realSet(handler, ms, ...rest);
-    if (ms === (delayMs as never)) {
-      log.armed.push(timer);
-      log.handlers.push(handler);
-    }
-    return timer;
-  }) as typeof setTimeout;
-  globalThis.clearTimeout = ((timer: NodeJS.Timeout) => {
-    if (log.armed.includes(timer)) {
-      log.cleared.push(timer);
+  globalThis.setTimeout = Object.assign(
+    <TArgs extends unknown[]>(
+      handler: (...args: TArgs) => void,
+      ms?: number,
+      ...rest: TArgs
+    ): NodeJS.Timeout => {
+      const timer = realSet(handler, ms, ...rest);
+      if (ms === delayMs) {
+        log.armed.push(timer);
+        log.handlers.push(() => handler(...rest));
+      }
+      return timer;
+    },
+    { __promisify__: realSet.__promisify__ },
+  );
+  globalThis.clearTimeout = (timer?: NodeJS.Timeout | string | number) => {
+    const armed = log.armed.find((candidate) => candidate === timer);
+    if (armed) {
+      log.cleared.push(armed);
     }
     realClear(timer);
-  }) as typeof clearTimeout;
+  };
   try {
     await body();
   } finally {
