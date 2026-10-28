@@ -19,6 +19,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "./types";
+import { IsObject, IsString } from "./guards";
 
 type IoTsCodec = Exclude<FieldType, StringFieldType>;
 
@@ -163,7 +164,7 @@ function ParseKeyTypes(
 }
 
 export function ParseFieldType(field: FieldType, path: string): ParsedField {
-  if (typeof field === "string") {
+  if (IsString(field)) {
     return { type: ParseToken(field, path) };
   }
   if (Array.isArray(field)) {
@@ -174,7 +175,7 @@ export function ParseFieldType(field: FieldType, path: string): ParsedField {
     }
     return { type: ArrayOf(ParseFieldType(field[0], path).type) };
   }
-  if (typeof field !== "object" || field === null) {
+  if (!IsObject(field)) {
     throw UnsupportedFieldType(String(field), path);
   }
   if (IsCodec(field)) {

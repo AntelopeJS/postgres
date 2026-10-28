@@ -50,6 +50,7 @@ import {
   type RootSelection,
   SCHEMA_STAGE,
 } from "./selection";
+import { IsString } from "./guards";
 
 type LifecycleAnswer = string | string[] | void;
 
@@ -126,7 +127,7 @@ function Lifecycle(stages: QueryStage[]): Promise<LifecycleAnswer> | undefined {
     stage.stage
   ];
   const schemaId = stages[0].options?.id;
-  assert(typeof schemaId === "string", MISSING_SCHEMA_ID);
+  assert(IsString(schemaId), MISSING_SCHEMA_ID);
   return WaitForSchemaReady(schemaId).then(() => handler(schemaId, stage));
 }
 

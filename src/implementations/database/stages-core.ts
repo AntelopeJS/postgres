@@ -11,6 +11,7 @@ import {
   type StageHandler,
   type StageMap,
 } from "./stage";
+import { IsSubqueryProvider } from "./context";
 
 type Equality = (value: Compiled, other: Compiled) => Compiled;
 
@@ -33,7 +34,7 @@ const ORDERING_OPERATORS = {
 
 const ArgStage: StageHandler = (_state, stage, context) => {
   const binding = context.arg(stage.args[FIRST_OPERAND]);
-  if (typeof binding === "function") {
+  if (IsSubqueryProvider(binding)) {
     return { current: binding([stage]) };
   }
   return { current: binding };

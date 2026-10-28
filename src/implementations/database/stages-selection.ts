@@ -18,6 +18,7 @@ import {
   SINGLE_ROW,
   WHERE_BLOCKERS,
 } from "./relation";
+import { IsString } from "./guards";
 
 const NO_KEYS = "FALSE";
 const EQUALITY = "=";
@@ -86,7 +87,7 @@ function IndexOption(stage: QueryStage): string | undefined {
     return undefined;
   }
   assert(
-    typeof name === "string",
+    IsString(name),
     `The '${stage.stage}' stage names its index with a string, received ${typeof name}`,
   );
   return name;

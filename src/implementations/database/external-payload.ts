@@ -14,6 +14,7 @@ import {
   IsReadOnly,
   ReadOnlyReason,
 } from "./external-types";
+import { IsString } from "./guards";
 
 /** Which statement a payload is split for: the three treat keys and absences differently. */
 export type ExternalWriteMode = "insert" | "update" | "replace";
@@ -168,8 +169,7 @@ function IdParts(walk: ExternalWalk, value: unknown): string[] {
   if (width === 1) {
     return [KeyText(value)];
   }
-  const parsed: unknown =
-    typeof value === "string" ? SafeParse(value) : undefined;
+  const parsed: unknown = IsString(value) ? SafeParse(value) : undefined;
   const parts = Array.isArray(parsed) ? parsed : [];
   if (
     parts.length !== width ||
@@ -182,7 +182,7 @@ function IdParts(walk: ExternalWalk, value: unknown): string[] {
 
 /** A key value as the text a key column is matched by: a number or a string as it is spelled. */
 function KeyText(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value);
+  return IsString(value) ? value : JSON.stringify(value);
 }
 
 function SafeParse(text: string): unknown {

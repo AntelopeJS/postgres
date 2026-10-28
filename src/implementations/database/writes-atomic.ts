@@ -31,6 +31,7 @@ import {
   type WriteTarget,
   WriteRowSource,
 } from "./writes-shared";
+import { IsString } from "./guards";
 
 export const ATOMIC_MUTATION = "atomicMutation";
 const ATOMIC_ARGUMENT_COUNT = 2;
@@ -51,7 +52,7 @@ function RevisionPredicate(
     : undefined;
   if (declared) {
     assert(
-      typeof expectedRevision === "string",
+      IsString(expectedRevision),
       "Missing revision bootstrap is unsupported for declared PostgreSQL columns: absent and null share SQL NULL",
     );
     assert(
@@ -61,7 +62,7 @@ function RevisionPredicate(
     return `${QualifiedColumn(WRITE_ALIAS, declared.column)} = ${Param(context.params, expectedRevision, TEXT).sql}`;
   }
   const extra = QualifiedColumn(WRITE_ALIAS, EXTRA_COLUMN);
-  if (typeof expectedRevision !== "string") {
+  if (!IsString(expectedRevision)) {
     return `NOT (${extra} ? ${Param(context.params, revisionField, TEXT).sql})`;
   }
   return `${JsonKey(extra, revisionField)} = ${Param(context.params, expectedRevision, OPAQUE).sql}`;

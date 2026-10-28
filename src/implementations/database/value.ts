@@ -14,6 +14,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "./types";
+import { IsNumber } from "./guards";
 
 const PRIMITIVE_TYPES: Record<string, SqlType> = {
   string: TEXT,
@@ -207,7 +208,7 @@ export function RecordedFunction(value: unknown): QueryStage | undefined {
     return undefined;
   }
   const ids: unknown = args[PARAMETER_IDS];
-  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "number")) {
+  if (!Array.isArray(ids) || !ids.every(IsNumber)) {
     return undefined;
   }
   return value as unknown as QueryStage;

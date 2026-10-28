@@ -37,6 +37,7 @@ import {
   type WriteStatement,
   type WriteTarget,
 } from "./writes-shared";
+import { IsString } from "./guards";
 
 const ALIAS = QuoteIdentifier(WRITE_ALIAS);
 const SOURCE_ALIAS = QuoteIdentifier("src");
@@ -321,7 +322,7 @@ function ConflictOf(stage: QueryStage): string | undefined {
     return undefined;
   }
   assert(
-    typeof conflict === "string" && CONFLICT_MODES.includes(conflict),
+    IsString(conflict) && CONFLICT_MODES.includes(conflict),
     `The '${stage.stage}' stage takes a conflict mode of ${CONFLICT_MODES.join(" or ")}, received ${JSON.stringify(conflict)}`,
   );
   return conflict;

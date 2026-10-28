@@ -32,6 +32,7 @@ import {
   type RelationFlag,
   SetProjection,
 } from "./relation";
+import { IsString } from "./guards";
 
 /**
  * What a sub-stream has reduced a group's rows to so far.
@@ -282,7 +283,7 @@ const ONLY_COLUMN = 0;
 function GroupName(stage: QueryStage): string {
   const name = stage.options?.index;
   assert(
-    typeof name === "string",
+    IsString(name),
     "The 'group' stage is missing the index or field to group on",
   );
   return name;

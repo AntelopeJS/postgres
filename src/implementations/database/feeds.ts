@@ -36,6 +36,7 @@ import {
   TABLE_COLUMN,
   TXID_COLUMN,
 } from "./changes";
+import { IsString } from "./guards";
 
 /** One side of an event as the laterals answered it: what it projects, and whether it matched. */
 interface LoggedSide {
@@ -434,7 +435,7 @@ const ROOT_LENGTH = 3;
 
 function RootId(stages: QueryStage[], index: number): string {
   const id = stages[index]?.options?.id;
-  return typeof id === "string" ? id : "";
+  return IsString(id) ? id : "";
 }
 
 /** The stages between the `schema`/`instance`/`table` prefix and the trailing `changes`. */

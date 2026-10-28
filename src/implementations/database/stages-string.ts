@@ -12,6 +12,7 @@ import {
   type StageHandler,
   type StageMap,
 } from "./stage";
+import { IsString } from "./guards";
 
 interface SplitOptions {
   separator?: string;
@@ -95,10 +96,9 @@ function Translated(pattern: string): string {
 
 const MatchStage = LiftRaw((value, stage, context) => {
   const raw = stage.args[FIRST_OPERAND];
-  const pattern =
-    typeof raw === "string"
-      ? Param(context.params, Translated(raw), TEXT)
-      : RequireOperand(DecodeValue(raw, context), stage, FIRST_OPERAND);
+  const pattern = IsString(raw)
+    ? Param(context.params, Translated(raw), TEXT)
+    : RequireOperand(DecodeValue(raw, context), stage, FIRST_OPERAND);
   return {
     sql: `(${Text(value).sql} ${MATCH_OPERATOR} ${Text(pattern).sql})`,
     type: BOOL,

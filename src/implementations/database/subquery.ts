@@ -4,7 +4,7 @@ import { AsJson } from "./readings";
 import type { Compiled } from "./sql";
 import { FIRST_OPERAND } from "./stage";
 import type { QueryStage } from "./utils";
-import type { DecodingContext } from "./context";
+import { type DecodingContext, IsSubqueryProvider } from "./context";
 import {
   AbsorbOrder,
   CurrentValue,
@@ -53,7 +53,7 @@ function ProvidedSubquery(
     return undefined;
   }
   const binding = context.arg(head.args[FIRST_OPERAND]);
-  return typeof binding === "function" ? binding(rest) : undefined;
+  return IsSubqueryProvider(binding) ? binding(rest) : undefined;
 }
 
 /**

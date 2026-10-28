@@ -6,13 +6,13 @@ import {
   ID_COLUMN,
   INSTANCE_COLUMN,
 } from "./utils";
+import { IsNumber, IsObject } from "./guards";
 
 function ReviveTimestamp(value: unknown): unknown {
   if (value instanceof Date) {
     return value;
   }
-  const date =
-    typeof value === "number" ? new Date(value) : new Date(String(value));
+  const date = IsNumber(value) ? new Date(value) : new Date(String(value));
   return Number.isNaN(date.getTime()) ? value : date;
 }
 
@@ -35,12 +35,7 @@ export function ReviveValue(value: unknown, type: SqlType): unknown {
 }
 
 function ReviveKeyTypes(value: unknown, keyTypes?: KeyTypes): unknown {
-  if (
-    !keyTypes ||
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value)
-  ) {
+  if (!keyTypes || !IsObject(value) || Array.isArray(value)) {
     return value;
   }
   const result: Record<string, unknown> = {

@@ -38,6 +38,7 @@ import {
   SINGLE_ROW,
   WHERE_BLOCKERS,
 } from "./relation";
+import { IsString } from "./guards";
 
 const MAPPER_OPERAND = 2;
 
@@ -158,7 +159,7 @@ function KeysOf(stage: QueryStage): LookupKeys {
   const localKey = stage.options?.localKey;
   const otherKey = stage.options?.otherKey;
   assert(
-    typeof localKey === "string" && typeof otherKey === "string",
+    IsString(localKey) && IsString(otherKey),
     "The 'lookup' stage names the local key and the other key with strings",
   );
   return { localKey, otherKey };

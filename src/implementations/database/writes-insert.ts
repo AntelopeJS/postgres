@@ -32,6 +32,7 @@ import {
   type WriteCompiler,
   WriteTable,
 } from "./writes-shared";
+import { IsString } from "./guards";
 
 const EXCLUDED_ROW = "EXCLUDED";
 const INSERTED: PayloadOptions = { id: ID_AS_KEY };
@@ -66,7 +67,7 @@ function ConflictModeOf(stage: QueryStage): ConflictMode | undefined {
     return undefined;
   }
   assert(
-    typeof conflict === "string" && Object.hasOwn(CONFLICT_MODES, conflict),
+    IsString(conflict) && Object.hasOwn(CONFLICT_MODES, conflict),
     `The '${stage.stage}' stage takes a conflict mode of ${Object.keys(CONFLICT_MODES).join(" or ")}, received ${JSON.stringify(conflict)}`,
   );
   return CONFLICT_MODES[conflict];
@@ -108,7 +109,7 @@ function SuppliedId(document: Record<string, unknown>): string | undefined {
     return undefined;
   }
   assert(
-    typeof supplied === "string",
+    IsString(supplied),
     `An inserted document's '${ID_COLUMN}' must be a string, received ${typeof supplied}`,
   );
   return supplied;

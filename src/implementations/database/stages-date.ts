@@ -13,6 +13,7 @@ import {
   type StageHandler,
   type StageMap,
 } from "./stage";
+import { IsString } from "./guards";
 
 type LocalReading = (local: string) => string;
 
@@ -55,7 +56,7 @@ function PartStage(field: string): StageHandler {
 
 function ZoneLiteral(stage: QueryStage): string {
   const zone = stage.args[FIRST_OPERAND];
-  if (typeof zone !== "string" || zone.length === 0) {
+  if (!IsString(zone) || zone.length === 0) {
     throw new Error(
       `Stage '${stage.stage}' requires a time zone name at position ${FIRST_OPERAND}`,
     );
