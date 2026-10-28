@@ -21,7 +21,10 @@ import {
   SetMeasureTimeoutForTests,
   WithMeasures,
 } from "../implementations/database/external-measures";
-import { WaitForSchemaReady } from "../implementations/database/schema";
+import {
+  GetSchema,
+  WaitForSchemaReady,
+} from "../implementations/database/schema";
 import { BIG_EVENTS_ROWS, CLIENT_ROLE } from "./fixture";
 import { Native, NativeCount } from "./sales";
 
@@ -171,8 +174,12 @@ describe("the catalog of an external instance", function () {
   });
 
   it("offers only declarations registration takes: a schema written from its first offers registers", async () => {
-    new Schema(SALES, Generated(await Mappable()));
+    const generated = Generated(await Mappable());
+    new Schema(SALES, generated);
     await WaitForSchemaReady(SALES);
+    expect(Object.keys(GetSchema(SALES))).to.have.members(
+      Object.keys(generated),
+    );
   });
 });
 

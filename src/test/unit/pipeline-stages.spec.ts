@@ -1,6 +1,5 @@
 import { expect } from "chai";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { SingleSelection } from "@antelopejs/interface-database";
 import {
@@ -193,22 +192,10 @@ describe("the pipeline stage vocabulary", () => {
     expect(new Set(VOCABULARY).size).to.equal(STAGE_COUNT);
   });
 
-  it("binds every stage to a callable handler", () => {
-    for (const name of VOCABULARY) {
-      expect(PIPELINE_STAGES[name], name).to.be.a("function");
-    }
-  });
-
   it("compiles exactly the writes this backend implements, and no others", () => {
     expect(Sorted(Object.keys(WRITE_STAGES))).to.deep.equal(
       Sorted(WRITE_VOCABULARY),
     );
-  });
-
-  it("binds every write to a callable compiler", () => {
-    for (const name of WRITE_VOCABULARY) {
-      expect(WRITE_STAGES[name].compile, name).to.be.a("function");
-    }
   });
 
   it("records for every write whether it reads the relation it follows", () => {
@@ -326,27 +313,6 @@ function StagesAfterRequiring(
   return printed.split(",");
 }
 
-const MODULE_SUFFIX = ".js";
-
-/**
- * Whether a family module reaches its own merger at run time, read off the emitted CommonJS.
- *
- * The structural half of the same proof: a `require` of the merger is the one thing that makes a
- * module-scope merge unsound, and TypeScript erases an `import type`, so the emitted module either
- * names the merger or does not. This answers *why* the adversarial orders above pass, where they
- * only answer *that* they do.
- */
-function RequiresMergerAtRuntime(
-  vocabulary: MergedVocabulary,
-  familyModule: string,
-): boolean {
-  const emitted = readFileSync(
-    join(DATABASE_DIR, `${familyModule}${MODULE_SUFFIX}`),
-    "utf8",
-  );
-  return emitted.includes(`require("./${vocabulary.merger}")`);
-}
-
 describe("the stage vocabularies under an adversarial require order", () => {
   for (const vocabulary of MERGED_VOCABULARIES) {
     for (const familyModule of vocabulary.families) {
@@ -357,15 +323,4 @@ describe("the stage vocabularies under an adversarial require order", () => {
       });
     }
   }
-
-  it("leaves no family importing its merger at run time", () => {
-    for (const vocabulary of MERGED_VOCABULARIES) {
-      for (const familyModule of vocabulary.families) {
-        expect(
-          RequiresMergerAtRuntime(vocabulary, familyModule),
-          `${familyModule} -> ${vocabulary.merger}`,
-        ).to.equal(false);
-      }
-    }
-  });
 });

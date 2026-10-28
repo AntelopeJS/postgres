@@ -5,7 +5,7 @@ import {
   AssertedIdentity,
   CrossInstanceRoot,
   EVERY_ROW,
-  ExpectBalancedLedger,
+  expectBalancedLedger,
   IdentityPredicate,
   NOTES_TABLE,
   type Note,
@@ -198,7 +198,7 @@ describe("the replace statement's refusals", () => {
 
 describe("the replace statement's parameter ledger", () => {
   it("references every parameter it binds, and binds every one it references", () => {
-    ExpectBalancedLedger([
+    expectBalancedLedger([
       Replace({ name: NAME }),
       Replace({}),
       Replace({ nickname: NICKNAME }),

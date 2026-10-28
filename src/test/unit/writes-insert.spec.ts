@@ -8,7 +8,7 @@ import type {
 import { SplitWrite } from "../../implementations/database/writes";
 import {
   CrossInstanceRoot,
-  ExpectBalancedLedger,
+  expectBalancedLedger,
   NOTES_TABLE,
   type Note,
   NotesRoot,
@@ -391,7 +391,7 @@ describe("splitting a terminal write off the pipeline", () => {
 
 describe("the insert statement's parameter ledger", () => {
   it("references every parameter it binds, and binds every one it references", () => {
-    ExpectBalancedLedger([
+    expectBalancedLedger([
       Insert({ name: "a", age: 3 }),
       Insert([{ name: "a" }, { age: 3, nickname: "z" }]),
       Insert({ _id: "k", name: "a" }, { conflict: "update" }),

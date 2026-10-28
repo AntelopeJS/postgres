@@ -444,8 +444,14 @@ describe("the change feed registry", () => {
     await pending;
   });
 
-  it("closes a reqId it has never seen without throwing", async () => {
-    await CloseOneFeed(NewReqId());
+  it("closes a reqId it has never seen, so a read arriving after it answers done", async () => {
+    const reqId = NewReqId();
+    await CloseOneFeed(reqId);
+    const { read } = Reader([{ scanned_to: "0" }, { events: [] }]);
+    expect(await WhileConfigured(() => Step(reqId, read))).to.deep.equal({
+      done: true,
+      value: undefined,
+    });
   });
 });
 

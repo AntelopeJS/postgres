@@ -10,7 +10,7 @@ import {
   AssertedIdentity,
   CrossInstanceRoot,
   EVERY_ROW,
-  ExpectBalancedLedger,
+  expectBalancedLedger,
   FROM_TABLE,
   IdentityPredicate,
   LOGS_TABLE,
@@ -530,7 +530,7 @@ describe("the update statement's mapper, whose body is an expression", () => {
 
 describe("the update statement's parameter ledger", () => {
   it("references every parameter it binds, and binds every one it references", () => {
-    ExpectBalancedLedger([
+    expectBalancedLedger([
       Update({ age: AGE }),
       Update({ name: undefined }),
       Update({ nickname: NICKNAME }),

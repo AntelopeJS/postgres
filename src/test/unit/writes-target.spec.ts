@@ -8,7 +8,7 @@ import {
 import {
   CrossInstanceRoot,
   EVERY_ROW,
-  ExpectBalancedLedger,
+  expectBalancedLedger,
   FROM_TABLE,
   IdentityPredicate,
   Occurrences,
@@ -192,7 +192,7 @@ describe("delete under CROSS_INSTANCE", () => {
 
 describe("the delete statement's parameter ledger", () => {
   it("references every parameter it binds, and binds every one it references", () => {
-    ExpectBalancedLedger([
+    expectBalancedLedger([
       Write(Root().delete()),
       Write(CrossInstanceRoot().delete()),
       Write(Root().get(KEY).delete()),
