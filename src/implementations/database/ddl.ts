@@ -180,16 +180,15 @@ export function ColumnDdl(column: ColumnPlan): string {
   return parts.join(" ");
 }
 
-const RESERVED_INDEX_KEYS: Record<string, string> = {
-  [ID_COLUMN]: QuoteIdentifier(ID_COLUMN),
-};
+const RESERVED_INDEX_KEYS = new Map([[ID_COLUMN, QuoteIdentifier(ID_COLUMN)]]);
 
 function IndexKey(indexId: string, field: string, spec?: FieldSpec): string {
   if (spec) {
     return QuoteIdentifier(spec.column);
   }
-  if (Object.hasOwn(RESERVED_INDEX_KEYS, field)) {
-    return RESERVED_INDEX_KEYS[field];
+  const reserved = RESERVED_INDEX_KEYS.get(field);
+  if (reserved !== undefined) {
+    return reserved;
   }
   if (RESERVED_COLUMNS.includes(field)) {
     throw new Error(
@@ -411,16 +410,16 @@ export function IsAdapterIndex(signature?: string): boolean {
 const DESTRUCTIVE: MigrationMode = "destructive";
 const CAST_PIVOT_TYPE = PhysicalType(TEXT);
 
-const CANONICAL_TYPES: Record<string, string> = {
-  text: "text",
-  "double precision": "double precision",
-  boolean: "boolean",
-  timestamptz: "timestamp with time zone",
-  jsonb: "jsonb",
-};
+const CANONICAL_TYPES = new Map([
+  ["text", "text"],
+  ["double precision", "double precision"],
+  ["boolean", "boolean"],
+  ["timestamptz", "timestamp with time zone"],
+  ["jsonb", "jsonb"],
+]);
 
 function Canonical(type: string): string {
-  return Object.hasOwn(CANONICAL_TYPES, type) ? CANONICAL_TYPES[type] : type;
+  return CANONICAL_TYPES.get(type) ?? type;
 }
 
 function AlterTable(target: string, action: string): string {

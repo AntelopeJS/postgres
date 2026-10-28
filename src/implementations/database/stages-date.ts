@@ -21,7 +21,7 @@ const EPOCH_FIELD = "EPOCH";
 const AT_OR_AFTER = ">=";
 const BEFORE = "<";
 
-const DATE_PARTS: Record<string, string> = {
+const DATE_PARTS = {
   date_year: "YEAR",
   date_month: "MONTH",
   date_day: "DAY",

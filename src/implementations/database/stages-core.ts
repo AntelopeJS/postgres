@@ -19,12 +19,12 @@ interface EqualityOperator {
   negated: boolean;
 }
 
-const BOOLEAN_OPERATORS: Record<string, string> = {
+const BOOLEAN_OPERATORS = {
   and: "AND",
   or: "OR",
 };
 
-const ORDERING_OPERATORS: Record<string, string> = {
+const ORDERING_OPERATORS = {
   cmp_gt: ">",
   cmp_ge: ">=",
   cmp_lt: "<",
@@ -124,10 +124,10 @@ const Distinct: Equality = (value, other) => {
   };
 };
 
-const EQUALITY_OPERATORS: Record<string, EqualityOperator> = {
+const EQUALITY_OPERATORS = {
   eq: { compare: Identical, negated: false },
   ne: { compare: Distinct, negated: true },
-};
+} satisfies Record<string, EqualityOperator>;
 
 /**
  * A json null is not SQL NULL, and a declared column holding SQL NULL is not a json null, so a

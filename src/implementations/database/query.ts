@@ -51,10 +51,18 @@ import {
   SCHEMA_STAGE,
 } from "./selection";
 
+type LifecycleAnswer = string | string[] | void;
+
 type LifecycleHandler = (
   schemaId: string,
   stage: QueryStage,
-) => Promise<unknown>;
+) => Promise<LifecycleAnswer>;
+
+type WriteAnswer =
+  | string[]
+  | number
+  | unknown[]
+  | Awaited<ReturnType<typeof ExecuteAtomicWrite>>;
 
 export type ResultRow = Record<string, unknown>;
 
@@ -73,31 +81,37 @@ const LIFECYCLE_STAGE_COUNT = 2;
 /** What the driver's nullable `rowCount` means when it declines to count. */
 const NO_ROWS = 0;
 
-const LIFECYCLE_HANDLERS: Record<string, LifecycleHandler> = {
+const LIFECYCLE_HANDLERS = {
   [CREATE_INSTANCE]: (schemaId, stage) =>
     CreateInstance(schemaId, stage.options?.id),
   [DESTROY_INSTANCE]: (schemaId, stage) =>
     DestroyInstance(schemaId, GetTableNames(schemaId), stage.options?.id),
   listInstances: ListInstances,
-};
+} satisfies Record<string, LifecycleHandler>;
+
+function IsLifecycleStage(
+  name: string,
+): name is keyof typeof LIFECYCLE_HANDLERS {
+  return Object.hasOwn(LIFECYCLE_HANDLERS, name);
+}
 
 /**
  * The lifecycle stages on an external instance, whose relations have no instances: creating or
  * destroying one is refused rather than recorded nowhere, and the list of them is empty.
  */
-const EXTERNAL_LIFECYCLE: Record<string, LifecycleHandler> = {
+const EXTERNAL_LIFECYCLE = {
   [CREATE_INSTANCE]: (_schemaId, stage) =>
     Promise.reject(ExternalInstanceRefusal(stage.stage)),
   [DESTROY_INSTANCE]: (_schemaId, stage) =>
     Promise.reject(ExternalInstanceRefusal(stage.stage)),
   listInstances: () => Promise.resolve([]),
-};
+} satisfies Record<keyof typeof LIFECYCLE_HANDLERS, LifecycleHandler>;
 
 /**
  * Dispatches a schema-rooted instance lifecycle query, or declines it synchronously.
  * The map is probed with `Object.hasOwn`, and the gate is awaited here rather than in `RunQuery`.
  */
-function Lifecycle(stages: QueryStage[]): Promise<unknown> | undefined {
+function Lifecycle(stages: QueryStage[]): Promise<LifecycleAnswer> | undefined {
   if (
     stages.length !== LIFECYCLE_STAGE_COUNT ||
     stages[0].stage !== SCHEMA_STAGE
@@ -105,7 +119,7 @@ function Lifecycle(stages: QueryStage[]): Promise<unknown> | undefined {
     return undefined;
   }
   const stage = stages[1];
-  if (!Object.hasOwn(LIFECYCLE_HANDLERS, stage.stage)) {
+  if (!IsLifecycleStage(stage.stage)) {
     return undefined;
   }
   const handler = (IsExternal() ? EXTERNAL_LIFECYCLE : LIFECYCLE_HANDLERS)[
@@ -173,7 +187,7 @@ async function RunWrite(
   target: WriteTarget,
   stage: QueryStage,
   context: DecodingContext,
-): Promise<unknown> {
+): Promise<WriteAnswer> {
   const statement = CompileWrite(target, stage, context);
   if (!statement.sql) {
     return statement.ids ?? NO_ROWS;
@@ -195,7 +209,7 @@ async function RunManagedWrite(
   statement: WriteStatement,
   stage: QueryStage,
   context: DecodingContext,
-): Promise<unknown> {
+): Promise<WriteAnswer> {
   if (stage.stage === ATOMIC_MUTATION) {
     return ExecuteAtomicWrite(statement.sql, context.params.all());
   }
@@ -231,7 +245,7 @@ async function RunExternalWrite(
   statement: WriteStatement,
   external: ExternalRelation,
   context: DecodingContext,
-): Promise<unknown> {
+): Promise<WriteAnswer> {
   await Validate(statement.validation);
   try {
     const result = await Query<ResultRow>(statement.sql, context.params.all());

@@ -131,8 +131,13 @@ function NamedInstance(external: ExternalRelation, id: unknown): Error {
  * than answered with rows nobody scoped to it.
  */
 function RefuseNamedInstance(external: ExternalRelation, id: unknown): void {
-  const unscoped = [undefined, null, CROSS_INSTANCE, DEFAULT_INSTANCE_ID];
-  if (!unscoped.includes(id as never)) {
+  const unscoped: readonly unknown[] = [
+    undefined,
+    null,
+    CROSS_INSTANCE,
+    DEFAULT_INSTANCE_ID,
+  ];
+  if (!unscoped.includes(id)) {
     throw NamedInstance(external, id);
   }
 }

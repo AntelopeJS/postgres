@@ -23,7 +23,7 @@ const SLICE_START = 1;
 const MATCH_OPERATOR = "~";
 const CONCAT_OPERATOR = "||";
 
-const CASE_FUNCTIONS: Record<string, string> = {
+const CASE_FUNCTIONS = {
   str_upcase: "upper",
   str_downcase: "lower",
 };
@@ -51,10 +51,10 @@ const LengthStage = Lift((value) => AsFloat(`length(${Text(value).sql})`));
  * The word-boundary assertions, which the two flavours spell differently and both accept.
  * `\b` is a backspace in PostgreSQL's ARE, so an untranslated pattern silently matches nothing.
  */
-const WORD_BOUNDARIES: Record<string, string> = {
-  b: "\\y",
-  B: "\\Y",
-};
+const WORD_BOUNDARIES = new Map([
+  ["b", "\\y"],
+  ["B", "\\Y"],
+]);
 
 const CLASS_OPEN = "[";
 const CLASS_CLOSE = "]";
@@ -78,7 +78,7 @@ function Translated(pattern: string): string {
     const char = pattern[at];
     if (char === ESCAPE && at + 1 < pattern.length) {
       const escaped = pattern[at + 1];
-      const boundary = inClass ? undefined : WORD_BOUNDARIES[escaped];
+      const boundary = inClass ? undefined : WORD_BOUNDARIES.get(escaped);
       out += boundary ?? char + escaped;
       at++;
       continue;

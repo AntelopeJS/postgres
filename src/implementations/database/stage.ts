@@ -134,7 +134,7 @@ export function LiftRaw(handler: RawValueStage): StageHandler {
 export function BuildStages<Operator>(
   operators: Record<string, Operator>,
   build: (operator: Operator) => StageHandler,
-): StageMap {
+) {
   const stages: StageMap = {};
   for (const [name, operator] of Object.entries(operators)) {
     stages[name] = build(operator);

@@ -65,7 +65,7 @@ function SchemaScanNotices(
   schemaId: string,
   schema: SchemaDefinition,
   shape: SchemaShape,
-): TableScanNotices {
+) {
   const notices: TableScanNotices = {};
   for (const [tableId, table] of Object.entries(schema)) {
     const unserved = UnservedIndexes(table, shape[tableId]);
@@ -77,7 +77,7 @@ function SchemaScanNotices(
 const NoScan: CrossInstanceScanNotice = () => {};
 
 /** An external table has no instances to scan across, so nothing ever warns about one. */
-function QuietNotices(schema: SchemaDefinition): TableScanNotices {
+function QuietNotices(schema: SchemaDefinition) {
   const notices: TableScanNotices = {};
   for (const tableId of Object.keys(schema)) {
     notices[tableId] = NoScan;

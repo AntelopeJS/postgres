@@ -1,21 +1,20 @@
 {
   "rules": {
     "anti-slop/no-chained-type-assertions": 34,
-    "anti-slop/no-known-value-widening": 42,
+    "anti-slop/no-known-value-widening": 22,
     "anti-slop/no-object-parameters": 1,
-    "anti-slop/no-runtime-typeof": 44,
+    "anti-slop/no-runtime-typeof": 43,
     "anti-slop/no-shape-in-symbol-names": 390,
-    "anti-slop/no-unknown-parameters": 60,
-    "anti-slop/no-unknown-returns": 24,
+    "anti-slop/no-unknown-parameters": 59,
+    "anti-slop/no-unknown-returns": 17,
     "anti-slop/no-unsafe-dictionary-type": 42,
-    "anti-slop/require-safety-comment-for-type-assertion": 220,
+    "anti-slop/require-safety-comment-for-type-assertion": 210,
     "eslint/max-lines-per-function": 5,
-    "typescript/no-base-to-string": 1,
     "typescript/no-redundant-type-constituents": 1,
     "typescript/unbound-method": 2
   },
   "oversizeFiles": {
-    "src/implementations/database/ddl.ts": 22863,
+    "src/implementations/database/ddl.ts": 22826,
     "src/implementations/database/relation.ts": 20741,
     "src/test/unit/cursors.spec.ts": 39237,
     "src/test/unit/ddl.spec.ts": 28508,

@@ -147,7 +147,7 @@ function AggregateSubStream(aggregate: Aggregation): SubStreamStage {
  * says it is the sub-stream position that cannot take it, because the same stage is perfectly
  * legal on the query one level out.
  */
-const SUB_STREAM_STAGES: SubStreamStageMap = {
+const SUB_STREAM_STAGES = {
   [MAP]: MapSubStream,
   [DISTINCT]: DistinctSubStream,
   [COUNT]: CountSubStream,
@@ -155,7 +155,13 @@ const SUB_STREAM_STAGES: SubStreamStageMap = {
   [AVERAGE]: AggregateSubStream(Mean),
   [MINIMUM]: AggregateSubStream(Minimum),
   [MAXIMUM]: AggregateSubStream(Maximum),
-};
+} satisfies SubStreamStageMap;
+
+function IsSubStreamStage(
+  name: string,
+): name is keyof typeof SUB_STREAM_STAGES {
+  return Object.hasOwn(SUB_STREAM_STAGES, name);
+}
 
 function IsTerminal(step: SubStream | Compiled): step is Compiled {
   return "sql" in step;
@@ -191,7 +197,7 @@ function StepSubStream(
   if (IsTerminal(state)) {
     RefuseSecondTerminal(stage);
   }
-  if (!Object.hasOwn(SUB_STREAM_STAGES, stage.stage)) {
+  if (!IsSubStreamStage(stage.stage)) {
     RefuseSubStreamStage(stage);
   }
   return SUB_STREAM_STAGES[stage.stage](state, stage, context);

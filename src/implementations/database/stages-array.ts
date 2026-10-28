@@ -78,10 +78,10 @@ function WalkElements(
 
 type Measure = (length: string) => Compiled;
 
-const MEASURES: Record<string, Measure> = {
+const MEASURES = {
   arr_count: (length) => AsFloat(length),
   arr_empty: (length) => ({ sql: `(${length} = ${NO_ELEMENTS})`, type: BOOL }),
-};
+} satisfies Record<string, Measure>;
 
 function MeasureStage(measure: Measure): StageHandler {
   return LiftRaw((value) => {
@@ -226,12 +226,12 @@ const AS_NUMBER: ElementReading = () => FLOAT;
 const AS_COMPARABLE: ElementReading = (elem) =>
   ORDERED_KINDS[elem.kind] ?? FLOAT;
 
-const REDUCERS: Record<string, Reducer> = {
+const REDUCERS = {
   arr_sum: { func: "sum", reading: AS_NUMBER, empty: EMPTY_SUM },
   arr_avg: { func: "avg", reading: AS_NUMBER },
   arr_min: { func: "min", reading: AS_COMPARABLE },
   arr_max: { func: "max", reading: AS_COMPARABLE },
-};
+} satisfies Record<string, Reducer>;
 
 function Reduced(reducer: Reducer, target: string): string {
   const reduced = `${reducer.func}(${target})`;

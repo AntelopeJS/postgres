@@ -114,7 +114,9 @@ let isSweeping = false;
 function Ignore() {}
 
 /** Runs a teardown step whose failure matters less than the client it is giving back. */
-function Quietly(step: () => unknown): Promise<void> {
+function Quietly<Result>(
+  step: () => Result | PromiseLike<Result>,
+): Promise<void> {
   return Promise.resolve().then(step).then(Ignore, Ignore);
 }
 
@@ -189,7 +191,10 @@ function WasForgotten(reqId: number): boolean {
 function Forget(reqId: number) {
   retired.push(reqId);
   while (retired.length > REMEMBERED_ENDINGS) {
-    const dropped = retired.shift() as number;
+    const dropped = retired.shift();
+    if (dropped === undefined) {
+      break;
+    }
     cursors.delete(dropped);
     Evicted(dropped);
   }
@@ -253,7 +258,7 @@ async function Declare(request: CursorRequest): Promise<OpenCursor> {
     throw err;
   }
   try {
-    await client.query(DeclareStatement(request.sql), request.params as never);
+    await client.query(DeclareStatement(request.sql), request.params);
   } catch (err) {
     await Discard(client);
     throw err;
