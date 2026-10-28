@@ -17,12 +17,7 @@ import {
   Describe,
   DescribeKeyColumns,
 } from "./external-types";
-import type {
-  ExternalRelation,
-  FieldSpec,
-  SchemaModel,
-  TableModel,
-} from "./fields";
+import type { ExternalRelation, SchemaModel, TableModel } from "./fields";
 
 /** One declared table on its way to a shape: its names, its declaration and what it parsed to. */
 interface DeclaredTable {
@@ -93,8 +88,8 @@ function WarnLossy(
 function DescribeFields(
   declared: DeclaredTable,
   columns: Map<string, CatalogColumn>,
-): Record<string, FieldSpec> {
-  const fields: Record<string, FieldSpec> = {};
+): TableModel["fields"] {
+  const fields: TableModel["fields"] = {};
   for (const [name, spec] of Object.entries(declared.parsed.fields)) {
     const column = columns.get(name);
     if (!column) {

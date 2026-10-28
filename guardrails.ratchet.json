@@ -1,7 +1,7 @@
 {
   "rules": {
     "anti-slop/no-chained-type-assertions": 33,
-    "anti-slop/no-known-value-widening": 13,
+    "anti-slop/no-known-value-widening": 12,
     "anti-slop/no-runtime-typeof": 42,
     "anti-slop/no-unknown-parameters": 55,
     "anti-slop/no-unknown-returns": 9,
