@@ -38,12 +38,8 @@ import {
   type QueryStage,
 } from "./utils";
 import { CloseOneCursor, type CursorRequest, ReadCursorRow } from "./cursors";
-import {
-  OUTPUT_COLUMN,
-  type Relation,
-  Render,
-  RequireOrigin,
-} from "./relation";
+import { OUTPUT_COLUMN, type Relation, RequireOrigin } from "./relation";
+import { Render } from "./render";
 import {
   BuildRoot,
   CollectSchemaIds,

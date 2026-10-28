@@ -3,7 +3,7 @@ import type { Schema } from "@antelopejs/interface-database/schema";
 import type { StagedObject } from "@antelopejs/interface-database/common";
 
 import { AcquireClient } from "../connection";
-import { Render } from "../implementations/database/relation";
+import { Render } from "../implementations/database/render";
 import { BuildRoot } from "../implementations/database/selection";
 import { DecodingContext } from "../implementations/database/context";
 import { CompileSubquery } from "../implementations/database/subquery";

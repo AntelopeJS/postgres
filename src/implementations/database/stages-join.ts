@@ -26,18 +26,20 @@ import {
 } from "./types";
 import {
   CurrentValue,
-  HasFlag,
   type JoinKind,
-  Nested,
   OUTPUT_COLUMN,
-  Prepare,
   type Relation,
+  SetProjection,
+} from "./relation";
+import {
+  HasFlag,
+  Nested,
+  Prepare,
   type RelationFlag,
   Render,
-  SetProjection,
   SINGLE_ROW,
   WHERE_BLOCKERS,
-} from "./relation";
+} from "./render";
 import { IsString } from "./guards";
 
 const MAPPER_OPERAND = 2;

@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { QueryStage } from "@antelopejs/interface-database/common";
 
-import { Render } from "../../implementations/database/relation";
+import { Render } from "../../implementations/database/render";
 import { FLOAT, TEXT, TIMESTAMP } from "../../implementations/database/types";
 import {
   Apply,

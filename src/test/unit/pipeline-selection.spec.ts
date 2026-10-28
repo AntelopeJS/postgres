@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { QueryStage } from "@antelopejs/interface-database/common";
 
-import { Render } from "../../implementations/database/relation";
+import { Render } from "../../implementations/database/render";
 import {
   Apply,
   ApplyRaw,
@@ -198,7 +198,9 @@ describe("the getAll stage", () => {
       "The 'byNameAge' index takes a value for every field, and has none at position 1",
     );
   });
+});
 
+describe("the getAll stage", () => {
   it("falls back to the overflow column for an undeclared field", () => {
     const { relation, context } = Apply(Root().getAll("Al", "nickname"));
     expect(relation.where).to.deep.equal([OVERFLOW_KEY]);

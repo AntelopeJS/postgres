@@ -10,19 +10,21 @@ import {
   TEXT,
 } from "../../implementations/database/types";
 import {
-  AbsorbOrder,
   CurrentValue,
   type JoinClause,
-  Nested,
-  Prepare,
   type Relation,
-  Render,
   ScanColumns,
   SetProjection,
   type TableOrigin,
   TableRelation,
   ValueRelation,
 } from "../../implementations/database/relation";
+import {
+  AbsorbOrder,
+  Nested,
+  Prepare,
+  Render,
+} from "../../implementations/database/render";
 
 const VEHICLES: TableModel = {
   fields: {

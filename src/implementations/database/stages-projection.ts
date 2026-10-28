@@ -7,13 +7,8 @@ import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { BuildDocument, type DocumentMember } from "./row-source";
 import { ARRAY_TYPEOF, HeldOnce, OBJECT_TYPEOF, TextArray } from "./jsonb";
 import { FIRST_OPERAND, FieldNames, FieldOf, RequireOperand } from "./stage";
-import {
-  CurrentValue,
-  Prepare,
-  type RelationFlag,
-  SetPlainProjection,
-  SetProjection,
-} from "./relation";
+import { CurrentValue, SetPlainProjection, SetProjection } from "./relation";
+import { Prepare, type RelationFlag } from "./render";
 
 /**
  * Every projection stage is blocked by a pending projection and by nothing else.

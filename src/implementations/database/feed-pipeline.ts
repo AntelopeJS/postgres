@@ -12,9 +12,9 @@ import {
   CurrentValue,
   LoggedRelation,
   type Relation,
-  Render,
   type TableOrigin,
 } from "./relation";
+import { Render } from "./render";
 
 /**
  * The alias each side's one row is read through, fixed rather than taken from the context.

@@ -15,13 +15,8 @@ import {
   Query,
   RegisterBeforeDisconnect,
 } from "../../connection";
-import {
-  BuildSchemaPlan,
-  CreateSchemaSql,
-  PlanIndexStatements,
-  PlanTable,
-  type TablePlan,
-} from "./ddl";
+import { BuildSchemaPlan, CreateSchemaSql, type TablePlan } from "./ddl";
+import { PlanIndexStatements, PlanTable } from "./convergence";
 
 const DUPLICATE_OBJECT_CODES = new Set(["23505", "42P06", "42P07", "42710"]);
 const CONVERGENCE_RETRIES = 2;

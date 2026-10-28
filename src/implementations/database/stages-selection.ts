@@ -10,14 +10,12 @@ import { ID_COLUMN, INSTANCE_COLUMN, type QueryStage } from "./utils";
 import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import { KeylessRefusal } from "./external-refusals";
 import {
-  Prepare,
   type Relation,
   type TableOrigin,
   RequireOrigin,
   ScanColumns,
-  SINGLE_ROW,
-  WHERE_BLOCKERS,
 } from "./relation";
+import { Prepare, SINGLE_ROW, WHERE_BLOCKERS } from "./render";
 import { IsString } from "./guards";
 
 const NO_KEYS = "FALSE";
