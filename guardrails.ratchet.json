@@ -7,7 +7,7 @@
     "anti-slop/no-chained-type-assertions": 34,
     "anti-slop/no-known-value-widening": 45,
     "anti-slop/no-object-parameters": 2,
-    "anti-slop/no-runtime-typeof": 49,
+    "anti-slop/no-runtime-typeof": 48,
     "anti-slop/no-shape-in-symbol-names": 390,
     "anti-slop/no-unknown-parameters": 62,
     "anti-slop/no-unknown-returns": 26,
