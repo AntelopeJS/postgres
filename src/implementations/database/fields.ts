@@ -20,11 +20,7 @@ import {
   TIMESTAMP,
 } from "./types";
 
-interface IoTsCodec {
-  is(value: unknown): boolean;
-  encode(value: never): unknown;
-  decode(value: unknown): unknown;
-}
+type IoTsCodec = Exclude<FieldType, StringFieldType>;
 
 export interface ParsedField {
   type: SqlType;
@@ -109,25 +105,33 @@ export interface SchemaShape {
   [tableId: string]: TableShape;
 }
 
-const SCALAR_TYPES: Record<string, SqlType> = {
+const SCALAR_TYPES = {
   string: TEXT,
   number: FLOAT,
   boolean: BOOL,
   date: TIMESTAMP,
   object: OPAQUE,
   any: OPAQUE,
-};
+} satisfies Record<string, SqlType>;
+
+function IsScalarToken(token: string): token is keyof typeof SCALAR_TYPES {
+  return Object.hasOwn(SCALAR_TYPES, token);
+}
 
 const ARRAY_SUFFIX = "[]";
 const SUPPORTED_TOKENS = Object.keys(SCALAR_TYPES).join(", ");
 
-function AsCodec(value: object): IoTsCodec | undefined {
-  const candidate = value as Partial<IoTsCodec>;
-  const looksLikeCodec =
-    typeof candidate.encode === "function" &&
-    typeof candidate.decode === "function" &&
-    typeof candidate.is === "function";
-  return looksLikeCodec ? (value as IoTsCodec) : undefined;
+function IsCodec(
+  value: Exclude<FieldType, string | StringFieldType[]>,
+): value is IoTsCodec {
+  return (
+    "encode" in value &&
+    typeof value.encode === "function" &&
+    "decode" in value &&
+    typeof value.decode === "function" &&
+    "is" in value &&
+    typeof value.is === "function"
+  );
 }
 
 function UnsupportedFieldType(token: string, path: string): Error {
@@ -141,7 +145,7 @@ function ParseToken(token: string, path: string): SqlType {
   if (normalized.endsWith(ARRAY_SUFFIX)) {
     return ArrayOf(ParseToken(normalized.slice(0, -ARRAY_SUFFIX.length), path));
   }
-  if (!Object.hasOwn(SCALAR_TYPES, normalized)) {
+  if (!IsScalarToken(normalized)) {
     throw UnsupportedFieldType(token, path);
   }
   return SCALAR_TYPES[normalized];
@@ -173,9 +177,8 @@ export function ParseFieldType(field: FieldType, path: string): ParsedField {
   if (typeof field !== "object" || field === null) {
     throw UnsupportedFieldType(String(field), path);
   }
-  const codec = AsCodec(field);
-  if (codec) {
-    return { type: OPAQUE, codec };
+  if (IsCodec(field)) {
+    return { type: OPAQUE, codec: field };
   }
   return {
     type: JsonOf(ParseShape(field as Record<string, StringFieldType>, path)),

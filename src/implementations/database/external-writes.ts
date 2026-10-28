@@ -478,12 +478,18 @@ const ExternalInsert: WriteCompiler = (target, stage, context) => {
 };
 
 /** The writes of an external relation, which `writes.ts` dispatches to by the target's shape. */
-export const EXTERNAL_WRITES: Record<string, WriteCompiler> = {
+export const EXTERNAL_WRITES = {
   insert: ExternalInsert,
   update: ChangeWrite("update"),
   replace: ChangeWrite("replace"),
   delete: ExternalDelete,
-};
+} satisfies Record<string, WriteCompiler>;
+
+export function IsExternalWriteStage(
+  name: string,
+): name is keyof typeof EXTERNAL_WRITES {
+  return Object.hasOwn(EXTERNAL_WRITES, name);
+}
 
 /** Whether a write target is a relation the adapter did not create. */
 export function IsExternalTarget(target: WriteTarget): boolean {

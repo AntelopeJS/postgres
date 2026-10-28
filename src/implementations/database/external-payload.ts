@@ -172,11 +172,11 @@ function IdParts(walk: ExternalWalk, value: unknown): string[] {
   const parts = Array.isArray(parsed) ? parsed : [];
   if (
     parts.length !== width ||
-    !parts.every((part) => typeof part === "string")
+    !parts.every((part): part is string => typeof part === "string")
   ) {
     throw MalformedId(walk, value);
   }
-  return parts as string[];
+  return parts;
 }
 
 /** A key value as the text a key column is matched by: a number or a string as it is spelled. */
