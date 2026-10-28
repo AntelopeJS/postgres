@@ -9,6 +9,7 @@ import {
   CloseOneFeed,
   type FeedEnvironment,
   type FeedReader,
+  type LoggedEvent,
   IsRegisteredFeed,
   ReadFeedEvent,
 } from "../../implementations/database/feeds";
@@ -45,7 +46,7 @@ interface Answer {
   epoch?: Date;
   high_water?: string | null;
   scanned_to?: string | null;
-  events?: unknown[];
+  events?: LoggedEvent[];
 }
 
 interface Asked {
@@ -79,7 +80,7 @@ function Reader(answers: Answer[]) {
           high_water: answer.high_water ?? null,
           scanned_to: answer.scanned_to ?? null,
           scanned_count: (answer.events ?? []).length,
-          events: (answer.events ?? []) as never,
+          events: answer.events ?? [],
         },
       ],
     });

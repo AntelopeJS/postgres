@@ -12,7 +12,7 @@ import {
   ApplyStages,
   CompileRelation,
 } from "../implementations/database/pipeline";
-import type { ExternalWriteError } from "../implementations/database/external-errors";
+import { ExternalWriteError } from "../implementations/database/external-errors";
 import {
   Native,
   NativeCount,
@@ -27,15 +27,27 @@ function Table(tableId: string) {
   return sales.instance().table(tableId);
 }
 
-async function Failure<T>(
-  work: () => PromiseLike<T>,
-): Promise<ExternalWriteError> {
+async function Failure<T>(work: () => PromiseLike<T>): Promise<Error> {
   try {
     await work();
   } catch (err) {
-    return err as ExternalWriteError;
+    if (err instanceof Error) {
+      return err;
+    }
+    throw err;
   }
   throw new Error("the write was expected to fail");
+}
+
+/** {@link Failure} for a write the database refused, which the adapter reports as a typed error. */
+async function WriteFailure<T>(
+  work: () => PromiseLike<T>,
+): Promise<ExternalWriteError> {
+  const failure = await Failure(work);
+  if (failure instanceof ExternalWriteError) {
+    return failure;
+  }
+  throw failure;
 }
 
 async function Reset(): Promise<void> {
@@ -197,7 +209,7 @@ describe("values an external column cannot hold", () => {
 
   for (const [table, document, field] of INVALID_VALUES) {
     it(`refuses ${JSON.stringify(document[field])} for ${table}.${field} before writing, naming the field`, async () => {
-      const failure = await Failure(() => Table(table).insert(document));
+      const failure = await WriteFailure(() => Table(table).insert(document));
       expect(failure.kind).to.equal("invalid");
       expect(failure.message).to.contain(`sales.${table}.${field}`);
       expect(await NativeCount(`SELECT count(*) FROM sales.${table}`)).to.equal(
@@ -412,7 +424,7 @@ describe("what the database refuses on a write to an external relation", () => {
 
   it("reports a duplicate value of a unique constraint", async () => {
     await Table("w_accounts").insert({ code: "e1" });
-    const failure = await Failure(() =>
+    const failure = await WriteFailure(() =>
       Table("w_accounts").insert({ code: "e1" }),
     );
     expect(failure.kind).to.equal("duplicate");
@@ -421,13 +433,15 @@ describe("what the database refuses on a write to an external relation", () => {
   });
 
   it("reports a missing required field, naming it", async () => {
-    const failure = await Failure(() => Table("w_items").insert({ qty: null }));
+    const failure = await WriteFailure(() =>
+      Table("w_items").insert({ qty: null }),
+    );
     expect(failure.kind).to.equal("missing");
     expect(failure.fields).to.deep.equal(["qty"]);
   });
 
   it("reports a reference to a row that does not exist", async () => {
-    const failure = await Failure(() =>
+    const failure = await WriteFailure(() =>
       Table("w_items").insert({ account_id: "999999", qty: 1 }),
     );
     expect(failure.kind).to.equal("reference");
@@ -438,14 +452,14 @@ describe("what the database refuses on a write to an external relation", () => {
       code: "e2",
     });
     await Table("w_items").insert({ account_id: account, qty: 1 });
-    const failure = await Failure(() =>
+    const failure = await WriteFailure(() =>
       Table("w_accounts").get(account).delete(),
     );
     expect(failure.kind).to.equal("referenced");
   });
 
   it("reports a broken check constraint", async () => {
-    const failure = await Failure(() =>
+    const failure = await WriteFailure(() =>
       Table("w_accounts").insert({ code: "e3", revenue: -1 }),
     );
     expect(failure.kind).to.equal("check");

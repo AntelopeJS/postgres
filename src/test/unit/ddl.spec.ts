@@ -232,10 +232,10 @@ describe("BuildTablePlan", () => {
     const index = hostilePlan.indexes[0];
     const comment = CreateIndexSql("shop", hostilePlan, index)[1];
     const matched = COMMENT_PATTERN.exec(comment);
-    expect(matched, comment).to.not.equal(null);
-    expect(DecodeLiteral((matched as RegExpExecArray)[1])).to.equal(
-      index.signature,
-    );
+    if (matched === null) {
+      expect.fail(comment);
+    }
+    expect(DecodeLiteral(matched[1])).to.equal(index.signature);
   });
 
   it("builds a unique index keyed by instance, with a marked signature", () => {

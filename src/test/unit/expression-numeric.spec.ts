@@ -214,13 +214,11 @@ describe("add", () => {
 
   it("reads an undeclared key added to a date as seconds, in either order", () => {
     const offset = `(${CREATED} + (${AsNumber(Extra("nope"))}) * ${SECONDS})`;
-    const forward = Compile((doc) =>
-      doc.key("createdAt").add(doc.key("nope") as never),
-    );
+    const forward = Compile((doc) => doc.key("createdAt").add(doc.key("nope")));
     expect(forward.sql).to.equal(offset);
     expect(forward.type).to.equal(TIMESTAMP);
     expect(
-      Compile((doc) => doc.key("nope").add(doc.key("createdAt") as never)).sql,
+      Compile((doc) => doc.key("nope").add(doc.key("createdAt"))).sql,
     ).to.equal(offset);
   });
 
@@ -237,8 +235,7 @@ describe("add", () => {
       Compile((doc) => doc.key("metadata").add("x" as never)).sql,
     ).to.equal(`(${AsText(METADATA)} || ${TEXT_PARAM})`);
     expect(
-      Compile((doc) => doc.key("metadata").add(doc.key("createdAt") as never))
-        .sql,
+      Compile((doc) => doc.key("metadata").add(doc.key("createdAt"))).sql,
     ).to.equal(`(${CREATED} + (${AsNumber(METADATA)}) * ${SECONDS})`);
   });
 });
@@ -269,9 +266,7 @@ describe("sub", () => {
   });
 
   it("reads an undeclared key subtracted from a date as seconds", () => {
-    const out = Compile((doc) =>
-      doc.key("createdAt").sub(doc.key("nope") as never),
-    );
+    const out = Compile((doc) => doc.key("createdAt").sub(doc.key("nope")));
     expect(out.sql).to.equal(
       `(${CREATED} - (${AsNumber(Extra("nope"))}) * ${SECONDS})`,
     );
@@ -280,7 +275,7 @@ describe("sub", () => {
 
   it("names the kinds it dispatched on, not the kinds it was given", () => {
     expect(() =>
-      Compile((doc) => doc.key("nope").sub(doc.key("createdAt") as never)),
+      Compile((doc) => doc.key("nope").sub(doc.key("createdAt"))),
     ).to.throw(/Stage 'sub' has no reading for a 'float' and a 'timestamp'/);
   });
 
@@ -293,12 +288,12 @@ describe("sub", () => {
         NewContext(),
       ),
     ).to.throw(/Stage 'sub' has no reading for a 'float' and a 'timestamp'/);
-    expect(() => Compile((doc) => doc.key("name").sub("x" as never))).to.throw(
+    expect(() => Compile((doc) => doc.key("name").sub("x"))).to.throw(
       /Stage 'sub' has no reading for a 'text' and a 'text'/,
     );
-    expect(() =>
-      Compile((doc) => doc.key("tags").sub(["x"] as never)),
-    ).to.throw(/Stage 'sub' has no reading for a 'array' and a 'array'/);
+    expect(() => Compile((doc) => doc.key("tags").sub(["x"]))).to.throw(
+      /Stage 'sub' has no reading for a 'array' and a 'array'/,
+    );
   });
 });
 
@@ -349,7 +344,7 @@ describe("mul, div and mod", () => {
 
 describe("the arithmetic fallback", () => {
   it("reads a boolean operand as one or zero rather than casting it", () => {
-    const out = Compile((doc) => doc.key("isActive").add(1 as never));
+    const out = Compile((doc) => doc.key("isActive").add(1));
     expect(out.sql).to.equal(
       `(((${ACTIVE})::int::double precision) + ${FLOAT_PARAM})`,
     );
@@ -357,20 +352,20 @@ describe("the arithmetic fallback", () => {
   });
 
   it("reads a date operand as epoch milliseconds rather than casting it", () => {
-    const out = Compile((doc) => doc.key("createdAt").mul(2 as never));
+    const out = Compile((doc) => doc.key("createdAt").mul(2));
     expect(out.sql).to.equal(
       `(((EXTRACT(EPOCH FROM ${CREATED}) * 1000)::double precision) * ${FLOAT_PARAM})`,
     );
   });
 
   it("guards a text operand rather than letting the data decide", () => {
-    const out = Compile((doc) => doc.key("name").add(5 as never));
+    const out = Compile((doc) => doc.key("name").add(5));
     expect(out.sql).to.equal(`(${AsNumericText(NAME)} + ${FLOAT_PARAM})`);
     expect(out.type).to.equal(FLOAT);
   });
 
   it("reduces a boolean operand for a bitwise stage too", () => {
-    expect(Compile((doc) => doc.key("isActive").band(1 as never)).sql).to.equal(
+    expect(Compile((doc) => doc.key("isActive").band(1)).sql).to.equal(
       AsFloat(
         `${Int32(`((${ACTIVE})::int::double precision)`)} & ${Int32(FLOAT_PARAM)}`,
       ),

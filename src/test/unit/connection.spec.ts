@@ -1,6 +1,5 @@
 import { expect } from "chai";
-import { EventEmitter } from "node:events";
-import type { Pool, PoolClient } from "pg";
+import { Client, Pool, type PoolClient } from "pg";
 
 import {
   type BeforeDisconnect,
@@ -145,19 +144,20 @@ function Checkouts(): Checkout {
  * one and the listener it attached would never come off. Driving the guard through this is what
  * makes the accumulation spec below able to fail.
  */
-function CheckOut(log: Checkout, client: EventEmitter): PoolClient {
-  const pooled = client as unknown as PoolClient;
-  pooled.release = ((...args: unknown[]) => {
-    log.releases += 1;
-    log.arguments.push(args);
-  }) as PoolClient["release"];
+function CheckOut(log: Checkout, client: Client): PoolClient {
+  const pooled = Object.assign(client, {
+    release: (...args: Parameters<PoolClient["release"]>) => {
+      log.releases += 1;
+      log.arguments.push(args);
+    },
+  });
   return GuardHeldClient(pooled);
 }
 
 describe("a client borrowed from the pool", () => {
   it("swallows an error event that would otherwise end the process", () => {
     const log = Checkouts();
-    const client = new EventEmitter();
+    const client = new Client();
     expect(() => client.emit(CLIENT_ERROR, new Error(DROPPED))).to.throw(
       DROPPED,
     );
@@ -171,7 +171,7 @@ describe("a client borrowed from the pool", () => {
 
   it("accumulates no listeners across repeated checkouts of one client", () => {
     const log = Checkouts();
-    const client = new EventEmitter();
+    const client = new Client();
     const counts: number[] = [];
     for (let checkout = 0; checkout < CHECKOUTS; checkout += 1) {
       const held = CheckOut(log, client);
@@ -186,36 +186,31 @@ describe("a client borrowed from the pool", () => {
   it("forwards every argument to the release the checkout installed", () => {
     const log = Checkouts();
     const dropped = new Error(DROPPED);
-    CheckOut(log, new EventEmitter()).release(dropped);
-    CheckOut(log, new EventEmitter()).release();
+    CheckOut(log, new Client()).release(dropped);
+    CheckOut(log, new Client()).release();
     expect(log.arguments).to.deep.equal([[dropped], NO_ARGUMENTS]);
   });
 });
 
-/** The pool as the guard sees it: an emitter, which is all `pg.Pool` is for this purpose. */
-function Guarded(pool: EventEmitter): EventEmitter {
-  return GuardPool(pool as unknown as Pool) as unknown as EventEmitter;
-}
-
 describe("the pool a client is idle in", () => {
   it("swallows an error event that would otherwise end the process", () => {
-    const pool = new EventEmitter();
+    const pool = new Pool();
     expect(() => pool.emit(CLIENT_ERROR, new Error(DROPPED))).to.throw(DROPPED);
-    Guarded(pool);
+    GuardPool(pool);
     expect(pool.listenerCount(CLIENT_ERROR)).to.equal(1);
     expect(() => pool.emit(CLIENT_ERROR, new Error(DROPPED))).to.not.throw();
   });
 
   it("keeps the listener attached, since the pool outlives every client it lends", () => {
-    const pool = new EventEmitter();
-    Guarded(pool);
+    const pool = new Pool();
+    GuardPool(pool);
     pool.emit(CLIENT_ERROR, new Error(DROPPED));
     expect(pool.listenerCount(CLIENT_ERROR)).to.equal(1);
     expect(() => pool.emit(CLIENT_ERROR, new Error(DROPPED))).to.not.throw();
   });
 
   it("answers the pool it guarded, so it composes around the constructor", () => {
-    const pool = new EventEmitter();
-    expect(Guarded(pool)).to.equal(pool);
+    const pool = new Pool();
+    expect(GuardPool(pool)).to.equal(pool);
   });
 });

@@ -1,10 +1,7 @@
 import { expect } from "chai";
 import { Query } from "@antelopejs/interface-database/query";
 import { QueryStage } from "@antelopejs/interface-database/common";
-import type {
-  DeepPartial,
-  StagedObject,
-} from "@antelopejs/interface-database/common";
+import type { StagedObject } from "@antelopejs/interface-database/common";
 
 import {
   AssertedIdentity,
@@ -16,13 +13,12 @@ import {
   LOGS_TABLE,
   LogsRoot,
   NOTES_TABLE,
-  type Note,
   NotesRoot,
   Occurrences,
   PeopleDocument,
-  type Person,
   ROW_COLUMNS,
   Root,
+  CallerRoot,
   SELECTED_ROW,
   WrittenSql as Sql,
   TABLE,
@@ -169,11 +165,7 @@ function NthUpdate(document: WriteDocument): StagedObject {
 }
 
 function Update(document: WriteDocument): Written {
-  return Write(
-    Root()
-      .get(KEY)
-      .update(document as unknown as DeepPartial<Person>),
-  );
+  return Write(CallerRoot().get(KEY).update(document));
 }
 
 describe("the update statement", () => {
@@ -184,9 +176,7 @@ describe("the update statement", () => {
   });
 
   it("names a declared field by its column rather than by its field name", () => {
-    const written = Write(
-      NotesRoot().update({ summary: "s" } as unknown as DeepPartial<Note>),
-    );
+    const written = Write(NotesRoot().update({ summary: "s" }));
     expect(Sql(written)).to.contain(
       `UPDATE ${NOTES_TABLE} AS "w0" SET "summ" = ($2::text) WHERE`,
     );
@@ -353,9 +343,7 @@ describe("the count an update answers", () => {
 
   /** The two differ wherever `PgIdentifier` truncated the name apart. */
   it("names the column rather than the field it was declared under", () => {
-    const written = Write(
-      NotesRoot().update({ summary: "s" } as unknown as DeepPartial<Note>),
-    );
+    const written = Write(NotesRoot().update({ summary: "s" }));
     expect(Sql(written)).to.contain(
       ' AND (("w0"."summ") IS DISTINCT FROM (($2::text)))',
     );
@@ -519,7 +507,7 @@ describe("the update statement's mapper, whose body is an expression", () => {
   });
 
   it("refuses a mapper that returned nothing, naming the stage", () => {
-    expect(() => Write(Root().update(RETURNS_NOTHING as never))).to.throw(
+    expect(() => Write(Root().update(RETURNS_NOTHING))).to.throw(
       "The 'update' stage was given a mapper that returned nothing",
     );
   });

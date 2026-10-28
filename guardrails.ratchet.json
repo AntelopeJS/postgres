@@ -1,12 +1,12 @@
 {
   "rules": {
-    "anti-slop/no-chained-type-assertions": 33,
+    "anti-slop/no-chained-type-assertions": 18,
     "anti-slop/no-known-value-widening": 12,
     "anti-slop/no-runtime-typeof": 42,
     "anti-slop/no-unknown-parameters": 55,
     "anti-slop/no-unknown-returns": 9,
-    "anti-slop/no-unsafe-dictionary-type": 28,
-    "anti-slop/require-safety-comment-for-type-assertion": 129,
+    "anti-slop/no-unsafe-dictionary-type": 25,
+    "anti-slop/require-safety-comment-for-type-assertion": 72,
     "eslint/max-lines-per-function": 5,
     "typescript/unbound-method": 1
   },
@@ -14,10 +14,10 @@
     "src/implementations/database/ddl.ts": 22826,
     "src/implementations/database/relation.ts": 20741,
     "src/test/unit/cursors.spec.ts": 39237,
-    "src/test/unit/ddl.spec.ts": 28499,
+    "src/test/unit/ddl.spec.ts": 28478,
     "src/test/unit/expression-array.spec.ts": 25323,
-    "src/test/unit/expression.spec.ts": 24270,
+    "src/test/unit/expression.spec.ts": 24243,
     "src/test/unit/pipeline-group.spec.ts": 20242,
-    "src/test/unit/writes-update.spec.ts": 20566
+    "src/test/unit/writes-update.spec.ts": 20384
   }
 }

@@ -132,9 +132,7 @@ describe("obj_merge", () => {
   });
 
   it("lets the right shape win on a key both sides declare", () => {
-    const out = Compile((doc) =>
-      doc.key("metadata").merge({ level: "nine" as never }),
-    );
+    const out = Compile((doc) => doc.key("metadata").merge({ level: "nine" }));
     expect(out.type).to.deep.equal(JsonOf({ level: TEXT, since: TIMESTAMP }));
   });
 
@@ -143,13 +141,12 @@ describe("obj_merge", () => {
       Compile((doc) => doc.key("nope").merge({ level: 9 })).type,
     ).to.deep.equal(OPAQUE);
     expect(
-      Compile((doc) => doc.key("metadata").merge(doc.key("nope") as never))
-        .type,
+      Compile((doc) => doc.key("metadata").merge(doc.key("nope"))).type,
     ).to.deep.equal(OPAQUE);
   });
 
   it("guards the merged result, since || wraps a non-object into an array", () => {
-    const out = Compile((doc) => doc.key("metadata").merge([1] as never));
+    const out = Compile((doc) => doc.key("metadata").merge([1]));
     const right = "($1::jsonb)";
     expect(out.sql).to.equal(Merged(METADATA, right, "t0"));
   });

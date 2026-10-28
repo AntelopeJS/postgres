@@ -1,5 +1,4 @@
 import { expect } from "chai";
-import type { DeepPartial } from "@antelopejs/interface-database/common";
 
 import {
   AssertedIdentity,
@@ -8,10 +7,9 @@ import {
   expectBalancedLedger,
   IdentityPredicate,
   NOTES_TABLE,
-  type Note,
   NotesRoot,
-  type Person,
   Root,
+  CallerRoot,
   SELECTED_ROW,
   WrittenSql as Sql,
   TABLE,
@@ -52,11 +50,7 @@ function Replaces(
 }
 
 function Replace(document: WriteDocument): Written {
-  return Write(
-    Root()
-      .get(KEY)
-      .replace(document as unknown as DeepPartial<Person>),
-  );
+  return Write(CallerRoot().get(KEY).replace(document));
 }
 
 describe("the replace statement", () => {
@@ -95,9 +89,7 @@ describe("the replace statement", () => {
   });
 
   it("names a declared field by its column rather than by its field name", () => {
-    const written = Write(
-      NotesRoot().replace({ summary: "s" } as unknown as DeepPartial<Note>),
-    );
+    const written = Write(NotesRoot().replace({ summary: "s" }));
     expect(Sql(written)).to.contain(
       `UPDATE ${NOTES_TABLE} AS "w0" SET "summ" = ($2::text), ${EMPTY_EXTRA} WHERE`,
     );

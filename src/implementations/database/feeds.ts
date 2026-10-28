@@ -43,7 +43,7 @@ interface LoggedSide {
   [MATCHED_KEY]: boolean | null;
 }
 
-interface LoggedEvent {
+export interface LoggedEvent {
   op: ChangeOperation;
   old: LoggedSide;
   new: LoggedSide;

@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import type { ClientBase, QueryResult } from "pg";
+import { Client, type QueryResult } from "pg";
 
 import { EnsureTriggers } from "../../implementations/database/migrate";
 import { ReapInterval, ReapOnce } from "../../implementations/database/reaper";
@@ -26,13 +26,13 @@ type Answer = (sql: string) => unknown[];
 const NOTHING: unknown[] = [];
 
 function Rows(rows: unknown[]): QueryResult {
-  return { rows } as unknown as QueryResult;
+  return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
 }
 
 /** A client that records what it was asked and answers from a per-statement table. */
 function Recording(answer: Answer, fail?: (sql: string) => boolean) {
   const statements: Statement[] = [];
-  const client = {
+  const client = Object.assign(new Client(), {
     query: (sql: string, params: unknown[] = NOTHING) => {
       statements.push({ sql, params });
       if (fail?.(sql)) {
@@ -40,7 +40,7 @@ function Recording(answer: Answer, fail?: (sql: string) => boolean) {
       }
       return Promise.resolve(Rows(answer(sql)));
     },
-  } as unknown as ClientBase;
+  });
   return { client, statements };
 }
 

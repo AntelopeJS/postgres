@@ -13,6 +13,7 @@ import {
   ProfilesRoot,
   ReadParamLedger,
   ROOT_ALIAS,
+  CallerRoot,
   Root,
   Sql,
   TABLE,
@@ -128,7 +129,7 @@ function OpaqueLookup() {
  * schema, which is an independent declaration, so it reaches this compiler bottom-typed.
  */
 function UndeclaredLookup() {
-  return (Root() as any).lookup(Other(), "nickname", "name");
+  return CallerRoot().lookup(Other(), "nickname", "name");
 }
 
 function ArrayLookup() {

@@ -4,6 +4,7 @@ import { ValueProxy } from "@antelopejs/interface-database";
 import { Render } from "../../implementations/database/relation";
 import {
   Apply,
+  CallerRoot,
   DOCUMENT,
   FROM_TABLE,
   Occurrences,
@@ -50,8 +51,7 @@ describe("the key stage", () => {
   });
 
   it("reads an undeclared name out of the overflow column", () => {
-    const undeclared = "nickname" as unknown as "name";
-    expect(Sql(Root().key(undeclared))).to.equal(
+    expect(Sql(CallerRoot().key("nickname"))).to.equal(
       `SELECT ("t0"."_extra" -> 'nickname') AS "value" ${FROM_TABLE}`,
     );
   });
@@ -197,8 +197,7 @@ describe("the pluck stage", () => {
   });
 
   it("routes an undeclared name through the container branch, out of the overflow", () => {
-    const undeclared = "nickname" as unknown as "name";
-    expect(Sql(Root().pluck(undeclared))).to.equal(
+    expect(Sql(CallerRoot().pluck("nickname"))).to.equal(
       `SELECT (jsonb_strip_nulls(jsonb_build_object())` +
         ` || (CASE WHEN ("t0"."_extra" -> 'nickname') IS NULL THEN '{}'::jsonb` +
         ` ELSE jsonb_build_object('nickname', ("t0"."_extra" -> 'nickname')) END))` +

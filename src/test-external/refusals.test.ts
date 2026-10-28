@@ -80,9 +80,7 @@ describe("what an external relation refuses", () => {
   }
 
   it("refuses changes(), since the adapter keeps no change log on the client's database", async () => {
-    const message = await Refusal(() =>
-      FirstEvent(Accounts().changes() as never),
-    );
+    const message = await Refusal(() => FirstEvent(Accounts().changes()));
     expect(message)
       .to.contain("changes()")
       .and.to.contain('"sales"."accounts"');

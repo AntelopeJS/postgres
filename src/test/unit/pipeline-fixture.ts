@@ -2,6 +2,7 @@ import { expect } from "chai";
 import assert from "node:assert";
 import { SchemaInstance } from "@antelopejs/interface-database";
 import {
+  type DeepPartial,
   QueryStage,
   type StagedObject,
 } from "@antelopejs/interface-database/common";
@@ -60,12 +61,23 @@ import {
 export type { ParamLedger } from "./spec-fixture";
 export { Occurrences } from "./spec-fixture";
 
+/** What the specs keep in the opaque `meta` column. */
+interface Meta {
+  owner?: string;
+  name?: string;
+}
+
+/** A row of the `logs` table, which declares no fields: everything it holds is overflow. */
+interface LogEntry {
+  x?: number;
+}
+
 export interface Person {
   name: string;
   age: number;
   isActive: boolean;
   joined: Date;
-  meta: Record<string, unknown>;
+  meta: Meta;
 }
 
 export interface Product {
@@ -86,7 +98,7 @@ export interface Directory {
   people: Person;
   products: Product;
   notes: Note;
-  logs: Record<string, unknown>;
+  logs: LogEntry;
   profiles: Profile;
 }
 
@@ -318,22 +330,30 @@ function NewSubqueryContext(): StubContext {
   return CountingContext(CompileSubquery);
 }
 
+function Instance<Tables>(instanceId: InstanceId | undefined) {
+  const schema = new SchemaInstance<Tables>(
+    QueryStage("schema", { id: SCHEMA_ID }),
+  );
+  return new SchemaInstance<Tables>(
+    QueryStage("instance", { id: instanceId }),
+    schema,
+  );
+}
+
 function Table<Name extends keyof Directory>(
   tableId: Name,
   instanceId: InstanceId | undefined,
 ) {
-  const schema = new SchemaInstance<Directory>(
-    QueryStage("schema", { id: SCHEMA_ID }),
-  );
-  const instance = new SchemaInstance<Directory>(
-    QueryStage("instance", { id: instanceId }),
-    schema,
-  );
-  return instance.table(tableId);
+  return Instance<Directory>(instanceId).table(tableId);
 }
 
 export function Root() {
   return Table(TABLE_ID, undefined);
+}
+
+/** {@link Root} as a caller whose row type spells `_id` and undeclared keys reads and writes it. */
+export function CallerRoot() {
+  return Instance<CallerDirectory>(undefined).table(TABLE_ID);
 }
 
 export function Other() {
@@ -441,12 +461,29 @@ export function Write(query: StagedObject): Written {
 }
 
 /**
- * A document as a caller hands one to a write, which is not a shape the contract can spell.
+ * A person as a caller declares one.
  *
- * `DeepPartial<T>` has no spelling for `_id` or for an undeclared key, and those are exactly what
- * the key column and the overflow column exist for, so every write spec casts through this.
+ * The caller's row type is its own declaration, independent of the schema: it spells the key
+ * column, the columns the adapter owns, keys the schema does not declare (which live in the
+ * overflow column) and keys a recorded lambda also uses, which are what the specs probe.
  */
-export type WriteDocument = Record<string, unknown>;
+interface CallerPerson extends Person {
+  _id: string | number | null;
+  _instance: string;
+  _extra: { [key: string]: string };
+  nickname: string;
+  stale: string;
+  stage: string;
+  args: (string[] | number)[];
+}
+
+/** The caller's view of the directory, as {@link CallerRoot} reads and writes it. */
+interface CallerDirectory {
+  people: CallerPerson;
+}
+
+/** A document as a caller hands one to a write through {@link CallerRoot}. */
+export type WriteDocument = DeepPartial<CallerPerson>;
 
 export function WrittenSql(written: Written): string {
   return written.statement.sql;
