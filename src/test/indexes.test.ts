@@ -134,8 +134,8 @@ async function Sync(
   schemaId: string,
   definition: SchemaDefinition = DEFINITION,
 ): Promise<void> {
-  const shape = ParseSchema(schemaId, definition);
-  const plans = await ConvergeTables(schemaId, definition, shape);
+  const model = ParseSchema(schemaId, definition);
+  const plans = await ConvergeTables(schemaId, definition, model);
   await BuildIndexes(schemaId, plans);
 }
 
@@ -367,12 +367,12 @@ describe("the background index phase", () => {
     await Reset(schemaId);
     await Sync(schemaId, UNINDEXED);
     const writes = await HoldWrites(schemaId);
-    const shape = ParseSchema(schemaId, DEFINITION);
+    const model = ParseSchema(schemaId, DEFINITION);
 
-    const plans = await ConvergeTables(schemaId, DEFINITION, shape);
+    const plans = await ConvergeTables(schemaId, DEFINITION, model);
     const first = Track(BuildIndexes(schemaId, plans));
     await WaitUntil(async () => (await Catalog(schemaId)).length > 0);
-    await ConvergeTables(schemaId, DEFINITION, shape);
+    await ConvergeTables(schemaId, DEFINITION, model);
     await BuildIndexes(schemaId, plans);
     expect(first.isSettled).to.equal(false);
 

@@ -4,7 +4,7 @@ import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
 import {
   GetSchema,
   GetTableNames,
-  GetTableShape,
+  GetTableModel,
   Schemas,
   WaitForSchemaReady,
 } from "../../implementations/database/schema";
@@ -44,7 +44,7 @@ describe("Schemas.register", () => {
     await Rejection(Schemas.register("broken", BAD_SCHEMA));
 
     expect(() => GetSchema("broken")).to.throw(/Unknown schema/);
-    expect(() => GetTableShape("broken", "orders")).to.throw(/Unknown schema/);
+    expect(() => GetTableModel("broken", "orders")).to.throw(/Unknown schema/);
   });
 });
 
@@ -53,7 +53,7 @@ describe("the registry accessors", () => {
     expect(() => GetSchema(INHERITED)).to.throw(
       `Unknown schema '${INHERITED}'`,
     );
-    expect(() => GetTableShape(INHERITED, "orders")).to.throw(
+    expect(() => GetTableModel(INHERITED, "orders")).to.throw(
       `Unknown schema '${INHERITED}'`,
     );
     expect(() => GetTableNames(INHERITED)).to.throw(

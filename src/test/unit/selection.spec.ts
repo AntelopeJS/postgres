@@ -8,7 +8,7 @@ import {
 
 import { RefusingCompilers, WithOptions } from "./spec-fixture";
 import { FLOAT, TEXT } from "../../implementations/database/types";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import type { TableOrigin } from "../../implementations/database/relation";
 import {
@@ -33,7 +33,7 @@ const TABLE_ID = "vehicles";
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
 
-const VEHICLES: TableShape = {
+const VEHICLES: TableModel = {
   fields: {
     car: { column: "car", type: TEXT },
     price: { column: "price", type: FLOAT },
@@ -54,7 +54,7 @@ function StubOrigin(schemaId: string, tableId: string): TableOrigin {
   return {
     schemaId,
     tableId,
-    shape: VEHICLES,
+    model: VEHICLES,
     index: (name) => (IsIndexKey(name) ? INDEXES[name] : [name]),
   };
 }

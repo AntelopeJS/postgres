@@ -222,7 +222,7 @@ describe("the pluck stage", () => {
   it("types the projection as the plucked fields alone", () => {
     expect(
       Apply(Root().pluck("name", "age")).relation.projection?.type,
-    ).to.deep.equal({ kind: "json", shape: { name: TEXT, age: FLOAT } });
+    ).to.deep.equal({ kind: "json", keys: { name: TEXT, age: FLOAT } });
   });
 
   it("rejects a field list that is not a list of names", () => {
@@ -266,7 +266,7 @@ describe("the without stage", () => {
       Apply(Root().without("age")).relation.projection?.type,
     ).to.deep.equal({
       kind: "json",
-      shape: {
+      keys: {
         _id: TEXT,
         _instance: TEXT,
         name: TEXT,
@@ -280,7 +280,7 @@ describe("the without stage", () => {
   it("types the projection as the shape minus the removed keys", () => {
     const type = Apply(Root().pluck("name", "age").without("age")).relation
       .projection?.type;
-    expect(type).to.deep.equal({ kind: "json", shape: { name: TEXT } });
+    expect(type).to.deep.equal({ kind: "json", keys: { name: TEXT } });
   });
 
   it("rejects a field list that is not a list of names", () => {

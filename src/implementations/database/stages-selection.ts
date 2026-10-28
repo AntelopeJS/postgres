@@ -65,7 +65,7 @@ function Selected(
 
 /** Refuses reading by `_id` a relation that has no key to alias, rather than matching nothing. */
 function RequireKey(origin: TableOrigin, indexId: string | undefined): void {
-  const external = origin.shape.external;
+  const external = origin.model.external;
   const byKey = indexId === undefined || indexId === ID_COLUMN;
   if (external && !external.key && byKey) {
     throw KeylessRefusal(external);

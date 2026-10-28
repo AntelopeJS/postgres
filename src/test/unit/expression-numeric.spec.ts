@@ -5,7 +5,7 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 import { RefusingCompilers } from "./spec-fixture";
 import { AsValue } from "../../implementations/database/stage";
 import type { Compiled } from "../../implementations/database/sql";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import {
   CompileExpression,
@@ -27,7 +27,7 @@ import {
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
 
-const users: TableShape = {
+const users: TableModel = {
   fields: {
     age: { column: "age", type: FLOAT },
     name: { column: "name", type: TEXT },

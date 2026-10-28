@@ -5,7 +5,7 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 import { RefusingCompilers } from "./spec-fixture";
 import { GuardJson } from "../../implementations/database/jsonb";
 import type { Compiled } from "../../implementations/database/sql";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import {
   CompileExpression,
@@ -42,7 +42,7 @@ const ROW_ID = LAMBDA_ID_FLOOR - 1;
 const VALUE_ID = LAMBDA_ID_FLOOR - 2;
 const SUBQUERY_ID = LAMBDA_ID_FLOOR - 3;
 
-const users: TableShape = {
+const users: TableModel = {
   fields: {
     age: { column: "age", type: FLOAT },
     name: { column: "name", type: TEXT },
@@ -269,7 +269,7 @@ describe("default", () => {
     expect(out.sql).to.equal(
       `COALESCE(NULLIF(("t"."_extra" -> 'meta'), 'null'::jsonb), jsonb_build_object())`,
     );
-    expect(out.type).to.deep.equal({ kind: "json", shape: {} });
+    expect(out.type).to.deep.equal({ kind: "json", keys: {} });
   });
 
   /**

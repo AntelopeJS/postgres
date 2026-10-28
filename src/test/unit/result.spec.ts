@@ -1,6 +1,6 @@
 import { expect } from "chai";
 
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodeRow, ReviveValue } from "../../implementations/database/result";
 import {
   ArrayOf,
@@ -11,7 +11,7 @@ import {
   TIMESTAMP,
 } from "../../implementations/database/types";
 
-const vehicles: TableShape = {
+const vehicles: TableModel = {
   fields: {
     car: { column: "car", type: TEXT },
     price: { column: "price", type: FLOAT },

@@ -278,20 +278,20 @@ describe("BuildTablePlan", () => {
 });
 
 describe("ServesCrossInstance", () => {
-  const shape = ParseTable(vehicles, "s.vehicles");
+  const model = ParseTable(vehicles, "s.vehicles");
 
   it("is true for a declared crossInstance index", () => {
     expect(
-      ServesCrossInstance("price", { crossInstance: true }, shape),
+      ServesCrossInstance("price", { crossInstance: true }, model),
     ).to.equal(true);
   });
 
   it("is false for a btree index that is not crossInstance", () => {
-    expect(ServesCrossInstance("price", {}, shape)).to.equal(false);
+    expect(ServesCrossInstance("price", {}, model)).to.equal(false);
   });
 
   it("is true for a gin index, which carries no instance prefix", () => {
-    expect(ServesCrossInstance("tags", { multi: true }, shape)).to.equal(true);
+    expect(ServesCrossInstance("tags", { multi: true }, model)).to.equal(true);
   });
 });
 

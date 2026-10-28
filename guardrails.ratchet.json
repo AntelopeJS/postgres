@@ -1,13 +1,12 @@
 {
   "rules": {
     "anti-slop/no-chained-type-assertions": 33,
-    "anti-slop/no-known-value-widening": 16,
+    "anti-slop/no-known-value-widening": 13,
     "anti-slop/no-runtime-typeof": 42,
-    "anti-slop/no-shape-in-symbol-names": 390,
-    "anti-slop/no-unknown-parameters": 56,
-    "anti-slop/no-unknown-returns": 10,
+    "anti-slop/no-unknown-parameters": 55,
+    "anti-slop/no-unknown-returns": 9,
     "anti-slop/no-unsafe-dictionary-type": 28,
-    "anti-slop/require-safety-comment-for-type-assertion": 135,
+    "anti-slop/require-safety-comment-for-type-assertion": 129,
     "eslint/max-lines-per-function": 5,
     "typescript/unbound-method": 1
   },
@@ -17,7 +16,7 @@
     "src/test/unit/cursors.spec.ts": 39237,
     "src/test/unit/ddl.spec.ts": 28499,
     "src/test/unit/expression-array.spec.ts": 25323,
-    "src/test/unit/expression.spec.ts": 24271,
+    "src/test/unit/expression.spec.ts": 24270,
     "src/test/unit/pipeline-group.spec.ts": 20242,
     "src/test/unit/writes-update.spec.ts": 20566
   }

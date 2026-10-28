@@ -79,7 +79,7 @@ function Operand(state: SubStream, stage: QueryStage): Compiled {
 }
 
 /** A new value and the source that addresses it, which is what a projection is one level up. */
-function Reshaped(state: SubStream, value: Compiled): SubStream {
+function Revalued(state: SubStream, value: Compiled): SubStream {
   return {
     source: new JsonRowSource(value),
     value,
@@ -91,7 +91,7 @@ const MapSubStream: SubStreamStage = (state, stage, context) => {
   const body = DecodeFunction(stage.args[FIRST_OPERAND], context, [
     state.source,
   ]);
-  return Reshaped(state, RequireOperand(body, stage, FIRST_OPERAND));
+  return Revalued(state, RequireOperand(body, stage, FIRST_OPERAND));
 };
 
 const DistinctSubStream: SubStreamStage = (state, stage) => {
@@ -100,7 +100,7 @@ const DistinctSubStream: SubStreamStage = (state, stage) => {
   if (field === undefined) {
     return deduped;
   }
-  return Reshaped(deduped, state.source.field(field));
+  return Revalued(deduped, state.source.field(field));
 };
 
 /** The one terminal that reads the *presence* of a row rather than the value it yields. */

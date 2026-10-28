@@ -7,7 +7,7 @@ import { PRIMARY_KEY_LIST } from "./ddl";
 import type { TableOrigin } from "./relation";
 import type { DecodingContext } from "./context";
 import { type Compiled, Param, QuoteIdentifier } from "./sql";
-import { DeclaredColumns, PhysicalOrder, type TableShape } from "./fields";
+import { DeclaredColumns, PhysicalOrder, type TableModel } from "./fields";
 import {
   EXTRA_COLUMN,
   ID_COLUMN,
@@ -120,14 +120,14 @@ function SuppliedId(document: Record<string, unknown>): string | undefined {
  */
 function InsertRowOf(
   document: Record<string, unknown>,
-  shape: TableShape,
+  model: TableModel,
   context: DecodingContext,
 ): InsertRow {
   const supplied = SuppliedId(document);
   const id = supplied ?? randomUUID();
   const generated =
     supplied === undefined ? Param(context.params, id, TEXT) : undefined;
-  const split = SplitPayload(document, shape, context, INSERTED);
+  const split = SplitPayload(document, model, context, INSERTED);
   const values = MembersByColumn(split);
   const key = generated ?? values.get(ID_COLUMN);
   assert(
@@ -142,8 +142,8 @@ function InsertRowOf(
  * The declared columns some row of the batch writes, in the order the table declares them.
  * Derived from the compiled rows, so every column that bound a `$n` is one the tuples name.
  */
-function BatchColumns(shape: TableShape, rows: InsertRow[]): string[] {
-  return DeclaredColumns(shape).filter((column) =>
+function BatchColumns(model: TableModel, rows: InsertRow[]): string[] {
+  return DeclaredColumns(model).filter((column) =>
     rows.some((row) => row.values.has(column)),
   );
 }
@@ -202,10 +202,10 @@ interface InsertPlan {
 
 /** One complete statement over the rows given, naming exactly the columns those rows write. */
 function GroupStatement(plan: InsertPlan, rows: InsertRow[]): string {
-  const shape = plan.origin.shape;
+  const model = plan.origin.model;
   const columns = plan.mode?.everyColumn
-    ? DeclaredColumns(shape)
-    : BatchColumns(shape, rows);
+    ? DeclaredColumns(model)
+    : BatchColumns(model, rows);
   const tuples = rows.map((row) => RowTuple(row, columns, plan.instance));
   return `${InsertInto(plan.origin, columns)} VALUES ${tuples.join(", ")}${ConflictClause(columns, plan.mode)}`;
 }
@@ -220,7 +220,7 @@ function RowGroups(plan: InsertPlan, rows: InsertRow[]): InsertRow[][] {
   }
   const groups = new Map<string, InsertRow[]>();
   for (const row of rows) {
-    const signature = BatchColumns(plan.origin.shape, [row]).join(
+    const signature = BatchColumns(plan.origin.model, [row]).join(
       SIGNATURE_SEPARATOR,
     );
     const group = groups.get(signature);
@@ -270,7 +270,7 @@ export const InsertWrite: WriteCompiler = (target, stage, context) => {
     instance: instance.sql,
   };
   const rows = documents.map((document) =>
-    InsertRowOf(document, target.origin.shape, context),
+    InsertRowOf(document, target.origin.model, context),
   );
   const statements = RowGroups(plan, rows).map((group) =>
     GroupStatement(plan, group),

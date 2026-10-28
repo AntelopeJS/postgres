@@ -5,7 +5,7 @@ import { Logger } from "../../logger";
 import { ReadTable } from "./introspect";
 import { SchemaName } from "./identifier";
 import { REGISTRY_SCHEMA } from "./utils";
-import type { SchemaShape } from "./fields";
+import type { SchemaModel } from "./fields";
 import { REGISTRY_STATEMENTS } from "./instances";
 import { GetOptions, type MigrationMode } from "../../config";
 import { CHANGE_LOG_STATEMENTS, TriggerStatements } from "./changes";
@@ -356,10 +356,10 @@ function ConvergeTablesLocked(
 export async function ConvergeTables(
   schemaId: string,
   schema: SchemaDefinition,
-  shape: SchemaShape,
+  model: SchemaModel,
 ): Promise<TablePlan[]> {
   const schemaName = SchemaName(schemaId);
-  const plans = BuildSchemaPlan(schema, shape);
+  const plans = BuildSchemaPlan(schema, model);
   await EnsureRegistry();
   await RetryOnDuplicateObject(() => ConvergeTablesLocked(schemaName, plans));
   return plans;

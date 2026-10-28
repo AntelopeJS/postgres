@@ -148,8 +148,8 @@ export function DecodeRows(relation: Relation, rows: ResultRow[]): unknown[] {
   if (projection) {
     return rows.map((row) => ReviveValue(row[OUTPUT_COLUMN], projection.type));
   }
-  const shape = RequireOrigin(relation).shape;
-  return rows.map((row) => DecodeRow(row, shape));
+  const model = RequireOrigin(relation).model;
+  return rows.map((row) => DecodeRow(row, model));
 }
 
 /**
@@ -192,7 +192,7 @@ async function RunWrite(
   if (!statement.sql) {
     return statement.ids ?? NO_ROWS;
   }
-  const external = target.origin.shape.external;
+  const external = target.origin.model.external;
   if (external) {
     return RunExternalWrite(statement, external, context);
   }

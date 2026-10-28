@@ -468,8 +468,8 @@ async function Open(state: FeedState, stages: QueryStage[]): Promise<void> {
   const target = TargetOf(stages);
   await WaitForSchemaReady(target.schemaId);
   const origin = state.env.origin(target.schemaId, target.tableId);
-  if (origin.shape.external) {
-    throw ExternalFeedRefusal(origin.shape.external);
+  if (origin.model.external) {
+    throw ExternalFeedRefusal(origin.model.external);
   }
   const plan = CompileFeed(
     Between(stages),

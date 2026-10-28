@@ -12,7 +12,7 @@ import { CompileSubquery } from "../../implementations/database/subquery";
 import { CompileExpression } from "../../implementations/database/expression";
 import {
   ParseFieldType,
-  type TableShape,
+  type SchemaModel,
 } from "../../implementations/database/fields";
 import type { CatalogColumn } from "../../implementations/database/external-catalog";
 import {
@@ -92,7 +92,7 @@ const LINE_NO: NativeColumn = {
   castType: "integer",
 };
 
-const SHAPES: Record<string, TableShape> = {
+const MODELS: SchemaModel = {
   accounts: {
     fields: {
       id: Field({ column: ID, declared: "string" }),
@@ -142,7 +142,7 @@ function Sql(query: StagedObject): string {
     (schemaId, tableId) => ({
       schemaId,
       tableId,
-      shape: SHAPES[tableId],
+      model: MODELS[tableId],
       index: (name) => [name],
     }),
   );

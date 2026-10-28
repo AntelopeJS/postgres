@@ -7,7 +7,7 @@ import {
 
 import { Logger } from "../logger";
 import {
-  GetTableShape,
+  GetTableModel,
   WaitForSchemaReady,
 } from "../implementations/database/schema";
 
@@ -55,7 +55,7 @@ async function Logged(
 }
 
 function KeyColumns(tableId: string): string[] | undefined {
-  return GetTableShape(SCHEMA_ID, tableId).external?.key?.map(
+  return GetTableModel(SCHEMA_ID, tableId).external?.key?.map(
     (key) => key.column,
   );
 }
@@ -97,7 +97,7 @@ describe("registering an external schema", () => {
     await Register({
       accounts: Table({ _id: "string", id: "string", name: "string" }),
     });
-    expect(GetTableShape(SCHEMA_ID, "accounts").external?.table).to.equal(
+    expect(GetTableModel(SCHEMA_ID, "accounts").external?.table).to.equal(
       "accounts",
     );
   });

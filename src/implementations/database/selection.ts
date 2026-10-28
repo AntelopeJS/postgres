@@ -10,7 +10,7 @@ import { QualifiedName, TableReference } from "./identifier";
 import type { DecodingContext } from "./context";
 import { type Compiled, Param, QualifiedColumn } from "./sql";
 import { type Relation, type TableOrigin, TableRelation } from "./relation";
-import { GetCrossInstanceScanNotice, GetIndex, GetTableShape } from "./schema";
+import { GetCrossInstanceScanNotice, GetIndex, GetTableModel } from "./schema";
 import { DEFAULT_INSTANCE_ID, INSTANCE_COLUMN, type QueryStage } from "./utils";
 
 export const SCHEMA_STAGE = "schema";
@@ -68,7 +68,7 @@ export function RegisteredOrigin(
   return {
     schemaId,
     tableId,
-    shape: GetTableShape(schemaId, tableId),
+    model: GetTableModel(schemaId, tableId),
     index: (name) => IndexFields(name, GetIndex(schemaId, tableId, name)),
     crossInstanceScan: GetCrossInstanceScanNotice(schemaId, tableId),
   };
@@ -170,7 +170,7 @@ export function BuildRoot(
   const tableId = RootId(table);
   const origin = resolve(schemaId, tableId);
   const rest = stages.slice(ROOT_STAGES.length);
-  const external = origin.shape.external;
+  const external = origin.model.external;
   if (external) {
     const relation = ExternalRoot(
       origin,

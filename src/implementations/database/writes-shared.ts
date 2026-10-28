@@ -115,7 +115,7 @@ export function WriteTable(origin: TableOrigin): string {
  * semantics a mapper wants.
  */
 export function WriteRowSource(origin: TableOrigin): RowSource {
-  return new ColumnRowSource(AliasedColumns(WRITE_ALIAS), origin.shape);
+  return new ColumnRowSource(AliasedColumns(WRITE_ALIAS), origin.model);
 }
 
 /**

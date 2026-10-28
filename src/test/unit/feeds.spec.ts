@@ -2,7 +2,6 @@ import { expect } from "chai";
 
 import { WhileConfigured } from "./spec-fixture";
 import type { QueryStage } from "../../implementations/database/utils";
-import type { TableShape } from "../../implementations/database/fields";
 import type { TableOrigin } from "../../implementations/database/relation";
 import { CloseCursor, ReadCursor } from "../../implementations/database/query";
 import {
@@ -60,10 +59,10 @@ interface Asked {
  * `index` answers the name itself, which is `IndexFields`' own undeclared-field fallback — the
  * feed's selection stages resolve through it exactly as the read path does.
  */
-const SHAPELESS: TableOrigin = {
+const FIELDLESS: TableOrigin = {
   schemaId: SCHEMA_ID,
   tableId: TABLE_ID,
-  shape: { fields: {} } as TableShape,
+  model: { fields: {} },
   index: (name) => [name],
 };
 
@@ -89,7 +88,7 @@ function Reader(answers: Answer[]) {
     read: {
       read,
       install: () => Promise.resolve(),
-      origin: () => SHAPELESS,
+      origin: () => FIELDLESS,
       listen: () => Promise.resolve(),
     },
     asked,

@@ -131,13 +131,13 @@ function ConstantType(value: unknown): SqlType {
     return ArrayOf(UnifyAll(value.map(ConstantType)));
   }
   if (IsPlainObject(value)) {
-    const shape: Record<string, SqlType> = {};
+    const keyTypes: Record<string, SqlType> = {};
     for (const [name, item] of Object.entries(value)) {
       if (item !== undefined) {
-        shape[name] = ConstantType(item);
+        keyTypes[name] = ConstantType(item);
       }
     }
-    return JsonOf(shape);
+    return JsonOf(keyTypes);
   }
   return PRIMITIVE_TYPES[typeof value];
 }
@@ -166,18 +166,18 @@ function DecodeObject(
   context: DecodingContext,
 ): Compiled {
   const parts: string[] = [];
-  const shape: Record<string, SqlType> = {};
+  const keyTypes: Record<string, SqlType> = {};
   for (const [name, item] of Object.entries(value)) {
     const compiled = DecodeValue(item, context);
     if (!compiled) {
       continue;
     }
     parts.push(QuoteLiteral(name), Cast(compiled, OPAQUE).sql);
-    shape[name] = compiled.type;
+    keyTypes[name] = compiled.type;
   }
   return {
     sql: `jsonb_build_object(${parts.join(", ")})`,
-    type: JsonOf(shape),
+    type: JsonOf(keyTypes),
   };
 }
 

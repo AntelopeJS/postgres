@@ -1,3 +1,4 @@
+import assert from "node:assert";
 import { StagedObject } from "@antelopejs/interface-database/common";
 
 import { PhysicalType, type SqlType, TEXT } from "./types";
@@ -6,7 +7,7 @@ import { WrittenAs } from "./readings";
 import type { DecodingContext } from "./context";
 import type { Compiled } from "./sql";
 import { QualifiedName } from "./identifier";
-import type { ExternalRelation, TableShape } from "./fields";
+import type { ExternalRelation, TableModel } from "./fields";
 import { ID_COLUMN, INSTANCE_COLUMN } from "./utils";
 import {
   type ColumnDescriptor,
@@ -89,7 +90,7 @@ export function KeyValue(
 }
 
 interface ExternalWalk {
-  shape: TableShape;
+  model: TableModel;
   external: ExternalRelation;
   path: string;
   mode: ExternalWriteMode;
@@ -214,14 +215,14 @@ function TakeKeyField(
   walk.payload.keyFields.push({
     field: name,
     descriptor,
-    type: walk.shape.fields[name].type,
+    type: walk.model.fields[name].type,
     raw: value,
   });
 }
 
 /**
  * Whether a key field and `_id`'s text name different keys, which only an exact reading can tell:
- * text as text, a number read losslessly as the same number. A lossy reading proves nothing.
+ * text, a number read losslessly as the same number. A lossy reading proves nothing.
  */
 function Disagrees(claim: KeyFieldClaim, text: string): boolean {
   if (claim.type.kind === "text") {
@@ -272,7 +273,7 @@ function TakeReadOnly(
 }
 
 function TakeField(walk: ExternalWalk, name: string, value: unknown): void {
-  const spec = walk.shape.fields[name];
+  const spec = walk.model.fields[name];
   const descriptor = spec.native as ColumnDescriptor;
   if (KeyColumn(walk, descriptor.column)) {
     if (IsReadOnly(descriptor)) {
@@ -320,7 +321,7 @@ function TakeKey(walk: ExternalWalk, name: string, value: unknown): void {
   if (name === INSTANCE_COLUMN) {
     return;
   }
-  if (!Object.hasOwn(walk.shape.fields, name)) {
+  if (!Object.hasOwn(walk.model.fields, name)) {
     throw Undeclared(walk, name);
   }
   TakeField(walk, name, value);
@@ -334,7 +335,7 @@ function ClearSilentFields(
   walk: ExternalWalk,
   document: Record<string, unknown>,
 ): void {
-  for (const [name, spec] of Object.entries(walk.shape.fields)) {
+  for (const [name, spec] of Object.entries(walk.model.fields)) {
     const descriptor = spec.native as ColumnDescriptor;
     const silent = !Object.hasOwn(document, name);
     if (
@@ -359,13 +360,14 @@ function ClearSilentFields(
  */
 export function SplitExternalPayload(
   document: Record<string, unknown>,
-  shape: TableShape,
+  model: TableModel,
   context: DecodingContext,
   mode: ExternalWriteMode,
 ): ExternalPayload {
-  const external = shape.external as ExternalRelation;
+  const { external } = model;
+  assert(external, "An external payload needs the relation it targets");
   const walk: ExternalWalk = {
-    shape,
+    model,
     external,
     path: `${external.schema}.${external.table}`,
     mode,

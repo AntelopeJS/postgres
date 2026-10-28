@@ -21,7 +21,7 @@ import {
   IsArray,
   IsOpaque,
   JsonOf,
-  MergeShapes,
+  MergeKeyTypes,
   type SqlType,
 } from "./types";
 import {
@@ -279,7 +279,7 @@ function Replaced(document: Compiled, key: string, value: Compiled): Compiled {
   const member = `jsonb_build_object(${QuoteLiteral(key)}, ${value.sql})`;
   return {
     sql: `(${AsJson(document).sql} || ${member})`,
-    type: MergeShapes(document.type, JsonOf({ [key]: value.type })),
+    type: MergeKeyTypes(document.type, JsonOf({ [key]: value.type })),
   };
 }
 

@@ -46,8 +46,8 @@ function RevisionPredicate(
   context: DecodingContext,
 ): string {
   const { revisionField, expectedRevision } = request;
-  const declared = Object.hasOwn(target.origin.shape.fields, revisionField)
-    ? target.origin.shape.fields[revisionField]
+  const declared = Object.hasOwn(target.origin.model.fields, revisionField)
+    ? target.origin.model.fields[revisionField]
     : undefined;
   if (declared) {
     assert(
@@ -77,7 +77,7 @@ function AtomicAssignments(
     ...request.patch,
     [request.revisionField]: request.nextRevision,
   };
-  const split = SplitPayload(document, target.origin.shape, context, {
+  const split = SplitPayload(document, target.origin.model, context, {
     id: ID_AS_ASSERTION,
   });
   const assignments = split.members.map((member) =>

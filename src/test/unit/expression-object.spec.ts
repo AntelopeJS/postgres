@@ -4,7 +4,7 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 
 import { Occurrences, RefusingCompilers } from "./spec-fixture";
 import type { Compiled } from "../../implementations/database/sql";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import {
   CompileExpression,
@@ -28,7 +28,7 @@ const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
 const OTHER_ROW_ID = LAMBDA_ID_FLOOR - 2;
 
-const users: TableShape = {
+const users: TableModel = {
   fields: {
     age: { column: "age", type: FLOAT },
     name: { column: "name", type: TEXT },
@@ -176,9 +176,9 @@ describe("obj_merge", () => {
     );
     expect(out.type).to.deep.equal(
       JsonOf({
-        ...new ColumnRowSource(AliasedColumns("t"), users).shape(),
+        ...new ColumnRowSource(AliasedColumns("t"), users).keyTypes(),
         customer: JsonOf(
-          new ColumnRowSource(AliasedColumns("r"), users).shape(),
+          new ColumnRowSource(AliasedColumns("r"), users).keyTypes(),
         ),
       }),
     );

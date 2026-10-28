@@ -10,7 +10,10 @@ import {
   type InstanceId,
 } from "@antelopejs/interface-database/schema";
 
-import type { TableShape } from "../../implementations/database/fields";
+import type {
+  SchemaModel,
+  TableModel,
+} from "../../implementations/database/fields";
 import { CompileSubquery } from "../../implementations/database/subquery";
 import { CompileExpression } from "../../implementations/database/expression";
 import {
@@ -103,7 +106,7 @@ export const FROM_TABLE = `FROM ${TABLE} AS "${ROOT_ALIAS}"`;
 
 const ROOT_STAGE_COUNT = 3;
 
-const PEOPLE: TableShape = {
+const PEOPLE: TableModel = {
   fields: {
     name: { column: "name", type: TEXT },
     age: { column: "age", type: FLOAT },
@@ -113,7 +116,7 @@ const PEOPLE: TableShape = {
   },
 };
 
-const PRODUCTS: TableShape = {
+const PRODUCTS: TableModel = {
   fields: {
     name: { column: "name", type: TEXT },
     price: { column: "price", type: FLOAT },
@@ -127,7 +130,7 @@ const PRODUCTS: TableShape = {
  * — and every other shape here spells them the same, which is the reading that
  * cannot tell a write naming the field apart from one naming the column.
  */
-const NOTES: TableShape = {
+const NOTES: TableModel = {
   fields: {
     summary: { column: "summ", type: TEXT },
   },
@@ -139,7 +142,7 @@ const NOTES: TableShape = {
  * The shape that has one physical column to write rather than several, which is where a write
  * assembling a parenthesised target list has to spell a bare column name instead.
  */
-const LOGS: TableShape = { fields: {} };
+const LOGS: TableModel = { fields: {} };
 
 /**
  * A shape declaring a field whose type is an array, which no other shape here does.
@@ -148,7 +151,7 @@ const LOGS: TableShape = { fields: {} };
  * the projection's own type, and an array is where that is visible without a document to hide it
  * in.
  */
-const PROFILES: TableShape = {
+const PROFILES: TableModel = {
   fields: {
     name: { column: "name", type: TEXT },
     skills: { column: "skills", type: ArrayOf(TEXT) },
@@ -216,7 +219,7 @@ export function ProductColumns(alias: string): string {
   );
 }
 
-const SHAPES: Record<string, TableShape> = {
+const MODELS: SchemaModel = {
   [TABLE_ID]: PEOPLE,
   [OTHER_TABLE_ID]: PRODUCTS,
   [NOTES_TABLE_ID]: NOTES,
@@ -237,7 +240,7 @@ function IsIndexKey(name: string): name is keyof typeof INDEXES {
 const StubOrigin: OriginResolver = (schemaId, tableId) => ({
   schemaId,
   tableId,
-  shape: Object.hasOwn(SHAPES, tableId) ? SHAPES[tableId] : PEOPLE,
+  model: Object.hasOwn(MODELS, tableId) ? MODELS[tableId] : PEOPLE,
   index: (name) => (IsIndexKey(name) ? INDEXES[name] : [name]),
 });
 

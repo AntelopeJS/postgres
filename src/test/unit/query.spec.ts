@@ -6,7 +6,7 @@ import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
 import { Schemas } from "../../implementations/database/schema";
 import { ParamLedgerOf, WhileConfigured } from "./spec-fixture";
 import { FLOAT, TEXT } from "../../implementations/database/types";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import { CompileSubquery } from "../../implementations/database/subquery";
 import { CompileExpression } from "../../implementations/database/expression";
@@ -32,7 +32,7 @@ import {
   TableRelation,
 } from "../../implementations/database/relation";
 
-const PEOPLE: TableShape = {
+const PEOPLE: TableModel = {
   fields: {
     name: { column: "name", type: TEXT },
     age: { column: "age", type: FLOAT },
@@ -52,7 +52,7 @@ const DECODED_ALICE = { _id: "a", name: "Alice", age: 30 };
 const StubOrigin: OriginResolver = (schemaId, tableId) => ({
   schemaId,
   tableId,
-  shape: PEOPLE,
+  model: PEOPLE,
   index: (name) => [name],
 });
 

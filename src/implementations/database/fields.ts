@@ -14,7 +14,7 @@ import {
   FLOAT,
   JsonOf,
   OPAQUE,
-  type SqlShape,
+  type KeyTypes,
   type SqlType,
   TEXT,
   TIMESTAMP,
@@ -45,7 +45,7 @@ export interface ExternalRelation {
   key?: ColumnDescriptor[];
 }
 
-export interface TableShape {
+export interface TableModel {
   fields: Record<string, FieldSpec>;
   external?: ExternalRelation;
 }
@@ -58,8 +58,8 @@ export interface TableShape {
  * the field name whenever `PgIdentifier` truncated it, so a second spelling would
  * write one column and read another with nothing failing.
  */
-export function DeclaredColumns(shape: TableShape): string[] {
-  return Object.values(shape.fields).map((spec) => spec.column);
+export function DeclaredColumns(model: TableModel): string[] {
+  return Object.values(model.fields).map((spec) => spec.column);
 }
 
 /**
@@ -77,8 +77,8 @@ export function DeclaredColumns(shape: TableShape): string[] {
  * caller reading across instances which one each row came from, and the default instance answers
  * no key at all rather than the empty string it is stored as.
  */
-export function DocumentKeys(shape: TableShape): string[] {
-  return [ID_COLUMN, INSTANCE_COLUMN, ...Object.keys(shape.fields)];
+export function DocumentKeys(model: TableModel): string[] {
+  return [ID_COLUMN, INSTANCE_COLUMN, ...Object.keys(model.fields)];
 }
 
 /**
@@ -101,8 +101,8 @@ export function PhysicalOrder<T>(
   return [key, instance, ...declared, extra];
 }
 
-export interface SchemaShape {
-  [tableId: string]: TableShape;
+export interface SchemaModel {
+  [tableId: string]: TableModel;
 }
 
 const SCALAR_TYPES = {
@@ -151,15 +151,15 @@ function ParseToken(token: string, path: string): SqlType {
   return SCALAR_TYPES[normalized];
 }
 
-function ParseShape(
+function ParseKeyTypes(
   record: Record<string, StringFieldType>,
   path: string,
-): SqlShape {
-  const shape: Record<string, SqlType> = {};
+): KeyTypes {
+  const keyTypes: Record<string, SqlType> = {};
   for (const [name, value] of Object.entries(record)) {
-    shape[name] = ParseFieldType(value, `${path}.${name}`).type;
+    keyTypes[name] = ParseFieldType(value, `${path}.${name}`).type;
   }
-  return shape;
+  return keyTypes;
 }
 
 export function ParseFieldType(field: FieldType, path: string): ParsedField {
@@ -181,7 +181,7 @@ export function ParseFieldType(field: FieldType, path: string): ParsedField {
     return { type: OPAQUE, codec: field };
   }
   return {
-    type: JsonOf(ParseShape(field as Record<string, StringFieldType>, path)),
+    type: JsonOf(ParseKeyTypes(field, path)),
   };
 }
 
@@ -206,7 +206,7 @@ function AssertKeyRestated(declared: FieldType, path: string): void {
   }
 }
 
-export function ParseTable(table: TableDefinition, path: string): TableShape {
+export function ParseTable(table: TableDefinition, path: string): TableModel {
   const fields: Record<string, FieldSpec> = {};
   const owners = new Map<string, string>();
   for (const [name, declared] of Object.entries(table.fields ?? {})) {
@@ -236,8 +236,8 @@ export function ParseTable(table: TableDefinition, path: string): TableShape {
 export function ParseSchema(
   schemaId: string,
   schema: SchemaDefinition,
-): SchemaShape {
-  const tables: SchemaShape = {};
+): SchemaModel {
+  const tables: SchemaModel = {};
   for (const [tableId, table] of Object.entries(schema)) {
     tables[tableId] = ParseTable(table, `${schemaId}.${tableId}`);
   }
