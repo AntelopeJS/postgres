@@ -112,11 +112,11 @@ This repository documents what is specific to the PostgreSQL backend:
 
 ## Compatibility
 
-| Package                                  | Supported range   |
-| ---------------------------------------- | ----------------- |
-| `@antelopejs/interface-database`         | `>=0.1.11 <0.2.0` |
-| `@antelopejs/interface-database-catalog` | `>=0.0.3 <0.1.0`  |
-| `@antelopejs/interface-core`             | `>=0.1.1 <1.0.0`  |
+| Package                                  | Supported range  |
+| ---------------------------------------- | ---------------- |
+| `@antelopejs/interface-database`         | `>=0.2.0 <0.3.0` |
+| `@antelopejs/interface-database-catalog` | `>=0.0.3 <0.1.0` |
+| `@antelopejs/interface-core`             | `>=0.1.1 <1.0.0` |
 
 The module is developed and tested against `@antelopejs/core` `^1.14.0` on Node.js 24 (the `.nvmrc` version CI runs), with the `pg` driver `^8.22.0` and PostgreSQL 18.
 
