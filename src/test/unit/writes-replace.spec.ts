@@ -105,9 +105,7 @@ describe("the replace statement", () => {
   });
 
   it("replaces every row the pipeline selected rather than only the first", () => {
-    const written = Write(
-      Root().replace({ name: NAME } as DeepPartial<Person>),
-    );
+    const written = Write(Root().replace({ name: NAME }));
     expect(Sql(written)).to.equal(
       Replaces(
         `"name" = ($2::text), "age" = NULL, "isActive" = NULL,` +
@@ -156,9 +154,8 @@ describe("the replace statement's asserted identity", () => {
 
   /** The same refusal `update` makes, reached through the statement the two share. */
   it("refuses a key asserted over a selection of many rows, naming what to do", () => {
-    expect(() =>
-      Write(Root().replace({ _id: KEY, name: NAME } as WriteDocument)),
-    ).to.throw(
+    const keyed = { _id: KEY, name: NAME };
+    expect(() => Write(Root().replace(keyed))).to.throw(
       "The 'replace' stage was given a payload naming '_id' over a selection of many rows: address the row with get(_id) first, or leave '_id' out of the payload",
     );
   });
@@ -176,9 +173,7 @@ describe("the replace statement's asserted identity", () => {
 
 describe("the replace statement's refusals", () => {
   it("refuses to write across every instance at once, naming the stage", () => {
-    expect(() =>
-      Write(CrossInstanceRoot().replace({ name: NAME } as DeepPartial<Person>)),
-    ).to.throw(
+    expect(() => Write(CrossInstanceRoot().replace({ name: NAME }))).to.throw(
       "The 'replace' stage cannot write under CROSS_INSTANCE: name the instance the rows belong to, or omit the instance id for the default one",
     );
   });
@@ -205,7 +200,7 @@ describe("the replace statement's parameter ledger", () => {
       Replace({ name: NAME, nickname: NICKNAME }),
       Replace({ _id: KEY, name: NAME }),
       Replace({ _id: KEY }),
-      Write(Root().replace({ name: NAME } as DeepPartial<Person>)),
+      Write(Root().replace({ name: NAME })),
     ]);
   });
 });

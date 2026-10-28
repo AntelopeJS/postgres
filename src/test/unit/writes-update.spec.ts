@@ -209,7 +209,7 @@ describe("the update statement", () => {
   });
 
   it("targets every row the pipeline selected, not only a single one", () => {
-    const written = Write(Root().update({ age: AGE } as DeepPartial<Person>));
+    const written = Write(Root().update({ age: AGE }));
     expect(Sql(written)).to.equal(Changes('"age" = ($2::double precision)'));
   });
 
@@ -294,9 +294,8 @@ describe("the update statement's asserted identity", () => {
    * the caller wrote one document over a selection of many and would silently reach at most one.
    */
   it("refuses a key asserted over a selection of many rows, naming what to do", () => {
-    expect(() =>
-      Write(Root().update({ _id: KEY, age: AGE } as WriteDocument)),
-    ).to.throw(
+    const keyed = { _id: KEY, age: AGE };
+    expect(() => Write(Root().update(keyed))).to.throw(
       "The 'update' stage was given a payload naming '_id' over a selection of many rows: address the row with get(_id) first, or leave '_id' out of the payload",
     );
   });
@@ -430,9 +429,7 @@ describe("the update statement's refusals", () => {
 
 describe("update under CROSS_INSTANCE", () => {
   it("changes the rows of every instance without naming one anywhere", () => {
-    const written = Write(
-      CrossInstanceRoot().update({ age: AGE } as DeepPartial<Person>),
-    );
+    const written = Write(CrossInstanceRoot().update({ age: AGE }));
     const assignment = '"age" = ($1::double precision)';
     expect(Sql(written)).to.equal(
       `${UPDATE} ${assignment} WHERE ` +
@@ -542,12 +539,12 @@ describe("the update statement's parameter ledger", () => {
           .get(KEY)
           .update((doc) => ({ _id: KEY, age: doc.key("age") })),
       ),
-      Write(CrossInstanceRoot().update({ age: AGE } as DeepPartial<Person>)),
+      Write(CrossInstanceRoot().update({ age: AGE })),
       Write(
         Root()
           .filter((doc) => doc.key("age").ge(MINIMUM_AGE))
           .slice(SLICE_OFFSET, SLICE_COUNT)
-          .update({ name: "a" } as DeepPartial<Person>),
+          .update({ name: "a" }),
       ),
       Write(Root().update((doc) => ({ age: doc.key("age").add(RAISE) }))),
       Write(Root().update((doc) => doc.key("meta"))),

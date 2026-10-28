@@ -64,7 +64,7 @@ const NON_STAGE_METHODS: readonly string[] = [
 const PROBE_TABLE_ID = "probe";
 const MAX_STAGE_ARITY = 3;
 
-type ProbeRow = Record<string, unknown>;
+type ProbeRow = { id: string };
 type StageMethod = (...args: unknown[]) => StagedObject;
 type MethodBag = Record<string, StageMethod>;
 type BuilderFactory = () => StagedObject;
@@ -87,7 +87,7 @@ function Intersection(
   return left.filter((name) => other.has(name));
 }
 
-function Identity(value: unknown): unknown {
+function Identity<Value>(value: Value): Value {
   return value;
 }
 
@@ -108,11 +108,11 @@ function ProbeArguments(method: string): unknown[] {
   return Array.from({ length: MAX_STAGE_ARITY }, () => Identity);
 }
 
-function OwnStageMethods(level: object): string[] {
-  const members = level as Record<string, unknown>;
-  return Object.getOwnPropertyNames(level).filter(
+function OwnStageMethods(members: PropertyDescriptorMap): string[] {
+  return Object.keys(members).filter(
     (name) =>
-      typeof members[name] === "function" && !NON_STAGE_METHODS.includes(name),
+      members[name].value instanceof Function &&
+      !NON_STAGE_METHODS.includes(name),
   );
 }
 
@@ -120,7 +120,9 @@ function ChainMethods(builder: StagedObject): string[] {
   const names = new Set<string>();
   let level: object | null = Object.getPrototypeOf(builder);
   while (level !== null && level !== Object.prototype) {
-    for (const name of OwnStageMethods(level)) {
+    for (const name of OwnStageMethods(
+      Object.getOwnPropertyDescriptors(level),
+    )) {
       names.add(name);
     }
     level = Object.getPrototypeOf(level);
@@ -165,7 +167,7 @@ function ContractStages(): string[] {
  * A terminal write is not a pipeline stage — it produces a statement rather than a relation — so
  * the accounting reads both dispatch maps, and a name in either one may not also be declined.
  */
-function DispatchedStages(): Record<string, string[]> {
+function DispatchedStages() {
   return {
     pipeline: Object.keys(PIPELINE_STAGES),
     write: Object.keys(WRITE_STAGES),
