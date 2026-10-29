@@ -114,9 +114,7 @@ let isSweeping = false;
 function Ignore() {}
 
 /** Runs a teardown step whose failure matters less than the client it is giving back. */
-function Quietly<Result>(
-  step: () => Result | PromiseLike<Result>,
-): Promise<void> {
+function Quietly(step: () => void): Promise<void> {
   return Promise.resolve().then(step).then(Ignore, Ignore);
 }
 

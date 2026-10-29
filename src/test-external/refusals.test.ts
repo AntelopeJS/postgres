@@ -9,9 +9,7 @@ function Accounts() {
   return sales.instance().table("accounts");
 }
 
-async function Refusal<T extends PromiseLike<unknown>>(
-  work: () => T,
-): Promise<string> {
+async function Refusal(work: () => PromiseLike<unknown>): Promise<string> {
   try {
     await work();
   } catch (err) {

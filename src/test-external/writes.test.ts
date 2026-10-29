@@ -27,7 +27,7 @@ function Table(tableId: string) {
   return sales.instance().table(tableId);
 }
 
-async function Failure<T>(work: () => PromiseLike<T>): Promise<Error> {
+async function Failure(work: () => PromiseLike<unknown>): Promise<Error> {
   try {
     await work();
   } catch (err) {
@@ -40,8 +40,8 @@ async function Failure<T>(work: () => PromiseLike<T>): Promise<Error> {
 }
 
 /** {@link Failure} for a write the database refused, which the adapter reports as a typed error. */
-async function WriteFailure<T>(
-  work: () => PromiseLike<T>,
+async function WriteFailure(
+  work: () => PromiseLike<unknown>,
 ): Promise<ExternalWriteError> {
   const failure = await Failure(work);
   if (failure instanceof ExternalWriteError) {
