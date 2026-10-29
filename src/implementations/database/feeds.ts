@@ -36,6 +36,7 @@ import {
   TABLE_COLUMN,
   TXID_COLUMN,
 } from "./changes";
+import { IsString } from "./guards";
 
 /** One side of an event as the laterals answered it: what it projects, and whether it matched. */
 interface LoggedSide {
@@ -43,7 +44,7 @@ interface LoggedSide {
   [MATCHED_KEY]: boolean | null;
 }
 
-interface LoggedEvent {
+export interface LoggedEvent {
   op: ChangeOperation;
   old: LoggedSide;
   new: LoggedSide;
@@ -152,6 +153,16 @@ interface FeedState {
   ending: Promise<void>;
   endNow: () => void;
   env: FeedEnvironment;
+}
+
+/** A feed whose `Open` has run, which is the only state a poll is ever made from. */
+interface OpenFeed extends FeedState {
+  target: FeedTarget;
+  plan: FeedPlan;
+}
+
+function IsOpen(state: FeedState): state is OpenFeed {
+  return state.target !== undefined && state.plan !== undefined;
 }
 
 /**
@@ -300,7 +311,11 @@ export function IsRegisteredFeed(reqId: number): boolean {
 function Forget(reqId: number) {
   retired.push(reqId);
   while (retired.length > REMEMBERED_ENDINGS) {
-    feeds.delete(retired.shift() as number);
+    const dropped = retired.shift();
+    if (dropped === undefined) {
+      break;
+    }
+    feeds.delete(dropped);
   }
 }
 
@@ -375,16 +390,8 @@ function Delivered(event: LoggedEvent, type: SqlType): Changes<unknown> {
 }
 
 function PollParams(target: FeedTarget, watermark: bigint): unknown[] {
-  const scope =
-    target.instance === CROSS_INSTANCE ? [] : [target.instance as string];
+  const scope = target.instance === CROSS_INSTANCE ? [] : [target.instance];
   return [target.schemaName, target.tableName, ...scope, watermark.toString()];
-}
-
-function Lapsed(state: FeedState, high: string | null): boolean {
-  if (high === null) {
-    return false;
-  }
-  return state.watermark < BigInt(high);
 }
 
 /**
@@ -393,11 +400,10 @@ function Lapsed(state: FeedState, high: string | null): boolean {
  */
 async function Poll(
   reqId: number,
-  state: FeedState,
+  state: OpenFeed,
   options: ResolvedOptions,
 ): Promise<void> {
-  const target = state.target as FeedTarget;
-  const plan = state.plan as FeedPlan;
+  const { target, plan } = state;
   const result = await state.env.read(
     PollSql(plan, target.instance !== CROSS_INSTANCE, options.changeBatchSize),
     [...plan.params, ...PollParams(target, state.watermark)],
@@ -407,10 +413,11 @@ async function Poll(
     Retire(reqId, state, RESTARTED);
     return;
   }
-  if (Lapsed(state, row.high_water)) {
+  const reaped = row.high_water === null ? undefined : BigInt(row.high_water);
+  if (reaped !== undefined && state.watermark < reaped) {
     state.gap = {
       from: state.watermark + 1n,
-      to: BigInt(row.high_water as string),
+      to: reaped,
     };
     Retire(reqId, state, LAPSED);
     return;
@@ -428,7 +435,7 @@ const ROOT_LENGTH = 3;
 
 function RootId(stages: QueryStage[], index: number): string {
   const id = stages[index]?.options?.id;
-  return typeof id === "string" ? id : "";
+  return IsString(id) ? id : "";
 }
 
 /** The stages between the `schema`/`instance`/`table` prefix and the trailing `changes`. */
@@ -462,8 +469,8 @@ async function Open(state: FeedState, stages: QueryStage[]): Promise<void> {
   const target = TargetOf(stages);
   await WaitForSchemaReady(target.schemaId);
   const origin = state.env.origin(target.schemaId, target.tableId);
-  if (origin.shape.external) {
-    throw ExternalFeedRefusal(origin.shape.external);
+  if (origin.model.external) {
+    throw ExternalFeedRefusal(origin.model.external);
   }
   const plan = CompileFeed(
     Between(stages),
@@ -480,8 +487,10 @@ async function Open(state: FeedState, stages: QueryStage[]): Promise<void> {
   await state.env.listen();
 }
 
-function Ended(state: FeedState): IteratorResult<unknown, void> {
-  const reason = state.reason as EndReason;
+function Ended(
+  state: FeedState,
+  reason: EndReason,
+): IteratorResult<unknown, void> {
   if (reason === CLOSED) {
     return { done: true, value: undefined };
   }
@@ -503,12 +512,12 @@ async function Advance(
   }
   for (;;) {
     if (state.reason) {
-      return Ended(state);
+      return Ended(state, state.reason);
     }
     if (state.buffer.length > EMPTY) {
       return { done: false, value: state.buffer.shift() };
     }
-    if (!state.target) {
+    if (!IsOpen(state)) {
       await Open(state, stages);
       continue;
     }

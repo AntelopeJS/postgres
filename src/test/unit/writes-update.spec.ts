@@ -1,10 +1,7 @@
 import { expect } from "chai";
 import { Query } from "@antelopejs/interface-database/query";
 import { QueryStage } from "@antelopejs/interface-database/common";
-import type {
-  DeepPartial,
-  StagedObject,
-} from "@antelopejs/interface-database/common";
+import type { StagedObject } from "@antelopejs/interface-database/common";
 
 import {
   AssertedIdentity,
@@ -16,13 +13,12 @@ import {
   LOGS_TABLE,
   LogsRoot,
   NOTES_TABLE,
-  type Note,
   NotesRoot,
   Occurrences,
   PeopleDocument,
-  type Person,
   ROW_COLUMNS,
   Root,
+  CallerRoot,
   SELECTED_ROW,
   WrittenSql as Sql,
   TABLE,
@@ -169,11 +165,7 @@ function NthUpdate(document: WriteDocument): StagedObject {
 }
 
 function Update(document: WriteDocument): Written {
-  return Write(
-    Root()
-      .get(KEY)
-      .update(document as unknown as DeepPartial<Person>),
-  );
+  return Write(CallerRoot().get(KEY).update(document));
 }
 
 describe("the update statement", () => {
@@ -184,9 +176,7 @@ describe("the update statement", () => {
   });
 
   it("names a declared field by its column rather than by its field name", () => {
-    const written = Write(
-      NotesRoot().update({ summary: "s" } as unknown as DeepPartial<Note>),
-    );
+    const written = Write(NotesRoot().update({ summary: "s" }));
     expect(Sql(written)).to.contain(
       `UPDATE ${NOTES_TABLE} AS "w0" SET "summ" = ($2::text) WHERE`,
     );
@@ -209,7 +199,7 @@ describe("the update statement", () => {
   });
 
   it("targets every row the pipeline selected, not only a single one", () => {
-    const written = Write(Root().update({ age: AGE } as DeepPartial<Person>));
+    const written = Write(Root().update({ age: AGE }));
     expect(Sql(written)).to.equal(Changes('"age" = ($2::double precision)'));
   });
 
@@ -294,9 +284,8 @@ describe("the update statement's asserted identity", () => {
    * the caller wrote one document over a selection of many and would silently reach at most one.
    */
   it("refuses a key asserted over a selection of many rows, naming what to do", () => {
-    expect(() =>
-      Write(Root().update({ _id: KEY, age: AGE } as WriteDocument)),
-    ).to.throw(
+    const keyed = { _id: KEY, age: AGE };
+    expect(() => Write(Root().update(keyed))).to.throw(
       "The 'update' stage was given a payload naming '_id' over a selection of many rows: address the row with get(_id) first, or leave '_id' out of the payload",
     );
   });
@@ -354,9 +343,7 @@ describe("the count an update answers", () => {
 
   /** The two differ wherever `PgIdentifier` truncated the name apart. */
   it("names the column rather than the field it was declared under", () => {
-    const written = Write(
-      NotesRoot().update({ summary: "s" } as unknown as DeepPartial<Note>),
-    );
+    const written = Write(NotesRoot().update({ summary: "s" }));
     expect(Sql(written)).to.contain(
       ' AND (("w0"."summ") IS DISTINCT FROM (($2::text)))',
     );
@@ -430,9 +417,7 @@ describe("the update statement's refusals", () => {
 
 describe("update under CROSS_INSTANCE", () => {
   it("changes the rows of every instance without naming one anywhere", () => {
-    const written = Write(
-      CrossInstanceRoot().update({ age: AGE } as DeepPartial<Person>),
-    );
+    const written = Write(CrossInstanceRoot().update({ age: AGE }));
     const assignment = '"age" = ($1::double precision)';
     expect(Sql(written)).to.equal(
       `${UPDATE} ${assignment} WHERE ` +
@@ -522,7 +507,7 @@ describe("the update statement's mapper, whose body is an expression", () => {
   });
 
   it("refuses a mapper that returned nothing, naming the stage", () => {
-    expect(() => Write(Root().update(RETURNS_NOTHING as never))).to.throw(
+    expect(() => Write(Root().update(RETURNS_NOTHING))).to.throw(
       "The 'update' stage was given a mapper that returned nothing",
     );
   });
@@ -542,12 +527,12 @@ describe("the update statement's parameter ledger", () => {
           .get(KEY)
           .update((doc) => ({ _id: KEY, age: doc.key("age") })),
       ),
-      Write(CrossInstanceRoot().update({ age: AGE } as DeepPartial<Person>)),
+      Write(CrossInstanceRoot().update({ age: AGE })),
       Write(
         Root()
           .filter((doc) => doc.key("age").ge(MINIMUM_AGE))
           .slice(SLICE_OFFSET, SLICE_COUNT)
-          .update({ name: "a" } as DeepPartial<Person>),
+          .update({ name: "a" }),
       ),
       Write(Root().update((doc) => ({ age: doc.key("age").add(RAISE) }))),
       Write(Root().update((doc) => doc.key("meta"))),

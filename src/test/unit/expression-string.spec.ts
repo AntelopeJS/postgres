@@ -4,7 +4,7 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 
 import { RefusingCompilers } from "./spec-fixture";
 import type { Compiled } from "../../implementations/database/sql";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import { STRING_STAGES } from "../../implementations/database/stages-string";
 import {
@@ -27,7 +27,7 @@ import {
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
 
-const users: TableShape = {
+const users: TableModel = {
   fields: {
     age: { column: "age", type: FLOAT },
     name: { column: "name", type: TEXT },
@@ -259,11 +259,8 @@ describe("str_match's pattern, which is a different regex language", () => {
 
 describe("str_split", () => {
   it("takes its separator from the options, never from an argument", () => {
-    const built = ValueProxy.arg<any>(ROW_ID)
-      .key("name")
-      .split(",")
-      .build()
-      .at(-1) as QueryStage;
+    const stages = ValueProxy.arg<any>(ROW_ID).key("name").split(",").build();
+    const built = stages[stages.length - 1];
     expect(built.stage).to.equal("str_split");
     expect(built.args).to.deep.equal([]);
     expect(built.options.separator).to.equal(",");

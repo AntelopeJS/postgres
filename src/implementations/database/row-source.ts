@@ -1,6 +1,6 @@
 import { Cast, WithDefault } from "./coerce";
 import { Defaulted, StoredAs } from "./readings";
-import { DocumentKeys, type TableShape } from "./fields";
+import { DocumentKeys, type TableModel } from "./fields";
 import {
   DEFAULT_INSTANCE_ID,
   EXTRA_COLUMN,
@@ -25,8 +25,8 @@ import {
   IsJsonBacked,
   JsonOf,
   OPAQUE,
-  ShapeOf,
-  type SqlShape,
+  KeyTypesOf,
+  type KeyTypes,
   type SqlType,
   TEXT,
 } from "./types";
@@ -39,7 +39,7 @@ export interface RowSource {
   field(name: string, def?: Compiled): Compiled;
   dynamicField(key: Compiled, def?: Compiled): Compiled;
   toJson(): Compiled;
-  shape(): SqlShape | undefined;
+  keyTypes(): KeyTypes | undefined;
   /**
    * A condition true exactly when the row is there, for a source a `LEFT JOIN` may miss. Absent,
    * `_id` being non-null is the test, which holds for every row of a table the adapter owns.
@@ -53,12 +53,12 @@ export interface DocumentMember extends Compiled {
 
 const DEFAULT_INSTANCE_SQL = QuoteLiteral(DEFAULT_INSTANCE_ID);
 
-function MemberShape(members: DocumentMember[]): SqlShape {
-  const shape: Record<string, SqlType> = {};
+function MemberKeyTypes(members: DocumentMember[]): KeyTypes {
+  const keyTypes: Record<string, SqlType> = {};
   for (const member of members) {
-    shape[member.name] = member.type;
+    keyTypes[member.name] = member.type;
   }
-  return shape;
+  return keyTypes;
 }
 
 function ContainerMember(member: DocumentMember): string {
@@ -98,7 +98,10 @@ export function BuildDocument(
   if (overflow) {
     parts.push(overflow);
   }
-  return { sql: `(${parts.join(" || ")})`, type: JsonOf(MemberShape(members)) };
+  return {
+    sql: `(${parts.join(" || ")})`,
+    type: JsonOf(MemberKeyTypes(members)),
+  };
 }
 
 /** Names a key in the message {@link Defaulted} raises for a default the column cannot hold. */
@@ -152,7 +155,7 @@ export function LoggedColumns(row: string): ColumnAddress {
 export class ColumnRowSource implements RowSource {
   public constructor(
     private readonly address: ColumnAddress,
-    private readonly table: TableShape,
+    private readonly table: TableModel,
   ) {}
 
   public field(name: string, def?: Compiled): Compiled {
@@ -216,8 +219,8 @@ export class ColumnRowSource implements RowSource {
     return BuildDocument(this.members(), overflow);
   }
 
-  public shape(): SqlShape {
-    return MemberShape(this.members());
+  public keyTypes(): KeyTypes {
+    return MemberKeyTypes(this.members());
   }
 }
 
@@ -250,8 +253,8 @@ export class NullableRowSource implements RowSource {
     };
   }
 
-  public shape(): SqlShape | undefined {
-    return this.inner.shape();
+  public keyTypes(): KeyTypes | undefined {
+    return this.inner.keyTypes();
   }
 }
 
@@ -274,11 +277,11 @@ export class JsonRowSource implements RowSource {
   }
 
   private fieldType(name: string): SqlType {
-    const shape = this.shape();
-    if (!shape || !Object.hasOwn(shape, name)) {
+    const keyTypes = this.keyTypes();
+    if (!keyTypes || !Object.hasOwn(keyTypes, name)) {
       return OPAQUE;
     }
-    return shape[name];
+    return keyTypes[name];
   }
 
   public toJson(): Compiled {
@@ -288,8 +291,8 @@ export class JsonRowSource implements RowSource {
     );
   }
 
-  public shape(): SqlShape | undefined {
-    return ShapeOf(this.value.type);
+  public keyTypes(): KeyTypes | undefined {
+    return KeyTypesOf(this.value.type);
   }
 }
 
@@ -300,9 +303,9 @@ export class JsonRowSource implements RowSource {
  * read builds have to name the same members, or a nested read addresses a column its subselect
  * never selected.
  */
-export function ExternalNames(shape: TableShape): string[] {
-  const declared = Object.keys(shape.fields);
-  return shape.external?.key ? [ID_COLUMN, ...declared] : declared;
+export function ExternalNames(model: TableModel): string[] {
+  const declared = Object.keys(model.fields);
+  return model.external?.key ? [ID_COLUMN, ...declared] : declared;
 }
 
 /** A composite `_id`, which a well-formed key spells as one JSON array of the parts' text. */
@@ -375,7 +378,7 @@ export type ExternalReads = "table" | "output";
 export class ExternalRowSource implements RowSource {
   public constructor(
     private readonly alias: string,
-    private readonly table: TableShape,
+    private readonly table: TableModel,
     private readonly reads: ExternalReads,
   ) {}
 
@@ -463,8 +466,8 @@ export class ExternalRowSource implements RowSource {
     return BuildDocument(this.members());
   }
 
-  public shape(): SqlShape {
-    return MemberShape(this.members());
+  public keyTypes(): KeyTypes {
+    return MemberKeyTypes(this.members());
   }
 
   /** The whole-row value, which is SQL NULL on a missed row and only then, whatever its columns hold. */

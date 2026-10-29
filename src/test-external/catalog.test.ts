@@ -167,7 +167,8 @@ describe("the catalog of an external instance", function () {
     try {
       await DescribeRelations(["sales.nope"]);
     } catch (error) {
-      expect((error as Error).message).to.include("sales.nope");
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).to.include("sales.nope");
       return;
     }
     throw new Error("DescribeRelations was expected to refuse");
@@ -356,7 +357,8 @@ describe("a sample of rows", function () {
     try {
       await SampleRows({ relation: "sales.accounts", limit: 21 });
     } catch (error) {
-      refused = error as Error;
+      if (!(error instanceof Error)) throw error;
+      refused = error;
     }
     expect(refused?.message).to.match(/from 1 to 20 rows/);
   });
@@ -383,7 +385,8 @@ describe("a sample of rows", function () {
     try {
       await SampleRows({ relation: "sales.people", limit: 5 });
     } catch (error) {
-      refused = error as Error;
+      if (!(error instanceof Error)) throw error;
+      refused = error;
     }
     expect(refused?.message).to.match(/cannot be read/);
   });
@@ -428,7 +431,8 @@ describe("the catalog outside development", () => {
     try {
       await Info();
     } catch (error) {
-      expect((error as Error).message).to.match(/development tool/);
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).to.match(/development tool/);
       return;
     } finally {
       options.catalog.enabled = enabled;

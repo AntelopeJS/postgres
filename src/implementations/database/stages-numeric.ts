@@ -102,21 +102,21 @@ function Infix(operator: string): Arithmetic {
   });
 }
 
-const ADD_OPERANDS: OperandTable = {
+const ADD_OPERANDS = {
   "timestamp:float": (left, right) => OffsetMoment(left, right, PLUS),
   "float:timestamp": (left, right) => OffsetMoment(right, left, PLUS),
   "timestamp:timestamp": NO_READING,
   "text:text": ConcatText,
   "array:array": ConcatArray,
-};
+} satisfies OperandTable;
 
-const SUB_OPERANDS: OperandTable = {
+const SUB_OPERANDS = {
   "timestamp:float": (left, right) => OffsetMoment(left, right, MINUS),
   "float:timestamp": NO_READING,
   "timestamp:timestamp": ElapsedSeconds,
   "text:text": NO_READING,
   "array:array": NO_READING,
-};
+} satisfies OperandTable;
 
 const BOTTOM_PULL: Partial<Record<SqlType["kind"], SqlType["kind"]>> = {
   timestamp: "float",

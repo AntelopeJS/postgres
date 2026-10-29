@@ -10,8 +10,9 @@ import { QualifiedName, TableReference } from "./identifier";
 import type { DecodingContext } from "./context";
 import { type Compiled, Param, QualifiedColumn } from "./sql";
 import { type Relation, type TableOrigin, TableRelation } from "./relation";
-import { GetCrossInstanceScanNotice, GetIndex, GetTableShape } from "./schema";
+import { GetCrossInstanceScanNotice, GetIndex, GetTableModel } from "./schema";
 import { DEFAULT_INSTANCE_ID, INSTANCE_COLUMN, type QueryStage } from "./utils";
+import { IsObject, IsString } from "./guards";
 
 export const SCHEMA_STAGE = "schema";
 const INSTANCE_STAGE = "instance";
@@ -68,7 +69,7 @@ export function RegisteredOrigin(
   return {
     schemaId,
     tableId,
-    shape: GetTableShape(schemaId, tableId),
+    model: GetTableModel(schemaId, tableId),
     index: (name) => IndexFields(name, GetIndex(schemaId, tableId, name)),
     crossInstanceScan: GetCrossInstanceScanNotice(schemaId, tableId),
   };
@@ -90,7 +91,7 @@ function RootStage(
 function RootId(stage: QueryStage): string {
   const id = stage.options?.id;
   assert(
-    typeof id === "string",
+    IsString(id),
     `The '${stage.stage}' stage of a table query is missing its id`,
   );
   return id;
@@ -108,7 +109,7 @@ function RootInstanceScope(
     return CROSS_INSTANCE;
   }
   assert(
-    id === undefined || id === null || typeof id === "string",
+    id === undefined || id === null || IsString(id),
     `An instance id must be a string or CROSS_INSTANCE, received ${typeof id}`,
   );
   return Param(context.params, id ?? DEFAULT_INSTANCE_ID, TEXT);
@@ -131,8 +132,13 @@ function NamedInstance(external: ExternalRelation, id: unknown): Error {
  * than answered with rows nobody scoped to it.
  */
 function RefuseNamedInstance(external: ExternalRelation, id: unknown): void {
-  const unscoped = [undefined, null, CROSS_INSTANCE, DEFAULT_INSTANCE_ID];
-  if (!unscoped.includes(id as never)) {
+  const unscoped: readonly unknown[] = [
+    undefined,
+    null,
+    CROSS_INSTANCE,
+    DEFAULT_INSTANCE_ID,
+  ];
+  if (!unscoped.includes(id)) {
     throw NamedInstance(external, id);
   }
 }
@@ -165,7 +171,7 @@ export function BuildRoot(
   const tableId = RootId(table);
   const origin = resolve(schemaId, tableId);
   const rest = stages.slice(ROOT_STAGES.length);
-  const external = origin.shape.external;
+  const external = origin.model.external;
   if (external) {
     const relation = ExternalRoot(
       origin,
@@ -200,7 +206,7 @@ interface SchemaWalk {
  * Plain objects reach every recorded lambda body; the visited set is for a caller's cyclic object.
  */
 function CollectValue(value: unknown, walk: SchemaWalk): void {
-  if (typeof value !== "object" || value === null || walk.visited.has(value)) {
+  if (!IsObject(value) || walk.visited.has(value)) {
     return;
   }
   walk.visited.add(value);
@@ -223,7 +229,7 @@ function CollectValue(value: unknown, walk: SchemaWalk): void {
 
 function CollectInto(stages: QueryStage[], walk: SchemaWalk): void {
   for (const stage of stages) {
-    if (stage.stage === SCHEMA_STAGE && typeof stage.options?.id === "string") {
+    if (stage.stage === SCHEMA_STAGE && IsString(stage.options?.id)) {
       walk.ids.add(stage.options.id);
     }
     for (const arg of stage.args ?? []) {

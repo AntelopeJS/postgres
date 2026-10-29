@@ -4,7 +4,7 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 
 import { Occurrences, RefusingCompilers } from "./spec-fixture";
 import type { Compiled } from "../../implementations/database/sql";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import {
   CompileExpression,
@@ -28,7 +28,7 @@ const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
 const OTHER_ROW_ID = LAMBDA_ID_FLOOR - 2;
 
-const users: TableShape = {
+const users: TableModel = {
   fields: {
     age: { column: "age", type: FLOAT },
     name: { column: "name", type: TEXT },
@@ -132,9 +132,7 @@ describe("obj_merge", () => {
   });
 
   it("lets the right shape win on a key both sides declare", () => {
-    const out = Compile((doc) =>
-      doc.key("metadata").merge({ level: "nine" as never }),
-    );
+    const out = Compile((doc) => doc.key("metadata").merge({ level: "nine" }));
     expect(out.type).to.deep.equal(JsonOf({ level: TEXT, since: TIMESTAMP }));
   });
 
@@ -143,13 +141,12 @@ describe("obj_merge", () => {
       Compile((doc) => doc.key("nope").merge({ level: 9 })).type,
     ).to.deep.equal(OPAQUE);
     expect(
-      Compile((doc) => doc.key("metadata").merge(doc.key("nope") as never))
-        .type,
+      Compile((doc) => doc.key("metadata").merge(doc.key("nope"))).type,
     ).to.deep.equal(OPAQUE);
   });
 
   it("guards the merged result, since || wraps a non-object into an array", () => {
-    const out = Compile((doc) => doc.key("metadata").merge([1] as never));
+    const out = Compile((doc) => doc.key("metadata").merge([1]));
     const right = "($1::jsonb)";
     expect(out.sql).to.equal(Merged(METADATA, right, "t0"));
   });
@@ -176,9 +173,9 @@ describe("obj_merge", () => {
     );
     expect(out.type).to.deep.equal(
       JsonOf({
-        ...new ColumnRowSource(AliasedColumns("t"), users).shape(),
+        ...new ColumnRowSource(AliasedColumns("t"), users).keyTypes(),
         customer: JsonOf(
-          new ColumnRowSource(AliasedColumns("r"), users).shape(),
+          new ColumnRowSource(AliasedColumns("r"), users).keyTypes(),
         ),
       }),
     );

@@ -42,7 +42,7 @@ const SLOW_ACQUIRE = `no PostgreSQL client has become available in ${SLOW_ACQUIR
 let pool: Pool | undefined;
 let isWaiting = false;
 
-export type BeforeDisconnect = () => unknown;
+export type BeforeDisconnect = () => void | PromiseLike<void>;
 
 export type PoolTeardown = () => Promise<void>;
 
@@ -196,7 +196,7 @@ export function Query<T extends QueryResultRow = QueryResultRow>(
   sql: string,
   params?: unknown[],
 ): Promise<QueryResult<T>> {
-  return GetPool().query<T>(sql, params as never);
+  return GetPool().query<T>(sql, params);
 }
 
 function ReportHeldClientError(err: unknown) {

@@ -1,4 +1,5 @@
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
+import { IsString } from "./guards";
 
 export type { QueryStage } from "@antelopejs/interface-database/common";
 
@@ -70,7 +71,7 @@ export function NormalizeInstanceId(
   if (id === undefined || id === null) {
     return DEFAULT_INSTANCE_ID;
   }
-  if (typeof id !== "string") {
+  if (!IsString(id)) {
     throw new Error(
       `${operation} expects a string instance id, received ${typeof id}`,
     );

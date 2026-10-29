@@ -36,14 +36,14 @@ export type PipelineStageMap = Record<string, PipelineStage>;
  * CommonJS the spread of a half-written module contributes nothing at all, so the map simply
  * dispatches fewer stages than it names, with no error and no failing type.
  */
-export const PIPELINE_STAGES: PipelineStageMap = {
+export const PIPELINE_STAGES = {
   ...ROW_STAGES,
   ...SELECTION_STAGES,
   ...PROJECTION_STAGES,
   ...AGGREGATE_STAGES,
   ...JOIN_STAGES,
   ...GROUP_STAGES,
-};
+} satisfies PipelineStageMap;
 
 /**
  * Stages this backend will support, named so a caller gets that answer rather than "unknown".
@@ -65,13 +65,17 @@ export const DEFERRED_STAGES: Record<string, string> = {};
  * here is either not the last stage or is being awaited rather than iterated. Awaiting one asks for
  * a finite answer to an unbounded question, and refusing by name is what keeps it from hanging.
  */
-export const REJECTED_STAGES: Record<string, string> = {
+export const REJECTED_STAGES = {
   [CHANGES_STAGE]:
     "A 'changes' feed must be the last stage of a query and must be iterated rather than awaited",
-};
+} satisfies Record<string, string>;
+
+function IsRejectedStage(name: string): name is keyof typeof REJECTED_STAGES {
+  return Object.hasOwn(REJECTED_STAGES, name);
+}
 
 function StageError(name: string): Error {
-  if (Object.hasOwn(REJECTED_STAGES, name)) {
+  if (IsRejectedStage(name)) {
     return new Error(REJECTED_STAGES[name]);
   }
   if (Object.hasOwn(DEFERRED_STAGES, name)) {

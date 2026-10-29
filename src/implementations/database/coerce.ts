@@ -11,8 +11,8 @@ import {
   JsonOf,
   OPAQUE,
   PhysicalType,
-  ShapeOf,
-  type SqlShape,
+  KeyTypesOf,
+  type KeyTypes,
   type SqlType,
 } from "./types";
 
@@ -53,22 +53,25 @@ function UnifySameKind(left: SqlType, right: SqlType): SqlType {
     return ArrayOf(Unify(left.elem, right.elem));
   }
   if (left.kind === "json" && right.kind === "json") {
-    return JsonOf(UnifyShapes(left.shape, right.shape));
+    return JsonOf(UnifyKeyTypes(left.keys, right.keys));
   }
   return left;
 }
 
-function UnifyShapes(left?: SqlShape, right?: SqlShape): SqlShape | undefined {
+function UnifyKeyTypes(
+  left?: KeyTypes,
+  right?: KeyTypes,
+): KeyTypes | undefined {
   if (!left || !right) {
     return undefined;
   }
-  const shape: Record<string, SqlType> = {};
+  const keyTypes: Record<string, SqlType> = {};
   for (const [name, type] of Object.entries(left)) {
     if (Object.hasOwn(right, name)) {
-      shape[name] = Unify(type, right[name]);
+      keyTypes[name] = Unify(type, right[name]);
     }
   }
-  return Object.keys(shape).length > 0 ? shape : undefined;
+  return Object.keys(keyTypes).length > 0 ? keyTypes : undefined;
 }
 
 /**
@@ -86,18 +89,18 @@ function UnifyShapes(left?: SqlShape, right?: SqlShape): SqlShape | undefined {
  * rather than to the bottom type they would then have to decode as raw json.
  */
 export function Widen(left: SqlType, right: SqlType): SqlType {
-  const leftShape = ShapeOf(left);
-  const rightShape = ShapeOf(right);
-  if (!leftShape || !rightShape) {
+  const leftKeys = KeyTypesOf(left);
+  const rightKeys = KeyTypesOf(right);
+  if (!leftKeys || !rightKeys) {
     return Unify(left, right);
   }
-  const shape: Record<string, SqlType> = { ...leftShape };
-  for (const [name, type] of Object.entries(rightShape)) {
-    shape[name] = Object.hasOwn(leftShape, name)
-      ? Unify(leftShape[name], type)
+  const keyTypes = { ...leftKeys };
+  for (const [name, type] of Object.entries(rightKeys)) {
+    keyTypes[name] = Object.hasOwn(leftKeys, name)
+      ? Unify(leftKeys[name], type)
       : type;
   }
-  return JsonOf(shape);
+  return JsonOf(keyTypes);
 }
 
 /**

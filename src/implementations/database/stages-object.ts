@@ -3,7 +3,7 @@ import { type Compiled, QuoteLiteral } from "./sql";
 import {
   ArrayOf,
   BOOL,
-  MergeShapes,
+  MergeKeyTypes,
   OPAQUE,
   type SqlType,
   TEXT,
@@ -58,7 +58,7 @@ const MergeStage = Lift((value, args, stage, context) => {
   const other = RequireOperand(args[FIRST_OPERAND], stage, FIRST_OPERAND);
   return {
     sql: Merged(AsJson(value), AsJson(other), context.nextAlias()),
-    type: MergeShapes(value.type, other.type),
+    type: MergeKeyTypes(value.type, other.type),
   };
 });
 

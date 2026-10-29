@@ -1,7 +1,7 @@
 import { AsJson } from "./readings";
 import { WithDefault } from "./coerce";
 import { type Compiled, QuoteLiteral } from "./sql";
-import { JsonOf, OPAQUE, ShapeOf, type SqlType } from "./types";
+import { JsonOf, OPAQUE, KeyTypesOf, type SqlType } from "./types";
 import { DecodeFunction, DecodeValue, NULL_JSON } from "./value";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { BuildDocument, type DocumentMember } from "./row-source";
@@ -64,11 +64,11 @@ const PluckStage: PipelineStage = (relation, stage, context) => {
 };
 
 function RemainingType(type: SqlType, removed: readonly string[]): SqlType {
-  const shape = ShapeOf(type);
-  if (!shape) {
+  const keyTypes = KeyTypesOf(type);
+  if (!keyTypes) {
     return OPAQUE;
   }
-  const kept = Object.entries(shape).filter(
+  const kept = Object.entries(keyTypes).filter(
     ([name]) => !removed.includes(name),
   );
   return JsonOf(Object.fromEntries(kept));

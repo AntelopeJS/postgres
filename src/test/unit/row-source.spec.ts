@@ -1,6 +1,6 @@
 import { expect } from "chai";
 
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import {
   ArrayOf,
   FLOAT,
@@ -17,7 +17,7 @@ import {
   JsonRowSource,
 } from "../../implementations/database/row-source";
 
-const vehicles: TableShape = {
+const vehicles: TableModel = {
   fields: {
     car: { column: "car", type: TEXT },
     price: { column: "price", type: FLOAT },
@@ -25,7 +25,7 @@ const vehicles: TableShape = {
   },
 };
 
-const catalog: TableShape = {
+const catalog: TableModel = {
   fields: {
     car: { column: "car", type: TEXT },
     metadata: { column: "metadata", type: JsonOf({ level: FLOAT }) },
@@ -100,7 +100,7 @@ describe("ColumnRowSource", () => {
 
   it("exposes a shape including the primary key and the instance", () => {
     expect(
-      new ColumnRowSource(AliasedColumns("t"), vehicles).shape(),
+      new ColumnRowSource(AliasedColumns("t"), vehicles).keyTypes(),
     ).to.deep.equal({
       _id: TEXT,
       _instance: TEXT,

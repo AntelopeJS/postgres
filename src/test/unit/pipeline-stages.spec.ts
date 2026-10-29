@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { SingleSelection } from "@antelopejs/interface-database";
 import {
   QueryStage,
-  type StagedObject,
+  StagedObject,
 } from "@antelopejs/interface-database/common";
 
 import { Root } from "./pipeline-fixture";
@@ -64,9 +64,7 @@ const NON_STAGE_METHODS: readonly string[] = [
 const PROBE_TABLE_ID = "probe";
 const MAX_STAGE_ARITY = 3;
 
-type ProbeRow = Record<string, unknown>;
-type StageMethod = (...args: unknown[]) => StagedObject;
-type MethodBag = Record<string, StageMethod>;
+type ProbeRow = { id: string };
 type BuilderFactory = () => StagedObject;
 
 const BUILDER_ROOTS: readonly BuilderFactory[] = [
@@ -87,7 +85,7 @@ function Intersection(
   return left.filter((name) => other.has(name));
 }
 
-function Identity(value: unknown): unknown {
+function Identity<Value>(value: Value): Value {
   return value;
 }
 
@@ -108,34 +106,46 @@ function ProbeArguments(method: string): unknown[] {
   return Array.from({ length: MAX_STAGE_ARITY }, () => Identity);
 }
 
-function OwnStageMethods(level: object): string[] {
-  const members = level as Record<string, unknown>;
-  return Object.getOwnPropertyNames(level).filter(
-    (name) =>
-      typeof members[name] === "function" && !NON_STAGE_METHODS.includes(name),
-  );
+function OwnStageMethods(members: PropertyDescriptorMap): [string, Function][] {
+  const methods: [string, Function][] = [];
+  for (const [name, descriptor] of Object.entries(members)) {
+    const value: unknown = descriptor.value;
+    if (value instanceof Function && !NON_STAGE_METHODS.includes(name)) {
+      methods.push([name, value]);
+    }
+  }
+  return methods;
 }
 
-function ChainMethods(builder: StagedObject): string[] {
-  const names = new Set<string>();
+/** The stage methods a builder answers, each as the most derived level of its chain defines it. */
+function ChainMethods(builder: StagedObject): Map<string, Function> {
+  const methods = new Map<string, Function>();
   let level: object | null = Object.getPrototypeOf(builder);
   while (level !== null && level !== Object.prototype) {
-    for (const name of OwnStageMethods(level)) {
-      names.add(name);
+    for (const [name, method] of OwnStageMethods(
+      Object.getOwnPropertyDescriptors(level),
+    )) {
+      if (!methods.has(name)) {
+        methods.set(name, method);
+      }
     }
     level = Object.getPrototypeOf(level);
   }
-  return [...names];
+  return methods;
 }
 
 function RecordedStage(
   make: BuilderFactory,
-  method: string,
+  name: string,
+  method: Function,
 ): string | undefined {
   const root = make();
   const depth = root.build().length;
-  const methods = root as unknown as MethodBag;
-  const stages = methods[method](...ProbeArguments(method)).build();
+  const staged: unknown = method.apply(root, ProbeArguments(name));
+  if (!(staged instanceof StagedObject)) {
+    throw new TypeError(`${name} did not answer a staged object`);
+  }
+  const stages = staged.build();
   return stages.length > depth ? stages[stages.length - 1].stage : undefined;
 }
 
@@ -149,8 +159,8 @@ function RecordedStage(
 function ContractStages(): string[] {
   const names = new Set<string>();
   for (const make of BUILDER_ROOTS) {
-    for (const method of ChainMethods(make())) {
-      const stage = RecordedStage(make, method);
+    for (const [name, method] of ChainMethods(make())) {
+      const stage = RecordedStage(make, name, method);
       if (stage !== undefined) {
         names.add(stage);
       }
@@ -165,7 +175,7 @@ function ContractStages(): string[] {
  * A terminal write is not a pipeline stage — it produces a statement rather than a relation — so
  * the accounting reads both dispatch maps, and a name in either one may not also be declined.
  */
-function DispatchedStages(): Record<string, string[]> {
+function DispatchedStages() {
   return {
     pipeline: Object.keys(PIPELINE_STAGES),
     write: Object.keys(WRITE_STAGES),

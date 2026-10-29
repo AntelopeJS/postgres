@@ -14,8 +14,6 @@ import {
 } from "../implementations/database/pipeline";
 import { Native, NativeCount, RegisterSales, type SalesTables } from "./sales";
 
-type Row = Record<string, unknown>;
-
 type IntegerComparison = "gt" | "ge" | "lt" | "le" | "eq";
 
 let sales: Schema<SalesTables>;
@@ -39,8 +37,11 @@ async function Plan(query: StagedObject): Promise<string> {
   const client = await AcquireClient();
   try {
     await client.query("SET enable_seqscan = off");
-    const plan = await client.query(`EXPLAIN ${sql}`, context.params.all());
-    return plan.rows.map((row: Row) => String(row["QUERY PLAN"])).join("\n");
+    const plan = await client.query<{ "QUERY PLAN": string }>(
+      `EXPLAIN ${sql}`,
+      context.params.all(),
+    );
+    return plan.rows.map((row) => String(row["QUERY PLAN"])).join("\n");
   } finally {
     await client.query("RESET enable_seqscan");
     client.release();
@@ -123,13 +124,15 @@ describe("numbers read from an external relation's exact types", () => {
     expect(total).to.equal(expected.total);
   });
 
-  for (const [method, operator] of [
+  const INTEGER_COMPARISONS: [IntegerComparison, string][] = [
     ["gt", ">"],
     ["ge", ">="],
     ["lt", "<"],
     ["le", "<="],
     ["eq", "="],
-  ] as [IntegerComparison, string][]) {
+  ];
+
+  for (const [method, operator] of INTEGER_COMPARISONS) {
     it(`keeps the meaning of '${operator} 5.5' on an integer column`, async () => {
       const total = await Table("accounts")
         .filter((row) => row.key("score")[method](5.5))
@@ -148,12 +151,14 @@ describe("inequality against an external column's own type", () => {
     sales = await RegisterSales();
   });
 
-  for (const [field, value, expected] of [
+  const INEQUALITIES: [string, string | number, number][] = [
     ["ref", "not-a-uuid", 2],
     ["ref", "", 2],
     ["n", 5.5, 2],
     ["n", 5, 1],
-  ] as [string, string | number, number][]) {
+  ];
+
+  for (const [field, value, expected] of INEQUALITIES) {
     it(`answers ${field} ne ${JSON.stringify(value)} as the complement of eq, keeping NULL rows`, async () => {
       const unequal = await Table("flags")
         .filter((row) => row.key(field).ne(value))

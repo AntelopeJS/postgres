@@ -12,6 +12,7 @@ import {
   type RelationFlag,
   SetProjection,
 } from "./relation";
+import { IsString } from "./guards";
 
 /**
  * An aggregate reads whichever rows the relation has already selected.
@@ -73,7 +74,7 @@ export function NamedField(stage: QueryStage): string | undefined {
     return undefined;
   }
   assert(
-    typeof field === "string",
+    IsString(field),
     `The '${stage.stage}' stage was given a field that is not a name`,
   );
   return field;

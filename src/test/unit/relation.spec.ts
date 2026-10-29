@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
 import { Occurrences, RefusingCompilers } from "./spec-fixture";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import {
   FLOAT,
@@ -24,7 +24,7 @@ import {
   ValueRelation,
 } from "../../implementations/database/relation";
 
-const VEHICLES: TableShape = {
+const VEHICLES: TableModel = {
   fields: {
     car: { column: "car", type: TEXT },
     price: { column: "price", type: FLOAT },
@@ -60,7 +60,7 @@ function NewOrigin(): TableOrigin {
   return {
     schemaId: "shop",
     tableId: "vehicles",
-    shape: VEHICLES,
+    model: VEHICLES,
     index: (name) => [name],
   };
 }

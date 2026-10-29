@@ -23,8 +23,8 @@ import {
 import {
   type FieldSpec,
   PhysicalOrder,
-  type SchemaShape,
-  type TableShape,
+  type SchemaModel,
+  type TableModel,
 } from "./fields";
 import {
   CrossInstanceIndexName,
@@ -180,16 +180,15 @@ export function ColumnDdl(column: ColumnPlan): string {
   return parts.join(" ");
 }
 
-const RESERVED_INDEX_KEYS: Record<string, string> = {
-  [ID_COLUMN]: QuoteIdentifier(ID_COLUMN),
-};
+const RESERVED_INDEX_KEYS = new Map([[ID_COLUMN, QuoteIdentifier(ID_COLUMN)]]);
 
 function IndexKey(indexId: string, field: string, spec?: FieldSpec): string {
   if (spec) {
     return QuoteIdentifier(spec.column);
   }
-  if (Object.hasOwn(RESERVED_INDEX_KEYS, field)) {
-    return RESERVED_INDEX_KEYS[field];
+  const reserved = RESERVED_INDEX_KEYS.get(field);
+  if (reserved !== undefined) {
+    return reserved;
   }
   if (RESERVED_COLUMNS.includes(field)) {
     throw new Error(
@@ -210,9 +209,9 @@ export function IndexFields(indexId: string, index: IndexDefinition): string[] {
 
 type IndexSpecs = readonly (FieldSpec | undefined)[];
 
-function IndexSpecs(fields: readonly string[], shape: TableShape): IndexSpecs {
+function IndexSpecs(fields: readonly string[], model: TableModel): IndexSpecs {
   return fields.map((field) =>
-    Object.hasOwn(shape.fields, field) ? shape.fields[field] : undefined,
+    Object.hasOwn(model.fields, field) ? model.fields[field] : undefined,
   );
 }
 
@@ -252,10 +251,10 @@ function BuildIndexPlans(
   tableId: string,
   indexId: string,
   index: IndexDefinition,
-  shape: TableShape,
+  model: TableModel,
 ): IndexPlan[] {
   const fields = IndexFields(indexId, index);
-  const specs = IndexSpecs(fields, shape);
+  const specs = IndexSpecs(fields, model);
   const keys = fields.map((field, position) =>
     IndexKey(indexId, field, specs[position]),
   );
@@ -283,20 +282,20 @@ function BuildIndexPlans(
 export function ServesCrossInstance(
   indexId: string,
   index: IndexDefinition,
-  shape: TableShape,
+  model: TableModel,
 ): boolean {
   if (index.crossInstance === true) {
     return true;
   }
-  return IsElementWise(index, IndexSpecs(IndexFields(indexId, index), shape));
+  return IsElementWise(index, IndexSpecs(IndexFields(indexId, index), model));
 }
 
 export function BuildTablePlan(
   tableId: string,
   definition: TableDefinition,
-  shape: TableShape,
+  model: TableModel,
 ): TablePlan {
-  const declared: ColumnPlan[] = Object.entries(shape.fields).map(
+  const declared: ColumnPlan[] = Object.entries(model.fields).map(
     ([field, spec]) => ({
       name: spec.column,
       type: PhysicalType(spec.type),
@@ -308,7 +307,7 @@ export function BuildTablePlan(
     table: TableName(tableId),
     columns: PhysicalOrder(ID_PLAN, INSTANCE_PLAN, declared, EXTRA_PLAN),
     indexes: Object.entries(definition.indexes ?? {}).flatMap(
-      ([indexId, index]) => BuildIndexPlans(tableId, indexId, index, shape),
+      ([indexId, index]) => BuildIndexPlans(tableId, indexId, index, model),
     ),
   };
 }
@@ -365,10 +364,10 @@ export function AssertDistinctNames(plans: readonly TablePlan[]): void {
  */
 export function BuildSchemaPlan(
   schema: SchemaDefinition,
-  shape: SchemaShape,
+  model: SchemaModel,
 ): TablePlan[] {
   const plans = Object.entries(schema).map(([tableId, definition]) =>
-    BuildTablePlan(tableId, definition, shape[tableId]),
+    BuildTablePlan(tableId, definition, model[tableId]),
   );
   AssertDistinctNames(plans);
   return plans;
@@ -411,16 +410,16 @@ export function IsAdapterIndex(signature?: string): boolean {
 const DESTRUCTIVE: MigrationMode = "destructive";
 const CAST_PIVOT_TYPE = PhysicalType(TEXT);
 
-const CANONICAL_TYPES: Record<string, string> = {
-  text: "text",
-  "double precision": "double precision",
-  boolean: "boolean",
-  timestamptz: "timestamp with time zone",
-  jsonb: "jsonb",
-};
+const CANONICAL_TYPES = new Map([
+  ["text", "text"],
+  ["double precision", "double precision"],
+  ["boolean", "boolean"],
+  ["timestamptz", "timestamp with time zone"],
+  ["jsonb", "jsonb"],
+]);
 
 function Canonical(type: string): string {
-  return Object.hasOwn(CANONICAL_TYPES, type) ? CANONICAL_TYPES[type] : type;
+  return CANONICAL_TYPES.get(type) ?? type;
 }
 
 function AlterTable(target: string, action: string): string {

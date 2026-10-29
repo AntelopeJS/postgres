@@ -2,7 +2,11 @@ import assert from "node:assert";
 
 import type { QueryStage } from "./utils";
 import { InsertWrite } from "./writes-insert";
-import { EXTERNAL_WRITES, IsExternalTarget } from "./external-writes";
+import {
+  EXTERNAL_WRITES,
+  IsExternalTarget,
+  IsExternalWriteStage,
+} from "./external-writes";
 import type { DecodingContext } from "./context";
 import { ATOMIC_MUTATION, AtomicWrite } from "./writes-atomic";
 import { DeleteWrite, ReplaceWrite, UpdateWrite } from "./writes-identity";
@@ -42,13 +46,17 @@ export interface WriteSplit {
  * `Query` no chain methods — so no compiler can ever need the dispatch that called it, which is
  * what makes that cut available at all.
  */
-export const WRITE_STAGES: WriteSpecMap = {
+export const WRITE_STAGES = {
   [ATOMIC_MUTATION]: { compile: AtomicWrite, readsRelation: false },
   insert: { compile: InsertWrite, readsRelation: false },
   update: { compile: UpdateWrite, readsRelation: true },
   replace: { compile: ReplaceWrite, readsRelation: true },
   delete: { compile: DeleteWrite, readsRelation: true },
-};
+} satisfies WriteSpecMap;
+
+function IsWriteStage(name: string): name is keyof typeof WRITE_STAGES {
+  return Object.hasOwn(WRITE_STAGES, name);
+}
 
 function RefuseWrites(stages: QueryStage[]): void {
   for (const stage of stages) {
@@ -88,7 +96,7 @@ function RefuseDiscardedStages(
  */
 export function SplitWrite(stages: QueryStage[]): WriteSplit {
   const last = stages[stages.length - 1];
-  if (!last || !Object.hasOwn(WRITE_STAGES, last.stage)) {
+  if (!last || !IsWriteStage(last.stage)) {
     RefuseWrites(stages);
     return { pipeline: stages };
   }
@@ -103,13 +111,10 @@ export function CompileWrite(
   stage: QueryStage,
   context: DecodingContext,
 ): WriteStatement {
-  assert(
-    Object.hasOwn(WRITE_STAGES, stage.stage),
-    `Unsupported write stage '${stage.stage}'`,
-  );
+  assert(IsWriteStage(stage.stage), `Unsupported write stage '${stage.stage}'`);
   if (IsExternalTarget(target)) {
     assert(
-      Object.hasOwn(EXTERNAL_WRITES, stage.stage),
+      IsExternalWriteStage(stage.stage),
       `The '${stage.stage}' stage is not supported on an external relation`,
     );
     return EXTERNAL_WRITES[stage.stage](target, stage, context);

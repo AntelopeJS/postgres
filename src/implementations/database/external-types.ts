@@ -345,10 +345,11 @@ export function DescribeKeyColumns(
     const column = columns.get(name);
     return column ? DescribeKey(column) : undefined;
   });
-  if (described.length === 0 || described.some((part) => !part)) {
+  const parts = described.filter((part) => part !== undefined);
+  if (described.length === 0 || parts.length !== described.length) {
     return undefined;
   }
-  return described as ColumnDescriptor[];
+  return parts;
 }
 
 /** Converts the other operand of a comparison, read as the declared kind, to the column's type. */

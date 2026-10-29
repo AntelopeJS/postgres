@@ -9,7 +9,7 @@ import {
   JsonOf,
   OPAQUE,
   PhysicalType,
-  ShapeOf,
+  KeyTypesOf,
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
@@ -32,19 +32,19 @@ describe("SqlType", () => {
 
   it("separates a shape that is empty from one that is unknown", () => {
     expect(JsonOf(undefined)).to.equal(OPAQUE);
-    expect(JsonOf({})).to.deep.equal({ kind: "json", shape: {} });
+    expect(JsonOf({})).to.deep.equal({ kind: "json", keys: {} });
   });
 
   it("calls only an absent shape the bottom type", () => {
-    expect(IsOpaque({ kind: "json", shape: {} })).to.equal(false);
+    expect(IsOpaque({ kind: "json", keys: {} })).to.equal(false);
     expect(IsOpaque(OPAQUE)).to.equal(true);
   });
 
   it("reads the members of a shaped json and nothing else", () => {
-    expect(ShapeOf(JsonOf({ a: TEXT }))).to.deep.equal({ a: TEXT });
-    expect(ShapeOf(OPAQUE)).to.equal(undefined);
-    expect(ShapeOf(ArrayOf(TEXT))).to.equal(undefined);
-    expect(ShapeOf(TEXT)).to.equal(undefined);
+    expect(KeyTypesOf(JsonOf({ a: TEXT }))).to.deep.equal({ a: TEXT });
+    expect(KeyTypesOf(OPAQUE)).to.equal(undefined);
+    expect(KeyTypesOf(ArrayOf(TEXT))).to.equal(undefined);
+    expect(KeyTypesOf(TEXT)).to.equal(undefined);
   });
 
   it("reports jsonb-backed kinds", () => {

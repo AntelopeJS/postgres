@@ -10,7 +10,7 @@ import { IsExternal } from "../../config";
 import { DescribeExternalSchema } from "./external-schema";
 import { ServesCrossInstance } from "./ddl";
 import { BuildIndexes, ConvergeTables } from "./migrate";
-import { ParseSchema, type SchemaShape, type TableShape } from "./fields";
+import { ParseSchema, type SchemaModel, type TableModel } from "./fields";
 
 /** Told the name a `CROSS_INSTANCE` read scans a table by. */
 export type CrossInstanceScanNotice = (indexId: string) => void;
@@ -18,7 +18,7 @@ export type CrossInstanceScanNotice = (indexId: string) => void;
 type TableScanNotices = Record<string, CrossInstanceScanNotice>;
 
 const definitions: Record<string, SchemaDefinition> = {};
-const shapes: Record<string, SchemaShape> = {};
+const schemaModels: Record<string, SchemaModel> = {};
 const scanNotices: Record<string, TableScanNotices> = {};
 const ready: Record<string, Promise<void>> = {};
 const indexing: Record<string, Promise<void>> = {};
@@ -35,11 +35,11 @@ function UnservedScanWarning(
 /** The declared indexes of a table no unprefixed physical index backs. */
 function UnservedIndexes(
   table: TableDefinition,
-  shape: TableShape,
+  model: TableModel,
 ): Set<string> {
   const indexes = Object.entries(table.indexes ?? {});
   const unserved = indexes.filter(
-    ([indexId, index]) => !ServesCrossInstance(indexId, index, shape),
+    ([indexId, index]) => !ServesCrossInstance(indexId, index, model),
   );
   return new Set(unserved.map(([indexId]) => indexId));
 }
@@ -64,11 +64,11 @@ function ScanNotice(
 function SchemaScanNotices(
   schemaId: string,
   schema: SchemaDefinition,
-  shape: SchemaShape,
-): TableScanNotices {
+  model: SchemaModel,
+) {
   const notices: TableScanNotices = {};
   for (const [tableId, table] of Object.entries(schema)) {
-    const unserved = UnservedIndexes(table, shape[tableId]);
+    const unserved = UnservedIndexes(table, model[tableId]);
     notices[tableId] = ScanNotice(schemaId, tableId, unserved);
   }
   return notices;
@@ -77,7 +77,7 @@ function SchemaScanNotices(
 const NoScan: CrossInstanceScanNotice = () => {};
 
 /** An external table has no instances to scan across, so nothing ever warns about one. */
-function QuietNotices(schema: SchemaDefinition): TableScanNotices {
+function QuietNotices(schema: SchemaDefinition) {
   const notices: TableScanNotices = {};
   for (const tableId of Object.keys(schema)) {
     notices[tableId] = NoScan;
@@ -89,9 +89,13 @@ function QuietNotices(schema: SchemaDefinition): TableScanNotices {
 async function InitializeExternal(
   schemaId: string,
   schema: SchemaDefinition,
-  parsed: SchemaShape,
+  parsed: SchemaModel,
 ) {
-  shapes[schemaId] = await DescribeExternalSchema(schemaId, schema, parsed);
+  schemaModels[schemaId] = await DescribeExternalSchema(
+    schemaId,
+    schema,
+    parsed,
+  );
   scanNotices[schemaId] = QuietNotices(schema);
 }
 
@@ -100,14 +104,14 @@ async function InitializeExternal(
  * background, tracked in `indexing`, so the readiness gate never waits on an index build.
  */
 async function initialize(schemaId: string, schema: SchemaDefinition) {
-  const shape = ParseSchema(schemaId, schema);
+  const model = ParseSchema(schemaId, schema);
   if (IsExternal()) {
-    await InitializeExternal(schemaId, schema, shape);
+    await InitializeExternal(schemaId, schema, model);
     return;
   }
-  shapes[schemaId] = shape;
-  scanNotices[schemaId] = SchemaScanNotices(schemaId, schema, shape);
-  const plans = await ConvergeTables(schemaId, schema, shape);
+  schemaModels[schemaId] = model;
+  scanNotices[schemaId] = SchemaScanNotices(schemaId, schema, model);
+  const plans = await ConvergeTables(schemaId, schema, model);
   indexing[schemaId] = BuildIndexes(schemaId, plans);
   guardedWrites.delete(schemaId);
   if (DeclaresUniqueIndex(schema)) {
@@ -138,7 +142,7 @@ function DeclaresUniqueIndex(schema: SchemaDefinition): boolean {
  * the same id has already succeeded and installed its own definition, shape and gate. Deleting
  * unconditionally there wipes the live schema and leaves the worst of both: `ready[schemaId]` is
  * the second registration's *resolved* promise, so every subsequent query passes
- * {@link WaitForSchemaReady} and then dies in {@link GetTableShape} with `Unknown schema` — for a
+ * {@link WaitForSchemaReady} and then dies in {@link GetTableModel} with `Unknown schema` — for a
  * schema that is registered, converged, and whose tables exist. Comparing the gate against this
  * call's own promise is the same ownership test `migrate.ts:EnsureRegistry` already makes.
  */
@@ -148,7 +152,7 @@ export const Schemas = {
     const pending: Promise<void> = initialize(schemaId, schema).catch((err) => {
       if (ready[schemaId] === pending) {
         delete definitions[schemaId];
-        delete shapes[schemaId];
+        delete schemaModels[schemaId];
         delete scanNotices[schemaId];
         guardedWrites.delete(schemaId);
       }
@@ -160,7 +164,7 @@ export const Schemas = {
   },
   unregister(schemaId: string) {
     delete definitions[schemaId];
-    delete shapes[schemaId];
+    delete schemaModels[schemaId];
     delete scanNotices[schemaId];
     delete ready[schemaId];
     delete indexing[schemaId];
@@ -191,11 +195,11 @@ export function GetTable(schemaId: string, tableId: string): TableDefinition {
   return schema[tableId];
 }
 
-export function GetTableShape(schemaId: string, tableId: string): TableShape {
-  assert(Object.hasOwn(shapes, schemaId), MissingSchema(schemaId));
-  const shape = shapes[schemaId];
-  assert(Object.hasOwn(shape, tableId), MissingTable(schemaId, tableId));
-  return shape[tableId];
+export function GetTableModel(schemaId: string, tableId: string): TableModel {
+  assert(Object.hasOwn(schemaModels, schemaId), MissingSchema(schemaId));
+  const model = schemaModels[schemaId];
+  assert(Object.hasOwn(model, tableId), MissingTable(schemaId, tableId));
+  return model[tableId];
 }
 
 export function GetTableNames(schemaId: string): string[] {

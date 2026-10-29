@@ -14,17 +14,14 @@ import {
   FLOAT,
   JsonOf,
   OPAQUE,
-  type SqlShape,
+  type KeyTypes,
   type SqlType,
   TEXT,
   TIMESTAMP,
 } from "./types";
+import { IsObject, IsString } from "./guards";
 
-interface IoTsCodec {
-  is(value: unknown): boolean;
-  encode(value: never): unknown;
-  decode(value: unknown): unknown;
-}
+type IoTsCodec = Exclude<FieldType, StringFieldType>;
 
 export interface ParsedField {
   type: SqlType;
@@ -49,7 +46,7 @@ export interface ExternalRelation {
   key?: ColumnDescriptor[];
 }
 
-export interface TableShape {
+export interface TableModel {
   fields: Record<string, FieldSpec>;
   external?: ExternalRelation;
 }
@@ -62,8 +59,8 @@ export interface TableShape {
  * the field name whenever `PgIdentifier` truncated it, so a second spelling would
  * write one column and read another with nothing failing.
  */
-export function DeclaredColumns(shape: TableShape): string[] {
-  return Object.values(shape.fields).map((spec) => spec.column);
+export function DeclaredColumns(model: TableModel): string[] {
+  return Object.values(model.fields).map((spec) => spec.column);
 }
 
 /**
@@ -81,8 +78,8 @@ export function DeclaredColumns(shape: TableShape): string[] {
  * caller reading across instances which one each row came from, and the default instance answers
  * no key at all rather than the empty string it is stored as.
  */
-export function DocumentKeys(shape: TableShape): string[] {
-  return [ID_COLUMN, INSTANCE_COLUMN, ...Object.keys(shape.fields)];
+export function DocumentKeys(model: TableModel): string[] {
+  return [ID_COLUMN, INSTANCE_COLUMN, ...Object.keys(model.fields)];
 }
 
 /**
@@ -105,29 +102,37 @@ export function PhysicalOrder<T>(
   return [key, instance, ...declared, extra];
 }
 
-export interface SchemaShape {
-  [tableId: string]: TableShape;
+export interface SchemaModel {
+  [tableId: string]: TableModel;
 }
 
-const SCALAR_TYPES: Record<string, SqlType> = {
+const SCALAR_TYPES = {
   string: TEXT,
   number: FLOAT,
   boolean: BOOL,
   date: TIMESTAMP,
   object: OPAQUE,
   any: OPAQUE,
-};
+} satisfies Record<string, SqlType>;
+
+function IsScalarToken(token: string): token is keyof typeof SCALAR_TYPES {
+  return Object.hasOwn(SCALAR_TYPES, token);
+}
 
 const ARRAY_SUFFIX = "[]";
 const SUPPORTED_TOKENS = Object.keys(SCALAR_TYPES).join(", ");
 
-function AsCodec(value: object): IoTsCodec | undefined {
-  const candidate = value as Partial<IoTsCodec>;
-  const looksLikeCodec =
-    typeof candidate.encode === "function" &&
-    typeof candidate.decode === "function" &&
-    typeof candidate.is === "function";
-  return looksLikeCodec ? (value as IoTsCodec) : undefined;
+function IsCodec(
+  value: Exclude<FieldType, string | StringFieldType[]>,
+): value is IoTsCodec {
+  return (
+    "encode" in value &&
+    typeof value.encode === "function" &&
+    "decode" in value &&
+    typeof value.decode === "function" &&
+    "is" in value &&
+    typeof value.is === "function"
+  );
 }
 
 function UnsupportedFieldType(token: string, path: string): Error {
@@ -141,25 +146,25 @@ function ParseToken(token: string, path: string): SqlType {
   if (normalized.endsWith(ARRAY_SUFFIX)) {
     return ArrayOf(ParseToken(normalized.slice(0, -ARRAY_SUFFIX.length), path));
   }
-  if (!Object.hasOwn(SCALAR_TYPES, normalized)) {
+  if (!IsScalarToken(normalized)) {
     throw UnsupportedFieldType(token, path);
   }
   return SCALAR_TYPES[normalized];
 }
 
-function ParseShape(
+function ParseKeyTypes(
   record: Record<string, StringFieldType>,
   path: string,
-): SqlShape {
-  const shape: Record<string, SqlType> = {};
+): KeyTypes {
+  const keyTypes: Record<string, SqlType> = {};
   for (const [name, value] of Object.entries(record)) {
-    shape[name] = ParseFieldType(value, `${path}.${name}`).type;
+    keyTypes[name] = ParseFieldType(value, `${path}.${name}`).type;
   }
-  return shape;
+  return keyTypes;
 }
 
 export function ParseFieldType(field: FieldType, path: string): ParsedField {
-  if (typeof field === "string") {
+  if (IsString(field)) {
     return { type: ParseToken(field, path) };
   }
   if (Array.isArray(field)) {
@@ -170,15 +175,14 @@ export function ParseFieldType(field: FieldType, path: string): ParsedField {
     }
     return { type: ArrayOf(ParseFieldType(field[0], path).type) };
   }
-  if (typeof field !== "object" || field === null) {
+  if (!IsObject(field)) {
     throw UnsupportedFieldType(String(field), path);
   }
-  const codec = AsCodec(field);
-  if (codec) {
-    return { type: OPAQUE, codec };
+  if (IsCodec(field)) {
+    return { type: OPAQUE, codec: field };
   }
   return {
-    type: JsonOf(ParseShape(field as Record<string, StringFieldType>, path)),
+    type: JsonOf(ParseKeyTypes(field, path)),
   };
 }
 
@@ -203,7 +207,7 @@ function AssertKeyRestated(declared: FieldType, path: string): void {
   }
 }
 
-export function ParseTable(table: TableDefinition, path: string): TableShape {
+export function ParseTable(table: TableDefinition, path: string): TableModel {
   const fields: Record<string, FieldSpec> = {};
   const owners = new Map<string, string>();
   for (const [name, declared] of Object.entries(table.fields ?? {})) {
@@ -233,8 +237,8 @@ export function ParseTable(table: TableDefinition, path: string): TableShape {
 export function ParseSchema(
   schemaId: string,
   schema: SchemaDefinition,
-): SchemaShape {
-  const tables: SchemaShape = {};
+): SchemaModel {
+  const tables: SchemaModel = {};
   for (const [tableId, table] of Object.entries(schema)) {
     tables[tableId] = ParseTable(table, `${schemaId}.${tableId}`);
   }

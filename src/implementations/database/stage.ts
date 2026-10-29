@@ -4,6 +4,7 @@ import type { Compiled } from "./sql";
 import { DecodeValue } from "./value";
 import type { DecodingContext } from "./context";
 import { JsonRowSource, type RowSource } from "./row-source";
+import { IsString } from "./guards";
 
 /**
  * Accumulator threaded through the stages of one expression.
@@ -89,8 +90,7 @@ export function FieldNames(
   index: number = FIRST_OPERAND,
 ): string[] {
   const fields = stage.args[index];
-  const named =
-    Array.isArray(fields) && fields.every((field) => typeof field === "string");
+  const named = Array.isArray(fields) && fields.every(IsString);
   if (!named) {
     throw new Error(`Stage '${stage.stage}' requires a list of field names`);
   }
@@ -134,7 +134,7 @@ export function LiftRaw(handler: RawValueStage): StageHandler {
 export function BuildStages<Operator>(
   operators: Record<string, Operator>,
   build: (operator: Operator) => StageHandler,
-): StageMap {
+) {
   const stages: StageMap = {};
   for (const [name, operator] of Object.entries(operators)) {
     stages[name] = build(operator);
@@ -158,7 +158,7 @@ export function FieldOf(
 ): Compiled {
   const def = DecodeValue(stage.args[SECOND_OPERAND], context);
   const name = stage.args[FIRST_OPERAND];
-  if (typeof name === "string") {
+  if (IsString(name)) {
     return source.field(name, def);
   }
   const key = RequireOperand(DecodeValue(name, context), stage, FIRST_OPERAND);

@@ -5,7 +5,7 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 import { RefusingCompilers } from "./spec-fixture";
 import { GuardJson } from "../../implementations/database/jsonb";
 import type { Compiled } from "../../implementations/database/sql";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import {
   CompileExpression,
@@ -42,7 +42,7 @@ const ROW_ID = LAMBDA_ID_FLOOR - 1;
 const VALUE_ID = LAMBDA_ID_FLOOR - 2;
 const SUBQUERY_ID = LAMBDA_ID_FLOOR - 3;
 
-const users: TableShape = {
+const users: TableModel = {
   fields: {
     age: { column: "age", type: FLOAT },
     name: { column: "name", type: TEXT },
@@ -221,14 +221,14 @@ describe("obj_index", () => {
 
   it("falls to a dynamic lookup when the key is a value proxy", () => {
     const out = Compile((doc) =>
-      doc.key("metadata").key(ValueProxy.constant("level") as never),
+      doc.key("metadata").key(ValueProxy.constant("level")),
     );
     expect(out.sql).to.equal(`("t"."metadata" -> ($1::text))`);
     expect(out.type).to.equal(OPAQUE);
   });
 
   it("materializes the whole row for a dynamic key over a column source", () => {
-    const out = Compile((doc) => doc.key(ValueProxy.constant("age") as never));
+    const out = Compile((doc) => doc.key(ValueProxy.constant("age")));
     expect(out.sql).to.contain("jsonb_strip_nulls(jsonb_build_object('_id'");
     expect(out.sql).to.contain(`-> ($1::text))`);
     expect(out.type).to.equal(OPAQUE);
@@ -236,7 +236,7 @@ describe("obj_index", () => {
 
   it("applies a default to a dynamic key", () => {
     const out = Compile((doc) =>
-      doc.key("metadata").key(ValueProxy.constant("level") as never, 0),
+      doc.key("metadata").key(ValueProxy.constant("level"), 0),
     );
     expect(out.sql).to.equal(
       `COALESCE(NULLIF(("t"."metadata" -> ($2::text)), 'null'::jsonb), to_jsonb(($1::double precision)))`,
@@ -269,7 +269,7 @@ describe("default", () => {
     expect(out.sql).to.equal(
       `COALESCE(NULLIF(("t"."_extra" -> 'meta'), 'null'::jsonb), jsonb_build_object())`,
     );
-    expect(out.type).to.deep.equal({ kind: "json", shape: {} });
+    expect(out.type).to.deep.equal({ kind: "json", keys: {} });
   });
 
   /**

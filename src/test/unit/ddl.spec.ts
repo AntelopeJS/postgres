@@ -232,10 +232,10 @@ describe("BuildTablePlan", () => {
     const index = hostilePlan.indexes[0];
     const comment = CreateIndexSql("shop", hostilePlan, index)[1];
     const matched = COMMENT_PATTERN.exec(comment);
-    expect(matched, comment).to.not.equal(null);
-    expect(DecodeLiteral((matched as RegExpExecArray)[1])).to.equal(
-      index.signature,
-    );
+    if (matched === null) {
+      expect.fail(comment);
+    }
+    expect(DecodeLiteral(matched[1])).to.equal(index.signature);
   });
 
   it("builds a unique index keyed by instance, with a marked signature", () => {
@@ -278,20 +278,20 @@ describe("BuildTablePlan", () => {
 });
 
 describe("ServesCrossInstance", () => {
-  const shape = ParseTable(vehicles, "s.vehicles");
+  const model = ParseTable(vehicles, "s.vehicles");
 
   it("is true for a declared crossInstance index", () => {
     expect(
-      ServesCrossInstance("price", { crossInstance: true }, shape),
+      ServesCrossInstance("price", { crossInstance: true }, model),
     ).to.equal(true);
   });
 
   it("is false for a btree index that is not crossInstance", () => {
-    expect(ServesCrossInstance("price", {}, shape)).to.equal(false);
+    expect(ServesCrossInstance("price", {}, model)).to.equal(false);
   });
 
   it("is true for a gin index, which carries no instance prefix", () => {
-    expect(ServesCrossInstance("tags", { multi: true }, shape)).to.equal(true);
+    expect(ServesCrossInstance("tags", { multi: true }, model)).to.equal(true);
   });
 });
 
@@ -381,13 +381,13 @@ const everyType: TableDefinition = {
   indexes: {},
 };
 
-const CATALOG_TYPES: Record<string, string> = {
-  text: "text",
-  "double precision": "double precision",
-  boolean: "boolean",
-  timestamptz: "timestamp with time zone",
-  jsonb: "jsonb",
-};
+const CATALOG_TYPES = new Map([
+  ["text", "text"],
+  ["double precision", "double precision"],
+  ["boolean", "boolean"],
+  ["timestamptz", "timestamp with time zone"],
+  ["jsonb", "jsonb"],
+]);
 
 const EMPTY: ActualTable = { columns: [], indexes: [] };
 
@@ -400,7 +400,7 @@ const FULL_COLUMNS: ActualColumn[] = [
   { name: "_extra", type: "jsonb" },
 ];
 
-const RETYPED_COLUMNS: ActualColumn[] = FULL_COLUMNS.map((column) =>
+const RETYPED_COLUMNS = FULL_COLUMNS.map((column) =>
   column.name === "price" ? { name: column.name, type: "text" } : column,
 );
 
@@ -409,7 +409,7 @@ const RETIRED_COLUMNS: ActualColumn[] = [
   { name: "retired", type: "text" },
 ];
 
-const UNCASTABLE_COLUMNS: ActualColumn[] = FULL_COLUMNS.map((column) =>
+const UNCASTABLE_COLUMNS = FULL_COLUMNS.map((column) =>
   column.name === "price" ? { name: column.name, type: "boolean" } : column,
 );
 
@@ -455,10 +455,11 @@ function SignedIndexes(plan: TablePlan): ActualIndex[] {
 }
 
 function CatalogType(type: string): string {
-  if (!Object.hasOwn(CATALOG_TYPES, type)) {
+  const spelling = CATALOG_TYPES.get(type);
+  if (spelling === undefined) {
     throw new Error(`No catalog spelling recorded for physical type '${type}'`);
   }
-  return CATALOG_TYPES[type];
+  return spelling;
 }
 
 function CatalogColumns(plan: TablePlan): ActualColumn[] {

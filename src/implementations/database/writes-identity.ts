@@ -4,13 +4,13 @@ import { AsJson } from "./readings";
 import { FIRST_OPERAND } from "./stage";
 import { PRIMARY_KEY_COLUMNS } from "./ddl";
 import { JsonRowSource } from "./row-source";
-import { JsonOf, type SqlShape } from "./types";
+import { JsonOf, type KeyTypes } from "./types";
 import type { DecodingContext } from "./context";
 import { Render, type TableOrigin } from "./relation";
 import { GuardJson, OBJECT_TYPEOF, TextArray } from "./jsonb";
 import { EXTRA_COLUMN, ID_COLUMN, type QueryStage } from "./utils";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
-import { DeclaredColumns, DocumentKeys, type TableShape } from "./fields";
+import { DeclaredColumns, DocumentKeys, type TableModel } from "./fields";
 import {
   DecodeValue,
   FunctionBody,
@@ -180,7 +180,7 @@ function ChangedPayload(
   target: WriteTarget,
   context: DecodingContext,
 ): PayloadSplit {
-  return SplitPayload(document, target.origin.shape, context, CHANGED);
+  return SplitPayload(document, target.origin.model, context, CHANGED);
 }
 
 /**
@@ -238,10 +238,10 @@ function ChangedColumnsOf(
  */
 function ReplacedColumns(
   split: PayloadSplit,
-  shape: TableShape,
+  model: TableModel,
 ): WrittenColumn[] {
   const supplied = MembersByColumn(split);
-  const written = DeclaredColumns(shape).map((column) => ({
+  const written = DeclaredColumns(model).map((column) => ({
     column,
     value: supplied.get(column)?.sql ?? NULL_VALUE,
   }));
@@ -253,9 +253,9 @@ function ReplacedColumns(
 }
 
 /** The types a mapper's document carries, keyed the way the document is: by field name. */
-function MappedShape(shape: TableShape): SqlShape {
+function MappedKeyTypes(model: TableModel): KeyTypes {
   return Object.fromEntries(
-    Object.entries(shape.fields).map(([name, spec]) => [name, spec.type]),
+    Object.entries(model.fields).map(([name, spec]) => [name, spec.type]),
   );
 }
 
@@ -263,8 +263,8 @@ function MappedShape(shape: TableShape): SqlShape {
  * The mapper's document with everything that has a column of its own taken out of it.
  * Guarded on the document being an object and defaulted to an empty one, since the column is `NOT NULL`.
  */
-function MappedExtra(mapped: Compiled, shape: TableShape): string {
-  const kept = `(${mapped.sql} - ${TextArray(DocumentKeys(shape))})`;
+function MappedExtra(mapped: Compiled, model: TableModel): string {
+  const kept = `(${mapped.sql} - ${TextArray(DocumentKeys(model))})`;
   return `COALESCE(${GuardJson(mapped, OBJECT_TYPEOF, kept)}, ${EMPTY_EXTRA})`;
 }
 
@@ -292,14 +292,14 @@ function MultiAssignment(
   const alias = context.nextAlias();
   const mapped: Compiled = {
     sql: QualifiedColumn(alias, MAPPED_COLUMN),
-    type: JsonOf(MappedShape(origin.shape)),
+    type: JsonOf(MappedKeyTypes(origin.model)),
   };
   const source = new JsonRowSource(mapped);
-  const declared = Object.entries(origin.shape.fields);
+  const declared = Object.entries(origin.model.fields);
   const columns = [...declared.map(([, spec]) => spec.column), EXTRA_COLUMN];
   const reads = [
     ...declared.map(([name]) => source.field(name).sql),
-    MappedExtra(mapped, origin.shape),
+    MappedExtra(mapped, origin.model),
   ];
   const held = `(SELECT ${document.sql} AS ${QuoteIdentifier(MAPPED_COLUMN)}) AS ${QuoteIdentifier(alias)}`;
   return `${MappedTarget(columns)} = (SELECT ${reads.join(", ")} FROM ${held})`;
@@ -370,7 +370,7 @@ export const ReplaceWrite: WriteCompiler = (target, stage, context) => {
   const document = ChangedDocument(stage, stage.args[FIRST_OPERAND]);
   const split = ChangedPayload(document, target, context);
   const changed = ChangedFrom(
-    ReplacedColumns(split, target.origin.shape),
+    ReplacedColumns(split, target.origin.model),
     split.identity,
   );
   return UpdateStatement(target, stage, changed, context);

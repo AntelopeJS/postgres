@@ -6,7 +6,7 @@ import { WrittenAs } from "./readings";
 import { IsJsonBacked, TEXT } from "./types";
 import { NULL_VALUE } from "./writes-shared";
 import type { DecodingContext } from "./context";
-import type { FieldSpec, TableShape } from "./fields";
+import type { FieldSpec, TableModel } from "./fields";
 import { ID_COLUMN, INSTANCE_COLUMN, RESERVED_COLUMNS } from "./utils";
 
 /**
@@ -14,7 +14,7 @@ import { ID_COLUMN, INSTANCE_COLUMN, RESERVED_COLUMNS } from "./utils";
  *
  * The two differ whenever `PgIdentifier` truncated the field name, and a member is
  * not always a declared field: `_id` is a member too when the stage is keyed by it, and `_id` is
- * never in `TableShape.fields`.
+ * never in `TableModel.fields`.
  */
 interface PayloadMember {
   column: string;
@@ -101,7 +101,7 @@ function Refusal(name: string): Error {
 interface PayloadWalk {
   split: PayloadSplit;
   added: Record<string, unknown>;
-  shape: TableShape;
+  model: TableModel;
   context: DecodingContext;
   options: PayloadOptions;
 }
@@ -208,8 +208,8 @@ function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
     TakeReserved(walk, name, value);
     return;
   }
-  if (Object.hasOwn(walk.shape.fields, name)) {
-    TakeDeclared(walk, name, walk.shape.fields[name], value);
+  if (Object.hasOwn(walk.model.fields, name)) {
+    TakeDeclared(walk, name, walk.model.fields[name], value);
     return;
   }
   TakeUndeclared(walk, name, value);
@@ -237,14 +237,14 @@ function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
  */
 export function SplitPayload(
   document: Record<string, unknown>,
-  shape: TableShape,
+  model: TableModel,
   context: DecodingContext,
   options: PayloadOptions,
 ): PayloadSplit {
   const walk: PayloadWalk = {
     split: { members: [], cleared: [], removed: [] },
     added: {},
-    shape,
+    model,
     context,
     options,
   };

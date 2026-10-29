@@ -10,8 +10,8 @@ import {
   BOOL,
   FLOAT,
   JsonOf,
-  ShapeOf,
-  type SqlShape,
+  KeyTypesOf,
+  type KeyTypes,
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
@@ -43,7 +43,7 @@ const COUNT_BOUND =
   " LEAST(GREATEST(trunc(($2::double precision)), 0), 2147483647) END)::bigint)";
 const SINGLE_ROW = "((1)::bigint)";
 
-function Reshaped(): Relation {
+function Projected(): Relation {
   return SetProjection(NewTable(), {
     sql: '"t0"."_extra"',
     type: JsonOf({ name: TEXT, age: FLOAT }),
@@ -143,7 +143,7 @@ describe("the orderBy stage", () => {
   });
 
   it("treats the name as a single field once the relation is reshaped", () => {
-    const sql = Sql(Root().orderBy("byNameAge", "asc"), Reshaped());
+    const sql = Sql(Root().orderBy("byNameAge", "asc"), Projected());
     expect(sql).to.contain(`ORDER BY ("t1"."value" -> 'byNameAge') ASC`);
     expect(sql).to.not.contain('"t1"."age"');
   });
@@ -285,12 +285,12 @@ const WIDENED_KEYS = [
   "price",
 ];
 
-function UnionShape(relation: Relation): SqlShape {
+function UnionKeyTypes(relation: Relation): KeyTypes {
   const projection = relation.projection;
   assert(projection, "a union must leave a projection behind");
-  const shape = ShapeOf(projection.type);
-  assert(shape, "a union of two documents must stay shaped");
-  return shape;
+  const keyTypes = KeyTypesOf(projection.type);
+  assert(keyTypes, "a union of two documents must stay shaped");
+  return keyTypes;
 }
 
 describe("the union stage", () => {
@@ -362,16 +362,16 @@ describe("the union stage", () => {
   });
 
   it("widens the two shapes instead of intersecting them", () => {
-    const shape = UnionShape(Apply(Root().union(Other())).relation);
-    expect(Object.keys(shape).sort()).to.deep.equal(WIDENED_KEYS);
+    const keyTypes = UnionKeyTypes(Apply(Root().union(Other())).relation);
+    expect(Object.keys(keyTypes).sort()).to.deep.equal(WIDENED_KEYS);
   });
 
   it("keeps the type of a key only one side declares", () => {
-    const shape = UnionShape(Apply(Root().union(Other())).relation);
-    expect(shape.age).to.deep.equal(FLOAT);
-    expect(shape.isActive).to.deep.equal(BOOL);
-    expect(shape.price).to.deep.equal(FLOAT);
-    expect(shape.name).to.deep.equal(TEXT);
+    const keyTypes = UnionKeyTypes(Apply(Root().union(Other())).relation);
+    expect(keyTypes.age).to.deep.equal(FLOAT);
+    expect(keyTypes.isActive).to.deep.equal(BOOL);
+    expect(keyTypes.price).to.deep.equal(FLOAT);
+    expect(keyTypes.name).to.deep.equal(TEXT);
   });
 
   it("spells a scalar side as jsonb, which is what a row-mode side projects", () => {
@@ -451,7 +451,7 @@ describe("the union stage", () => {
     const { relation } = Apply(Root().union(Other()).union(Other()));
     expect(relation.alias).to.equal("t4");
     expect(Occurrences(relation.from, "UNION ALL")).to.equal(2);
-    expect(Object.keys(UnionShape(relation)).sort()).to.deep.equal(
+    expect(Object.keys(UnionKeyTypes(relation)).sort()).to.deep.equal(
       WIDENED_KEYS,
     );
   });

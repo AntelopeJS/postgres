@@ -4,7 +4,7 @@ import type { SqlType } from "./types";
 import type { DecodingContext } from "./context";
 import { EXTRA_COLUMN, ID_COLUMN, INSTANCE_COLUMN } from "./utils";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
-import { DeclaredColumns, PhysicalOrder, type TableShape } from "./fields";
+import { DeclaredColumns, PhysicalOrder, type TableModel } from "./fields";
 import {
   AliasedColumns,
   ColumnRowSource,
@@ -32,7 +32,7 @@ type ScanNotice = (name: string) => void;
 export interface TableOrigin {
   schemaId: string;
   tableId: string;
-  shape: TableShape;
+  model: TableModel;
   index: IndexResolver;
   /** Told when a `CROSS_INSTANCE` read scans by an index name; absent where nobody is listening. */
   crossInstanceScan?: ScanNotice;
@@ -194,18 +194,18 @@ export function ScanColumns(
 }
 
 /** An external relation's select list: each member read as its value, under its own name. */
-function ExternalColumns(relation: Relation, shape: TableShape): string[] {
-  return ExternalNames(shape).map(
+function ExternalColumns(relation: Relation, model: TableModel): string[] {
+  return ExternalNames(model).map(
     (name) => `${relation.source.field(name).sql} AS ${QuoteIdentifier(name)}`,
   );
 }
 
 function RowColumns(relation: Relation): string[] {
   const origin = RequireOrigin(relation);
-  if (origin.shape.external) {
-    return ExternalColumns(relation, origin.shape);
+  if (origin.model.external) {
+    return ExternalColumns(relation, origin.model);
   }
-  const declared = DeclaredColumns(origin.shape);
+  const declared = DeclaredColumns(origin.model);
   const columns = PhysicalOrder(
     ID_COLUMN,
     INSTANCE_COLUMN,
@@ -362,10 +362,10 @@ function TableSource(
   origin: TableOrigin,
   reads: ExternalReads,
 ): RowSource {
-  if (origin.shape.external) {
-    return new ExternalRowSource(alias, origin.shape, reads);
+  if (origin.model.external) {
+    return new ExternalRowSource(alias, origin.model, reads);
   }
-  return new ColumnRowSource(AliasedColumns(alias), origin.shape);
+  return new ColumnRowSource(AliasedColumns(alias), origin.model);
 }
 
 /**
@@ -410,7 +410,7 @@ export function LoggedRelation(
   return NewRelation({
     from,
     alias,
-    source: new ColumnRowSource(LoggedColumns(row), origin.shape),
+    source: new ColumnRowSource(LoggedColumns(row), origin.model),
     origin,
   });
 }

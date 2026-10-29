@@ -58,10 +58,11 @@ function Row(id: string, email: string, seat: number): Account {
 }
 
 /** The error a write was refused with, failing the test when it was not refused. */
-async function Refusal(write: PromiseLike<unknown>): Promise<unknown> {
+async function Refusal(write: PromiseLike<unknown>): Promise<Error> {
   try {
     await write;
   } catch (err) {
+    if (!(err instanceof Error)) throw err;
     return err;
   }
   return expect.fail("the write should have been refused");
@@ -75,9 +76,9 @@ async function expectDuplicate(
   const err = await Refusal(write);
   expect(IsDuplicateKeyError(err), String(err)).to.equal(true);
   expect(err).to.be.instanceOf(DuplicateKeyError);
-  const duplicate = err as DuplicateKeyError;
-  expect(duplicate.index).to.equal(index);
-  expect(duplicate.fields).to.deep.equal(fields);
+  if (!(err instanceof DuplicateKeyError)) throw err;
+  expect(err.index).to.equal(index);
+  expect(err.fields).to.deep.equal(fields);
 }
 
 describe("duplicate keys", () => {

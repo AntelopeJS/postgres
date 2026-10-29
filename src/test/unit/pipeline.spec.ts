@@ -3,7 +3,7 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 
 import { RefusingCompilers } from "./spec-fixture";
 import { TEXT } from "../../implementations/database/types";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import {
   type Relation,
@@ -15,7 +15,7 @@ import {
   REJECTED_STAGES,
 } from "../../implementations/database/pipeline";
 
-const VEHICLES: TableShape = {
+const VEHICLES: TableModel = {
   fields: {
     car: { column: "car", type: TEXT },
   },
@@ -53,7 +53,7 @@ function NewTable(): Relation {
   return TableRelation(TABLE, ROOT_ALIAS, {
     schemaId: "shop",
     tableId: "vehicles",
-    shape: VEHICLES,
+    model: VEHICLES,
     index: (name) => [name],
   });
 }

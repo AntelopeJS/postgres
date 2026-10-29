@@ -17,19 +17,14 @@ import {
   Describe,
   DescribeKeyColumns,
 } from "./external-types";
-import type {
-  ExternalRelation,
-  FieldSpec,
-  SchemaShape,
-  TableShape,
-} from "./fields";
+import type { ExternalRelation, SchemaModel, TableModel } from "./fields";
 
 /** One declared table on its way to a shape: its names, its declaration and what it parsed to. */
 interface DeclaredTable {
   schemaId: string;
   tableId: string;
   table: TableDefinition;
-  parsed: TableShape;
+  parsed: TableModel;
 }
 
 function PathOf(declared: DeclaredTable): string {
@@ -93,8 +88,8 @@ function WarnLossy(
 function DescribeFields(
   declared: DeclaredTable,
   columns: Map<string, CatalogColumn>,
-): Record<string, FieldSpec> {
-  const fields: Record<string, FieldSpec> = {};
+): TableModel["fields"] {
+  const fields: TableModel["fields"] = {};
   for (const [name, spec] of Object.entries(declared.parsed.fields)) {
     const column = columns.get(name);
     if (!column) {
@@ -165,7 +160,7 @@ function WarnUnservedIndexes(
   }
 }
 
-async function DescribeTable(declared: DeclaredTable): Promise<TableShape> {
+async function DescribeTable(declared: DeclaredTable): Promise<TableModel> {
   const relation = await ReadDeclared(declared);
   const columns = ColumnsByName(relation);
   const fields = DescribeFields(declared, columns);
@@ -187,16 +182,16 @@ async function DescribeTable(declared: DeclaredTable): Promise<TableShape> {
 export async function DescribeExternalSchema(
   schemaId: string,
   schema: SchemaDefinition,
-  parsed: SchemaShape,
-): Promise<SchemaShape> {
-  const shapes: SchemaShape = {};
+  parsed: SchemaModel,
+): Promise<SchemaModel> {
+  const models: SchemaModel = {};
   for (const [tableId, table] of Object.entries(schema)) {
-    shapes[tableId] = await DescribeTable({
+    models[tableId] = await DescribeTable({
       schemaId,
       tableId,
       table,
       parsed: parsed[tableId],
     });
   }
-  return shapes;
+  return models;
 }
