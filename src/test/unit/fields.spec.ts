@@ -51,7 +51,7 @@ describe("ParseFieldType", () => {
       name: "X",
       is: () => true,
       encode: (v) => v,
-      decode: (v) => v,
+      decode: () => ({ _tag: "Right" }),
     } satisfies Extract<FieldType, { is: unknown }>;
     const parsed = ParseFieldType(codec, "t.status");
     expect(parsed.type).to.equal(OPAQUE);
