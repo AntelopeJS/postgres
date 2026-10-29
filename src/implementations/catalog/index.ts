@@ -1,4 +1,3 @@
-import { GetRuntimeInfo } from "@antelopejs/interface-core/runtime";
 import type {
   CatalogInfo,
   Measure,
@@ -12,7 +11,8 @@ import type {
   SampleRequest,
 } from "@antelopejs/interface-database-catalog";
 
-import { GetOptions, IsExternal } from "../../config";
+import { IsCatalogEnabled, IsExternal } from "../../config";
+import { AssertConnected } from "../../connection";
 import {
   DescribeRow,
   ReadInfo,
@@ -31,19 +31,18 @@ const OWNED_REFUSAL =
 const DEVELOPMENT_REFUSAL =
   "the catalog is a development tool: it answers under ajs project dev or run, or with catalog.enabled";
 
-async function IsEnabled(): Promise<boolean> {
-  const configured = GetOptions().catalog.enabled;
-  return configured ?? (await GetRuntimeInfo()).dev;
-}
-
-/** Refuses every catalog call on an owned instance, and outside development unless enabled. */
+/**
+ * Refuses every catalog call on an owned instance, outside development unless enabled, and on an
+ * instance whose first connection failed, with the reason it failed.
+ */
 async function Guard(): Promise<void> {
   if (!IsExternal()) {
     throw new Error(OWNED_REFUSAL);
   }
-  if (!(await IsEnabled())) {
+  if (!(await IsCatalogEnabled())) {
     throw new Error(DEVELOPMENT_REFUSAL);
   }
+  AssertConnected();
 }
 
 export async function Info(): Promise<CatalogInfo> {

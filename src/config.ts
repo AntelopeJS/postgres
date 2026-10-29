@@ -1,3 +1,4 @@
+import { GetRuntimeInfo } from "@antelopejs/interface-core/runtime";
 import type { PoolConfig } from "pg";
 
 /**
@@ -233,6 +234,12 @@ export function GetOptions(): ResolvedOptions {
 /** Whether the configured instance serves tables it does not own. */
 export function IsExternal(): boolean {
   return GetOptions().mode === "external";
+}
+
+/** Whether the catalog answers: `catalog.enabled` when set, and otherwise the project's development mode. */
+export async function IsCatalogEnabled(): Promise<boolean> {
+  const configured = GetOptions().catalog.enabled;
+  return configured ?? (await GetRuntimeInfo()).dev;
 }
 
 export function ClearOptions() {
