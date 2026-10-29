@@ -10,6 +10,13 @@ export type SubqueryProvider = (stages: QueryStage[]) => Compiled;
 
 export type ArgumentBinding = RowSource | SubqueryProvider | Compiled;
 
+/** Whether a binding is a subquery provider, the one binding that is called rather than read. */
+export function IsSubqueryProvider(
+  binding: ArgumentBinding,
+): binding is SubqueryProvider {
+  return typeof binding === "function";
+}
+
 type ExpressionCompiler = (
   stages: QueryStage[],
   context: DecodingContext,

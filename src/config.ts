@@ -137,17 +137,13 @@ let resolved: ResolvedOptions | undefined;
 /** A supplied option read as a positive safe integer, refused otherwise — see {@link Options.cursorBatchSize}. */
 function PositiveSafeInteger(
   option: string,
-  supplied: unknown,
+  supplied: number | undefined,
   fallback: number,
 ): number {
   if (supplied === undefined) {
     return fallback;
   }
-  if (
-    typeof supplied !== "number" ||
-    !Number.isSafeInteger(supplied) ||
-    supplied < SMALLEST_POSITIVE_INTEGER
-  ) {
+  if (!Number.isSafeInteger(supplied) || supplied < SMALLEST_POSITIVE_INTEGER) {
     throw new Error(
       `${option} must be a positive safe integer, received ${String(supplied)}`,
     );

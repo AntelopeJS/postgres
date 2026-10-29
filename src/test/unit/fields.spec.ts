@@ -45,12 +45,15 @@ describe("ParseFieldType", () => {
 
   it("detects an io-ts codec structurally", () => {
     const codec = {
+      _A: undefined,
+      _O: undefined,
+      _I: undefined,
       name: "X",
       is: () => true,
-      encode: (v: never) => v,
-      decode: (v: unknown) => v,
-    };
-    const parsed = ParseFieldType(codec as unknown as FieldType, "t.status");
+      encode: (v) => v,
+      decode: (v) => v,
+    } satisfies Extract<FieldType, { is: unknown }>;
+    const parsed = ParseFieldType(codec, "t.status");
     expect(parsed.type).to.equal(OPAQUE);
     expect(parsed.codec).to.equal(codec);
   });
@@ -101,12 +104,12 @@ describe("ParseTable", () => {
   });
 
   it("accepts a declared key column, which restates it rather than adding one", () => {
-    const shape = ParseTable(
+    const model = ParseTable(
       { fields: { _id: "string", price: "number" }, indexes: {} },
       "shop.orders",
     );
-    expect(Object.keys(shape.fields)).to.deep.equal(["price"]);
-    expect(DocumentKeys(shape)).to.deep.equal(["_id", "_instance", "price"]);
+    expect(Object.keys(model.fields)).to.deep.equal(["price"]);
+    expect(DocumentKeys(model)).to.deep.equal(["_id", "_instance", "price"]);
   });
 
   it("refuses a declared key column the key could not be", () => {
@@ -119,11 +122,11 @@ describe("ParseTable", () => {
 
   it("fits an oversized field name into a column name", () => {
     const name = "n".repeat(100);
-    const shape = ParseTable(
+    const model = ParseTable(
       { fields: { name: "string" }, indexes: {} },
       "shop.orders",
     );
-    expect(shape.fields.name.column).to.equal("name");
+    expect(model.fields.name.column).to.equal("name");
 
     const long = ParseTable(
       { fields: { [name]: "string" }, indexes: {} },

@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
 
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import { CompileExpression } from "../../implementations/database/expression";
 import {
@@ -24,7 +24,7 @@ import {
   SplitPayload,
 } from "../../implementations/database/payload";
 
-const vehicles: TableShape = {
+const vehicles: TableModel = {
   fields: {
     car: { column: "car", type: TEXT },
     price: { column: "price", type: FLOAT },
@@ -61,7 +61,7 @@ interface SplitResult {
 }
 
 function Split(
-  document: Record<string, unknown>,
+  document: Parameters<typeof SplitPayload>[0],
   options: PayloadOptions = TARGETED,
 ): SplitResult {
   const context = NewContext();

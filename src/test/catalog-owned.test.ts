@@ -6,7 +6,8 @@ describe("the catalog of an owned instance", () => {
     try {
       await Info();
     } catch (error) {
-      expect((error as Error).message).to.match(/owns its tables/);
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).to.match(/owns its tables/);
       return;
     }
     throw new Error("Info was expected to refuse");

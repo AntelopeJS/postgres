@@ -21,7 +21,10 @@ import {
   SetMeasureTimeoutForTests,
   WithMeasures,
 } from "../implementations/database/external-measures";
-import { WaitForSchemaReady } from "../implementations/database/schema";
+import {
+  GetSchema,
+  WaitForSchemaReady,
+} from "../implementations/database/schema";
 import { BIG_EVENTS_ROWS, CLIENT_ROLE } from "./fixture";
 import { Native, NativeCount } from "./sales";
 
@@ -164,15 +167,20 @@ describe("the catalog of an external instance", function () {
     try {
       await DescribeRelations(["sales.nope"]);
     } catch (error) {
-      expect((error as Error).message).to.include("sales.nope");
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).to.include("sales.nope");
       return;
     }
     throw new Error("DescribeRelations was expected to refuse");
   });
 
   it("offers only declarations registration takes: a schema written from its first offers registers", async () => {
-    new Schema(SALES, Generated(await Mappable()));
+    const generated = Generated(await Mappable());
+    new Schema(SALES, generated);
     await WaitForSchemaReady(SALES);
+    expect(Object.keys(GetSchema(SALES))).to.have.members(
+      Object.keys(generated),
+    );
   });
 });
 
@@ -349,7 +357,8 @@ describe("a sample of rows", function () {
     try {
       await SampleRows({ relation: "sales.accounts", limit: 21 });
     } catch (error) {
-      refused = error as Error;
+      if (!(error instanceof Error)) throw error;
+      refused = error;
     }
     expect(refused?.message).to.match(/from 1 to 20 rows/);
   });
@@ -376,7 +385,8 @@ describe("a sample of rows", function () {
     try {
       await SampleRows({ relation: "sales.people", limit: 5 });
     } catch (error) {
-      refused = error as Error;
+      if (!(error instanceof Error)) throw error;
+      refused = error;
     }
     expect(refused?.message).to.match(/cannot be read/);
   });
@@ -421,7 +431,8 @@ describe("the catalog outside development", () => {
     try {
       await Info();
     } catch (error) {
-      expect((error as Error).message).to.match(/development tool/);
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).to.match(/development tool/);
       return;
     } finally {
       options.catalog.enabled = enabled;

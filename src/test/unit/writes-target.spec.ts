@@ -8,7 +8,7 @@ import {
 import {
   CrossInstanceRoot,
   EVERY_ROW,
-  ExpectBalancedLedger,
+  expectBalancedLedger,
   FROM_TABLE,
   IdentityPredicate,
   Occurrences,
@@ -98,7 +98,7 @@ function Wrapped(): Written {
  * chained — the refusal is the compiler's rather than the type system's, and only a query the
  * types cannot spell reaches it.
  */
-function Reshaped(): StagedObject {
+function MappedQuery(): StagedObject {
   return new Query<number>(
     QueryStage(DELETE_STAGE),
     Root().map((doc) => doc.key("name")),
@@ -159,7 +159,7 @@ describe("the delete statement", () => {
   });
 
   it("refuses a relation that no longer knows its table, naming what is missing", () => {
-    expect(() => Write(Reshaped())).to.throw(
+    expect(() => Write(MappedQuery())).to.throw(
       "A row-mode relation must carry the origin of its table",
     );
   });
@@ -192,7 +192,7 @@ describe("delete under CROSS_INSTANCE", () => {
 
 describe("the delete statement's parameter ledger", () => {
   it("references every parameter it binds, and binds every one it references", () => {
-    ExpectBalancedLedger([
+    expectBalancedLedger([
       Write(Root().delete()),
       Write(CrossInstanceRoot().delete()),
       Write(Root().get(KEY).delete()),

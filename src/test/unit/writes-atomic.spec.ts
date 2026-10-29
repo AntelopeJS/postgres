@@ -1,7 +1,13 @@
 import { expect } from "chai";
 import { DatabaseError } from "pg";
 
-import { Root, Write, WrittenSql, CrossInstanceRoot } from "./pipeline-fixture";
+import {
+  CrossInstanceRoot,
+  Root,
+  Write,
+  CallerRoot,
+  WrittenSql,
+} from "./pipeline-fixture";
 import { ExecuteAtomicWrite } from "../../implementations/database/writes-atomic";
 
 const UPDATE = {
@@ -35,18 +41,18 @@ describe("the atomic mutation statement", () => {
     expect(() => CrossInstanceRoot().atomicMutation("one", UPDATE)).to.throw();
     expect(() =>
       Write(
-        Root().atomicMutation("one", {
+        CallerRoot().atomicMutation("one", {
           ...UPDATE,
           patch: { _instance: "other" },
-        } as never),
+        }),
       ),
     ).to.throw();
     expect(() =>
       Write(
-        Root().atomicMutation("one", {
+        CallerRoot().atomicMutation("one", {
           ...UPDATE,
           patch: { _extra: {} },
-        } as never),
+        }),
       ),
     ).to.throw();
   });

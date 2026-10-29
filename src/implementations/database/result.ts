@@ -1,53 +1,47 @@
-import type { TableShape } from "./fields";
-import type { ArrayType, JsonType, SqlShape, SqlType } from "./types";
+import type { TableModel } from "./fields";
+import type { KeyTypes, SqlType } from "./types";
 import {
   DEFAULT_INSTANCE_ID,
   EXTRA_COLUMN,
   ID_COLUMN,
   INSTANCE_COLUMN,
 } from "./utils";
-
-type Reviver = (value: unknown, type: SqlType) => unknown;
+import { IsNumber, IsObject } from "./guards";
 
 function ReviveTimestamp(value: unknown): unknown {
   if (value instanceof Date) {
     return value;
   }
-  const date =
-    typeof value === "number" ? new Date(value) : new Date(String(value));
+  const date = IsNumber(value) ? new Date(value) : new Date(String(value));
   return Number.isNaN(date.getTime()) ? value : date;
 }
-
-const REVIVERS: Partial<Record<SqlType["kind"], Reviver>> = {
-  timestamp: (value) => ReviveTimestamp(value),
-  array: (value, type) =>
-    Array.isArray(value)
-      ? value.map((item) => ReviveValue(item, (type as ArrayType).elem))
-      : value,
-  json: (value, type) => ReviveShape(value, (type as JsonType).shape),
-};
 
 export function ReviveValue(value: unknown, type: SqlType): unknown {
   if (value === null || value === undefined) {
     return value;
   }
-  const reviver = REVIVERS[type.kind];
-  return reviver ? reviver(value, type) : value;
+  switch (type.kind) {
+    case "timestamp":
+      return ReviveTimestamp(value);
+    case "array":
+      return Array.isArray(value)
+        ? value.map((item) => ReviveValue(item, type.elem))
+        : value;
+    case "json":
+      return ReviveKeyTypes(value, type.keys);
+    default:
+      return value;
+  }
 }
 
-function ReviveShape(value: unknown, shape?: SqlShape): unknown {
-  if (
-    !shape ||
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value)
-  ) {
+function ReviveKeyTypes(value: unknown, keyTypes?: KeyTypes): unknown {
+  if (!keyTypes || !IsObject(value) || Array.isArray(value)) {
     return value;
   }
   const result: Record<string, unknown> = {
     ...(value as Record<string, unknown>),
   };
-  for (const [name, type] of Object.entries(shape)) {
+  for (const [name, type] of Object.entries(keyTypes)) {
     if (Object.hasOwn(result, name)) {
       result[name] = ReviveValue(result[name], type);
     }
@@ -57,7 +51,7 @@ function ReviveShape(value: unknown, shape?: SqlShape): unknown {
 
 export function DecodeRow(
   row: Record<string, unknown>,
-  table: TableShape,
+  table: TableModel,
 ): Record<string, unknown> {
   const document: Record<string, unknown> = {};
   const id = row[ID_COLUMN];

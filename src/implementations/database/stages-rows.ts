@@ -14,16 +14,19 @@ import {
   CurrentValue,
   ScanColumns,
   type OrderTerm,
-  Prepare,
   type Relation,
+  SetProjection,
+  ValueRelation,
+} from "./relation";
+import {
+  Prepare,
   type RelationFlag,
   Render,
   RowBound,
-  SetProjection,
   SINGLE_ROW,
-  ValueRelation,
   WHERE_BLOCKERS,
-} from "./relation";
+} from "./render";
+import { IsString } from "./guards";
 
 /**
  * An `ORDER BY` runs before the row bounds, so those and an aggregate are what block it.
@@ -91,7 +94,7 @@ const FilterStage: PipelineStage = (relation, stage, context) => {
 function SortName(stage: QueryStage): string {
   const name = stage.options?.index;
   assert(
-    typeof name === "string",
+    IsString(name),
     "The 'orderBy' stage is missing the index or field to sort on",
   );
   return name;

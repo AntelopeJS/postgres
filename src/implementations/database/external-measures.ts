@@ -44,9 +44,9 @@ function SessionOver(client: PoolClient): MeasureSession {
     async measure<T extends QueryResultRow>(sql: string, params?: unknown[]) {
       await client.query(`SAVEPOINT ${SAVEPOINT}`);
       try {
-        const result = await client.query<T>(sql, params as never);
+        const result = await client.query<T>(sql, params);
         await client.query(`RELEASE SAVEPOINT ${SAVEPOINT}`);
-        return { status: "ok", value: result.rows } as Measure<T[]>;
+        return { status: "ok", value: result.rows } satisfies Measure<T[]>;
       } catch (error) {
         await client.query(`ROLLBACK TO SAVEPOINT ${SAVEPOINT}`);
         return Failed<T[]>(error);

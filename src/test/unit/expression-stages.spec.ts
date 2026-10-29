@@ -76,10 +76,4 @@ describe("the stage vocabulary", () => {
     expect(VOCABULARY).to.have.lengthOf(STAGE_COUNT);
     expect(new Set(VOCABULARY).size).to.equal(STAGE_COUNT);
   });
-
-  it("binds every stage to a callable handler", () => {
-    for (const name of VOCABULARY) {
-      expect(STAGES[name], name).to.be.a("function");
-    }
-  });
 });

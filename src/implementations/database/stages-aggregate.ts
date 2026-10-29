@@ -4,14 +4,9 @@ import type { QueryStage } from "@antelopejs/interface-database/common";
 import type { Compiled } from "./sql";
 import { AsFloat, Numeric, ORDERED_KINDS } from "./readings";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
-import {
-  AbsorbOrder,
-  CurrentValue,
-  Prepare,
-  type Relation,
-  type RelationFlag,
-  SetProjection,
-} from "./relation";
+import { CurrentValue, type Relation, SetProjection } from "./relation";
+import { AbsorbOrder, Prepare, type RelationFlag } from "./render";
+import { IsString } from "./guards";
 
 /**
  * An aggregate reads whichever rows the relation has already selected.
@@ -73,7 +68,7 @@ export function NamedField(stage: QueryStage): string | undefined {
     return undefined;
   }
   assert(
-    typeof field === "string",
+    IsString(field),
     `The '${stage.stage}' stage was given a field that is not a name`,
   );
   return field;

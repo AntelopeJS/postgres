@@ -1,17 +1,15 @@
 import { expect } from "chai";
-import type { DeepPartial } from "@antelopejs/interface-database/common";
 
 import {
   AssertedIdentity,
   CrossInstanceRoot,
   EVERY_ROW,
-  ExpectBalancedLedger,
+  expectBalancedLedger,
   IdentityPredicate,
   NOTES_TABLE,
-  type Note,
   NotesRoot,
-  type Person,
   Root,
+  CallerRoot,
   SELECTED_ROW,
   WrittenSql as Sql,
   TABLE,
@@ -52,11 +50,7 @@ function Replaces(
 }
 
 function Replace(document: WriteDocument): Written {
-  return Write(
-    Root()
-      .get(KEY)
-      .replace(document as unknown as DeepPartial<Person>),
-  );
+  return Write(CallerRoot().get(KEY).replace(document));
 }
 
 describe("the replace statement", () => {
@@ -95,9 +89,7 @@ describe("the replace statement", () => {
   });
 
   it("names a declared field by its column rather than by its field name", () => {
-    const written = Write(
-      NotesRoot().replace({ summary: "s" } as unknown as DeepPartial<Note>),
-    );
+    const written = Write(NotesRoot().replace({ summary: "s" }));
     expect(Sql(written)).to.contain(
       `UPDATE ${NOTES_TABLE} AS "w0" SET "summ" = ($2::text), ${EMPTY_EXTRA} WHERE`,
     );
@@ -105,9 +97,7 @@ describe("the replace statement", () => {
   });
 
   it("replaces every row the pipeline selected rather than only the first", () => {
-    const written = Write(
-      Root().replace({ name: NAME } as DeepPartial<Person>),
-    );
+    const written = Write(Root().replace({ name: NAME }));
     expect(Sql(written)).to.equal(
       Replaces(
         `"name" = ($2::text), "age" = NULL, "isActive" = NULL,` +
@@ -156,9 +146,8 @@ describe("the replace statement's asserted identity", () => {
 
   /** The same refusal `update` makes, reached through the statement the two share. */
   it("refuses a key asserted over a selection of many rows, naming what to do", () => {
-    expect(() =>
-      Write(Root().replace({ _id: KEY, name: NAME } as WriteDocument)),
-    ).to.throw(
+    const keyed = { _id: KEY, name: NAME };
+    expect(() => Write(Root().replace(keyed))).to.throw(
       "The 'replace' stage was given a payload naming '_id' over a selection of many rows: address the row with get(_id) first, or leave '_id' out of the payload",
     );
   });
@@ -176,9 +165,7 @@ describe("the replace statement's asserted identity", () => {
 
 describe("the replace statement's refusals", () => {
   it("refuses to write across every instance at once, naming the stage", () => {
-    expect(() =>
-      Write(CrossInstanceRoot().replace({ name: NAME } as DeepPartial<Person>)),
-    ).to.throw(
+    expect(() => Write(CrossInstanceRoot().replace({ name: NAME }))).to.throw(
       "The 'replace' stage cannot write under CROSS_INSTANCE: name the instance the rows belong to, or omit the instance id for the default one",
     );
   });
@@ -198,14 +185,14 @@ describe("the replace statement's refusals", () => {
 
 describe("the replace statement's parameter ledger", () => {
   it("references every parameter it binds, and binds every one it references", () => {
-    ExpectBalancedLedger([
+    expectBalancedLedger([
       Replace({ name: NAME }),
       Replace({}),
       Replace({ nickname: NICKNAME }),
       Replace({ name: NAME, nickname: NICKNAME }),
       Replace({ _id: KEY, name: NAME }),
       Replace({ _id: KEY }),
-      Write(Root().replace({ name: NAME } as DeepPartial<Person>)),
+      Write(Root().replace({ name: NAME })),
     ]);
   });
 });

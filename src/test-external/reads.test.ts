@@ -4,9 +4,13 @@ import {
   type Schema,
 } from "@antelopejs/interface-database/schema";
 
-import { Native, NativeCount, RegisterSales, type SalesTables } from "./sales";
-
-type Row = Record<string, unknown>;
+import {
+  Native,
+  NativeCount,
+  RegisterSales,
+  type SalesRow as Row,
+  type SalesTables,
+} from "./sales";
 
 const PARIS = "Europe/Paris";
 
@@ -34,12 +38,12 @@ describe("listing an external relation as a TableView does", () => {
   });
 
   it("lists with an enum filter, a (?i) search, a sort and a page, as a TableView does", async () => {
-    const rows = (await Accounts()
+    const rows = await Accounts()
       .orderBy("name", "desc")
       .filter((row) => row.key("status").eq("active"))
       .filter((row) => row.key("name").match("(?i)acct 1"))
       .slice(0, 5)
-      .pluck("_internal", "_id", "name", "status")) as Row[];
+      .pluck("_internal", "_id", "name", "status");
     const expected = await Native<Row>(
       `SELECT id::text AS "_id", name, status::text AS status FROM sales.accounts
        WHERE status = 'active' AND name ~* 'acct 1' ORDER BY name DESC LIMIT 5`,
@@ -129,9 +133,9 @@ describe("reading an external row by key", () => {
   });
 
   it("gets a row by its bigint key as a string _id, with exact bigints and true instants", async () => {
-    const row = (await Accounts()
+    const row = await Accounts()
       .get("42")
-      .pluck("_id", "id", "big_counter", "signed_on", "last_seen")) as Row;
+      .pluck("_id", "id", "big_counter", "signed_on", "last_seen");
     expect(row).to.deep.equal({
       _id: "42",
       id: "42",
@@ -145,9 +149,7 @@ describe("reading an external row by key", () => {
     const original = process.env.TZ;
     process.env.TZ = "America/New_York";
     try {
-      const row = (await Accounts()
-        .get("42")
-        .pluck("signed_on", "last_seen")) as Row;
+      const row = await Accounts().get("42").pluck("signed_on", "last_seen");
       expect(row).to.deep.equal({
         signed_on: new Date("2026-02-12T00:00:00.000Z"),
         last_seen: new Date("2026-01-01T00:42:00.000Z"),
@@ -158,7 +160,7 @@ describe("reading an external row by key", () => {
   });
 
   it("reads a whole row in row mode with _id first and every declared field", async () => {
-    const row = (await Accounts().get("7")) as Row;
+    const row = await Accounts().get("7");
     expect(Object.keys(row)[0]).to.equal("_id");
     expect(row).to.include({
       _id: "7",
@@ -174,10 +176,7 @@ describe("reading an external row by key", () => {
     const [known] = await Native<{ id: string }>(
       "SELECT contact_id::text AS id FROM sales.contacts ORDER BY first_name LIMIT 1",
     );
-    const rows = (await Contacts().getAll(
-      [known.id, "not-a-uuid"],
-      "_id",
-    )) as Row[];
+    const rows = await Contacts().getAll([known.id, "not-a-uuid"], "_id");
     expect(rows.map((row) => row._id)).to.deep.equal([known.id]);
   });
 });
@@ -188,7 +187,7 @@ describe("reading across external relations", () => {
   });
 
   it("resolves a foreign field: lookup from a bigint foreign key to the account's _id", async () => {
-    const rows = (await Contacts()
+    const rows = await Contacts()
       .orderBy("first_name", "asc")
       .slice(0, 3)
       .lookup(
@@ -196,7 +195,7 @@ describe("reading across external relations", () => {
         "account_id",
         "_id",
       )
-      .pluck("first_name", "account_id")) as Row[];
+      .pluck("first_name", "account_id");
     const expected = await Native<Row>(
       `SELECT c.first_name, jsonb_build_object('_id', a.id::text, 'name', a.name) AS account_id
        FROM sales.contacts c JOIN sales.accounts a ON a.id = c.account_id
@@ -232,7 +231,7 @@ describe("reading across external relations", () => {
   });
 
   it("reads an undeclared key, such as the _internal data-api plucks, as absent", async () => {
-    const row = (await Accounts().get("1").pluck("_internal", "name")) as Row;
+    const row = await Accounts().get("1").pluck("_internal", "name");
     expect(row).to.deep.equal({ name: "Acct 1" });
     const total = await Accounts()
       .filter((row) => row.key("nickname").eq("x"))
@@ -247,25 +246,22 @@ describe("the _id of relations without a single-column primary key", () => {
   });
 
   it("answers a composite key's _id as its parts, and gets the row back by it", async () => {
-    const [first] = (await sales
+    const [first] = await sales
       .instance()
       .table("order_lines")
       .orderBy("_id")
-      .slice(0, 1)) as Row[];
+      .slice(0, 1);
     expect(first._id).to.equal('["0", "1"]');
-    const again = (await sales
+    const again = await sales
       .instance()
       .table("order_lines")
-      .get(String(first._id))) as Row;
+      .get(String(first._id));
     expect(again).to.deep.equal(first);
   });
 
   it("answers _id from the unique index of a table without a primary key", async () => {
-    const row = (await sales
-      .instance()
-      .table("events")
-      .orderBy("at")
-      .nth(0)) as Row;
+    const row = await sales.instance().table("events").orderBy("at").nth(0);
+    if (row === null) throw new Error("the relation answered no row");
     expect(row._id).to.equal(row.event_ref);
   });
 
@@ -275,7 +271,7 @@ describe("the _id of relations without a single-column primary key", () => {
       expect(await table.count()).to.equal(
         await NativeCount(`SELECT count(*) FROM sales.${relation}`),
       );
-      const [row] = (await table.slice(0, 1)) as Row[];
+      const [row] = await table.slice(0, 1);
       expect(row).to.not.have.property("_id");
     });
   }
@@ -297,7 +293,8 @@ describe("instances over an external relation", () => {
     try {
       await sales.instance("tenant-1").table("accounts").count();
     } catch (err) {
-      refusal = err as Error;
+      if (!(err instanceof Error)) throw err;
+      refusal = err;
     }
     expect(refusal?.message)
       .to.contain('"sales"."accounts"')

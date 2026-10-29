@@ -27,11 +27,11 @@ import {
 import {
   CurrentValue,
   IndexColumns,
-  Prepare,
   type Relation,
-  type RelationFlag,
   SetProjection,
 } from "./relation";
+import { Prepare, type RelationFlag } from "./render";
+import { IsString } from "./guards";
 
 /**
  * What a sub-stream has reduced a group's rows to so far.
@@ -79,7 +79,7 @@ function Operand(state: SubStream, stage: QueryStage): Compiled {
 }
 
 /** A new value and the source that addresses it, which is what a projection is one level up. */
-function Reshaped(state: SubStream, value: Compiled): SubStream {
+function Revalued(state: SubStream, value: Compiled): SubStream {
   return {
     source: new JsonRowSource(value),
     value,
@@ -91,7 +91,7 @@ const MapSubStream: SubStreamStage = (state, stage, context) => {
   const body = DecodeFunction(stage.args[FIRST_OPERAND], context, [
     state.source,
   ]);
-  return Reshaped(state, RequireOperand(body, stage, FIRST_OPERAND));
+  return Revalued(state, RequireOperand(body, stage, FIRST_OPERAND));
 };
 
 const DistinctSubStream: SubStreamStage = (state, stage) => {
@@ -100,7 +100,7 @@ const DistinctSubStream: SubStreamStage = (state, stage) => {
   if (field === undefined) {
     return deduped;
   }
-  return Reshaped(deduped, state.source.field(field));
+  return Revalued(deduped, state.source.field(field));
 };
 
 /** The one terminal that reads the *presence* of a row rather than the value it yields. */
@@ -147,7 +147,7 @@ function AggregateSubStream(aggregate: Aggregation): SubStreamStage {
  * says it is the sub-stream position that cannot take it, because the same stage is perfectly
  * legal on the query one level out.
  */
-const SUB_STREAM_STAGES: SubStreamStageMap = {
+const SUB_STREAM_STAGES = {
   [MAP]: MapSubStream,
   [DISTINCT]: DistinctSubStream,
   [COUNT]: CountSubStream,
@@ -155,7 +155,13 @@ const SUB_STREAM_STAGES: SubStreamStageMap = {
   [AVERAGE]: AggregateSubStream(Mean),
   [MINIMUM]: AggregateSubStream(Minimum),
   [MAXIMUM]: AggregateSubStream(Maximum),
-};
+} satisfies SubStreamStageMap;
+
+function IsSubStreamStage(
+  name: string,
+): name is keyof typeof SUB_STREAM_STAGES {
+  return Object.hasOwn(SUB_STREAM_STAGES, name);
+}
 
 function IsTerminal(step: SubStream | Compiled): step is Compiled {
   return "sql" in step;
@@ -191,7 +197,7 @@ function StepSubStream(
   if (IsTerminal(state)) {
     RefuseSecondTerminal(stage);
   }
-  if (!Object.hasOwn(SUB_STREAM_STAGES, stage.stage)) {
+  if (!IsSubStreamStage(stage.stage)) {
     RefuseSubStreamStage(stage);
   }
   return SUB_STREAM_STAGES[stage.stage](state, stage, context);
@@ -276,7 +282,7 @@ const ONLY_COLUMN = 0;
 function GroupName(stage: QueryStage): string {
   const name = stage.options?.index;
   assert(
-    typeof name === "string",
+    IsString(name),
     "The 'group' stage is missing the index or field to group on",
   );
   return name;

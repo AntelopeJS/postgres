@@ -1,3 +1,4 @@
+import assert from "node:assert";
 import { StagedObject } from "@antelopejs/interface-database/common";
 
 import { PhysicalType, type SqlType, TEXT } from "./types";
@@ -6,13 +7,14 @@ import { WrittenAs } from "./readings";
 import type { DecodingContext } from "./context";
 import type { Compiled } from "./sql";
 import { QualifiedName } from "./identifier";
-import type { ExternalRelation, TableShape } from "./fields";
+import type { ExternalRelation, TableModel } from "./fields";
 import { ID_COLUMN, INSTANCE_COLUMN } from "./utils";
 import {
   type ColumnDescriptor,
   IsReadOnly,
   ReadOnlyReason,
 } from "./external-types";
+import { IsString } from "./guards";
 
 /** Which statement a payload is split for: the three treat keys and absences differently. */
 export type ExternalWriteMode = "insert" | "update" | "replace";
@@ -89,7 +91,7 @@ export function KeyValue(
 }
 
 interface ExternalWalk {
-  shape: TableShape;
+  model: TableModel;
   external: ExternalRelation;
   path: string;
   mode: ExternalWriteMode;
@@ -167,21 +169,20 @@ function IdParts(walk: ExternalWalk, value: unknown): string[] {
   if (width === 1) {
     return [KeyText(value)];
   }
-  const parsed: unknown =
-    typeof value === "string" ? SafeParse(value) : undefined;
+  const parsed: unknown = IsString(value) ? SafeParse(value) : undefined;
   const parts = Array.isArray(parsed) ? parsed : [];
   if (
     parts.length !== width ||
-    !parts.every((part) => typeof part === "string")
+    !parts.every((part): part is string => typeof part === "string")
   ) {
     throw MalformedId(walk, value);
   }
-  return parts as string[];
+  return parts;
 }
 
 /** A key value as the text a key column is matched by: a number or a string as it is spelled. */
 function KeyText(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value);
+  return IsString(value) ? value : JSON.stringify(value);
 }
 
 function SafeParse(text: string): unknown {
@@ -214,14 +215,14 @@ function TakeKeyField(
   walk.payload.keyFields.push({
     field: name,
     descriptor,
-    type: walk.shape.fields[name].type,
+    type: walk.model.fields[name].type,
     raw: value,
   });
 }
 
 /**
  * Whether a key field and `_id`'s text name different keys, which only an exact reading can tell:
- * text as text, a number read losslessly as the same number. A lossy reading proves nothing.
+ * text, a number read losslessly as the same number. A lossy reading proves nothing.
  */
 function Disagrees(claim: KeyFieldClaim, text: string): boolean {
   if (claim.type.kind === "text") {
@@ -272,8 +273,9 @@ function TakeReadOnly(
 }
 
 function TakeField(walk: ExternalWalk, name: string, value: unknown): void {
-  const spec = walk.shape.fields[name];
-  const descriptor = spec.native as ColumnDescriptor;
+  const spec = walk.model.fields[name];
+  const descriptor = spec.native;
+  assert(descriptor, "An external field needs the column it was resolved to");
   if (KeyColumn(walk, descriptor.column)) {
     if (IsReadOnly(descriptor)) {
       TakeReadOnly(walk, name, descriptor, value);
@@ -320,7 +322,7 @@ function TakeKey(walk: ExternalWalk, name: string, value: unknown): void {
   if (name === INSTANCE_COLUMN) {
     return;
   }
-  if (!Object.hasOwn(walk.shape.fields, name)) {
+  if (!Object.hasOwn(walk.model.fields, name)) {
     throw Undeclared(walk, name);
   }
   TakeField(walk, name, value);
@@ -334,8 +336,9 @@ function ClearSilentFields(
   walk: ExternalWalk,
   document: Record<string, unknown>,
 ): void {
-  for (const [name, spec] of Object.entries(walk.shape.fields)) {
-    const descriptor = spec.native as ColumnDescriptor;
+  for (const [name, spec] of Object.entries(walk.model.fields)) {
+    const descriptor = spec.native;
+    assert(descriptor, "An external field needs the column it was resolved to");
     const silent = !Object.hasOwn(document, name);
     if (
       silent &&
@@ -359,13 +362,14 @@ function ClearSilentFields(
  */
 export function SplitExternalPayload(
   document: Record<string, unknown>,
-  shape: TableShape,
+  model: TableModel,
   context: DecodingContext,
   mode: ExternalWriteMode,
 ): ExternalPayload {
-  const external = shape.external as ExternalRelation;
+  const { external } = model;
+  assert(external, "An external payload needs the relation it targets");
   const walk: ExternalWalk = {
-    shape,
+    model,
     external,
     path: `${external.schema}.${external.table}`,
     mode,

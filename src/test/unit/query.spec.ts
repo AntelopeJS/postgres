@@ -6,7 +6,7 @@ import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
 import { Schemas } from "../../implementations/database/schema";
 import { ParamLedgerOf, WhileConfigured } from "./spec-fixture";
 import { FLOAT, TEXT } from "../../implementations/database/types";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import { CompileSubquery } from "../../implementations/database/subquery";
 import { CompileExpression } from "../../implementations/database/expression";
@@ -32,7 +32,7 @@ import {
   TableRelation,
 } from "../../implementations/database/relation";
 
-const PEOPLE: TableShape = {
+const PEOPLE: TableModel = {
   fields: {
     name: { column: "name", type: TEXT },
     age: { column: "age", type: FLOAT },
@@ -52,7 +52,7 @@ const DECODED_ALICE = { _id: "a", name: "Alice", age: 30 };
 const StubOrigin: OriginResolver = (schemaId, tableId) => ({
   schemaId,
   tableId,
-  shape: PEOPLE,
+  model: PEOPLE,
   index: (name) => [name],
 });
 
@@ -178,9 +178,9 @@ interface OpenLog {
 const GATED_SCHEMA_ID = "cursor-gate";
 const UNPARSEABLE_TYPE = "uuid";
 
-const BAD_SCHEMA = {
+const BAD_SCHEMA: SchemaDefinition = {
   [TABLE_ID]: { fields: { name: UNPARSEABLE_TYPE }, indexes: {} },
-} as unknown as SchemaDefinition;
+};
 
 const WRITE_STAGE = "'insert'";
 const CURSOR_HINT = "cursor";
@@ -252,7 +252,10 @@ async function Refusal(work: Promise<unknown>): Promise<Error> {
   try {
     await work;
   } catch (err) {
-    return err as Error;
+    if (!(err instanceof Error)) {
+      throw err;
+    }
+    return err;
   }
   throw new Error(NEVER_REFUSED);
 }
@@ -327,8 +330,9 @@ describe("the statement a cursor declares", () => {
     expect(ledger.referenced).to.deep.equal(ledger.bound);
   });
 
-  it("closes a reqId that never opened, without throwing", async () => {
+  it("closes a reqId that never opened, without throwing or touching the open cursors", async () => {
     await CloseCursor(UNOPENED_REQ_ID);
     await CloseCursor(UNOPENED_REQ_ID);
+    expect(CountOpenCursors()).to.equal(baseline);
   });
 });

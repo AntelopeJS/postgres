@@ -1,9 +1,10 @@
 import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
 
-import { Render } from "../../implementations/database/relation";
+import { Render } from "../../implementations/database/render";
 import {
   Apply,
+  CallerRoot,
   DOCUMENT,
   FROM_TABLE,
   Occurrences,
@@ -50,8 +51,7 @@ describe("the key stage", () => {
   });
 
   it("reads an undeclared name out of the overflow column", () => {
-    const undeclared = "nickname" as unknown as "name";
-    expect(Sql(Root().key(undeclared))).to.equal(
+    expect(Sql(CallerRoot().key("nickname"))).to.equal(
       `SELECT ("t0"."_extra" -> 'nickname') AS "value" ${FROM_TABLE}`,
     );
   });
@@ -197,8 +197,7 @@ describe("the pluck stage", () => {
   });
 
   it("routes an undeclared name through the container branch, out of the overflow", () => {
-    const undeclared = "nickname" as unknown as "name";
-    expect(Sql(Root().pluck(undeclared))).to.equal(
+    expect(Sql(CallerRoot().pluck("nickname"))).to.equal(
       `SELECT (jsonb_strip_nulls(jsonb_build_object())` +
         ` || (CASE WHEN ("t0"."_extra" -> 'nickname') IS NULL THEN '{}'::jsonb` +
         ` ELSE jsonb_build_object('nickname', ("t0"."_extra" -> 'nickname')) END))` +
@@ -222,7 +221,7 @@ describe("the pluck stage", () => {
   it("types the projection as the plucked fields alone", () => {
     expect(
       Apply(Root().pluck("name", "age")).relation.projection?.type,
-    ).to.deep.equal({ kind: "json", shape: { name: TEXT, age: FLOAT } });
+    ).to.deep.equal({ kind: "json", keys: { name: TEXT, age: FLOAT } });
   });
 
   it("rejects a field list that is not a list of names", () => {
@@ -266,7 +265,7 @@ describe("the without stage", () => {
       Apply(Root().without("age")).relation.projection?.type,
     ).to.deep.equal({
       kind: "json",
-      shape: {
+      keys: {
         _id: TEXT,
         _instance: TEXT,
         name: TEXT,
@@ -280,7 +279,7 @@ describe("the without stage", () => {
   it("types the projection as the shape minus the removed keys", () => {
     const type = Apply(Root().pluck("name", "age").without("age")).relation
       .projection?.type;
-    expect(type).to.deep.equal({ kind: "json", shape: { name: TEXT } });
+    expect(type).to.deep.equal({ kind: "json", keys: { name: TEXT } });
   });
 
   it("rejects a field list that is not a list of names", () => {

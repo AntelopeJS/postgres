@@ -4,22 +4,25 @@ import type { SchemaDefinition } from "@antelopejs/interface-database/schema";
 import {
   GetSchema,
   GetTableNames,
-  GetTableShape,
+  GetTableModel,
   Schemas,
   WaitForSchemaReady,
 } from "../../implementations/database/schema";
 
 const INHERITED = "constructor";
 
-const BAD_SCHEMA = {
+const BAD_SCHEMA: SchemaDefinition = {
   orders: { fields: { ref: "uuid" }, indexes: {} },
-} as unknown as SchemaDefinition;
+};
 
 async function Rejection(promise: Promise<unknown>): Promise<Error> {
   try {
     await promise;
   } catch (err) {
-    return err as Error;
+    if (!(err instanceof Error)) {
+      throw err;
+    }
+    return err;
   }
   throw new Error("expected the promise to reject");
 }
@@ -41,7 +44,7 @@ describe("Schemas.register", () => {
     await Rejection(Schemas.register("broken", BAD_SCHEMA));
 
     expect(() => GetSchema("broken")).to.throw(/Unknown schema/);
-    expect(() => GetTableShape("broken", "orders")).to.throw(/Unknown schema/);
+    expect(() => GetTableModel("broken", "orders")).to.throw(/Unknown schema/);
   });
 });
 
@@ -50,7 +53,7 @@ describe("the registry accessors", () => {
     expect(() => GetSchema(INHERITED)).to.throw(
       `Unknown schema '${INHERITED}'`,
     );
-    expect(() => GetTableShape(INHERITED, "orders")).to.throw(
+    expect(() => GetTableModel(INHERITED, "orders")).to.throw(
       `Unknown schema '${INHERITED}'`,
     );
     expect(() => GetTableNames(INHERITED)).to.throw(

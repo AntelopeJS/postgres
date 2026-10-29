@@ -2,6 +2,7 @@ import { expect } from "chai";
 import assert from "node:assert";
 import { SchemaInstance } from "@antelopejs/interface-database";
 import {
+  type DeepPartial,
   QueryStage,
   type StagedObject,
 } from "@antelopejs/interface-database/common";
@@ -10,7 +11,10 @@ import {
   type InstanceId,
 } from "@antelopejs/interface-database/schema";
 
-import type { TableShape } from "../../implementations/database/fields";
+import type {
+  SchemaModel,
+  TableModel,
+} from "../../implementations/database/fields";
 import { CompileSubquery } from "../../implementations/database/subquery";
 import { CompileExpression } from "../../implementations/database/expression";
 import {
@@ -27,9 +31,9 @@ import {
 } from "../../implementations/database/selection";
 import {
   type Relation,
-  Render,
   TableRelation,
 } from "../../implementations/database/relation";
+import { Render } from "../../implementations/database/render";
 import {
   type WriteStatement,
   WriteTargetOf,
@@ -57,12 +61,23 @@ import {
 export type { ParamLedger } from "./spec-fixture";
 export { Occurrences } from "./spec-fixture";
 
+/** What the specs keep in the opaque `meta` column. */
+interface Meta {
+  owner?: string;
+  name?: string;
+}
+
+/** A row of the `logs` table, which declares no fields: everything it holds is overflow. */
+interface LogEntry {
+  x?: number;
+}
+
 export interface Person {
   name: string;
   age: number;
   isActive: boolean;
   joined: Date;
-  meta: Record<string, unknown>;
+  meta: Meta;
 }
 
 export interface Product {
@@ -83,7 +98,7 @@ export interface Directory {
   people: Person;
   products: Product;
   notes: Note;
-  logs: Record<string, unknown>;
+  logs: LogEntry;
   profiles: Profile;
 }
 
@@ -103,7 +118,7 @@ export const FROM_TABLE = `FROM ${TABLE} AS "${ROOT_ALIAS}"`;
 
 const ROOT_STAGE_COUNT = 3;
 
-const PEOPLE: TableShape = {
+const PEOPLE: TableModel = {
   fields: {
     name: { column: "name", type: TEXT },
     age: { column: "age", type: FLOAT },
@@ -113,7 +128,7 @@ const PEOPLE: TableShape = {
   },
 };
 
-const PRODUCTS: TableShape = {
+const PRODUCTS: TableModel = {
   fields: {
     name: { column: "name", type: TEXT },
     price: { column: "price", type: FLOAT },
@@ -127,7 +142,7 @@ const PRODUCTS: TableShape = {
  * — and every other shape here spells them the same, which is the reading that
  * cannot tell a write naming the field apart from one naming the column.
  */
-const NOTES: TableShape = {
+const NOTES: TableModel = {
   fields: {
     summary: { column: "summ", type: TEXT },
   },
@@ -139,7 +154,7 @@ const NOTES: TableShape = {
  * The shape that has one physical column to write rather than several, which is where a write
  * assembling a parenthesised target list has to spell a bare column name instead.
  */
-const LOGS: TableShape = { fields: {} };
+const LOGS: TableModel = { fields: {} };
 
 /**
  * A shape declaring a field whose type is an array, which no other shape here does.
@@ -148,7 +163,7 @@ const LOGS: TableShape = { fields: {} };
  * the projection's own type, and an array is where that is visible without a document to hide it
  * in.
  */
-const PROFILES: TableShape = {
+const PROFILES: TableModel = {
   fields: {
     name: { column: "name", type: TEXT },
     skills: { column: "skills", type: ArrayOf(TEXT) },
@@ -216,7 +231,7 @@ export function ProductColumns(alias: string): string {
   );
 }
 
-const SHAPES: Record<string, TableShape> = {
+const MODELS: SchemaModel = {
   [TABLE_ID]: PEOPLE,
   [OTHER_TABLE_ID]: PRODUCTS,
   [NOTES_TABLE_ID]: NOTES,
@@ -224,17 +239,21 @@ const SHAPES: Record<string, TableShape> = {
   [PROFILES_TABLE_ID]: PROFILES,
 };
 
-const INDEXES: Record<string, string[]> = {
+const INDEXES = {
   byNameAge: ["name", "age"],
   byNameSkills: ["name", "skills"],
-};
+} satisfies Record<string, string[]>;
+
+function IsIndexKey(name: string): name is keyof typeof INDEXES {
+  return Object.hasOwn(INDEXES, name);
+}
 
 /** The stubbed {@link OriginResolver} a pipeline spec compiles against, registry and all. */
 const StubOrigin: OriginResolver = (schemaId, tableId) => ({
   schemaId,
   tableId,
-  shape: Object.hasOwn(SHAPES, tableId) ? SHAPES[tableId] : PEOPLE,
-  index: (name) => (Object.hasOwn(INDEXES, name) ? INDEXES[name] : [name]),
+  model: Object.hasOwn(MODELS, tableId) ? MODELS[tableId] : PEOPLE,
+  index: (name) => (IsIndexKey(name) ? INDEXES[name] : [name]),
 });
 
 export function NewTable(): Relation {
@@ -311,22 +330,30 @@ function NewSubqueryContext(): StubContext {
   return CountingContext(CompileSubquery);
 }
 
-function Table<Name extends keyof Directory & string>(
-  tableId: Name,
-  instanceId: InstanceId | undefined,
-) {
-  const schema = new SchemaInstance<Directory>(
+function Instance<Tables>(instanceId: InstanceId | undefined) {
+  const schema = new SchemaInstance<Tables>(
     QueryStage("schema", { id: SCHEMA_ID }),
   );
-  const instance = new SchemaInstance<Directory>(
+  return new SchemaInstance<Tables>(
     QueryStage("instance", { id: instanceId }),
     schema,
   );
-  return instance.table(tableId);
+}
+
+function Table<Name extends keyof Directory>(
+  tableId: Name,
+  instanceId: InstanceId | undefined,
+) {
+  return Instance<Directory>(instanceId).table(tableId);
 }
 
 export function Root() {
   return Table(TABLE_ID, undefined);
+}
+
+/** {@link Root} as a caller whose row type spells `_id` and undeclared keys reads and writes it. */
+export function CallerRoot() {
+  return Instance<CallerDirectory>(undefined).table(TABLE_ID);
 }
 
 export function Other() {
@@ -434,12 +461,29 @@ export function Write(query: StagedObject): Written {
 }
 
 /**
- * A document as a caller hands one to a write, which is not a shape the contract can spell.
+ * A person as a caller declares one.
  *
- * `DeepPartial<T>` has no spelling for `_id` or for an undeclared key, and those are exactly what
- * the key column and the overflow column exist for, so every write spec casts through this.
+ * The caller's row type is its own declaration, independent of the schema: it spells the key
+ * column, the columns the adapter owns, keys the schema does not declare (which live in the
+ * overflow column) and keys a recorded lambda also uses, which are what the specs probe.
  */
-export type WriteDocument = Record<string, unknown>;
+interface CallerPerson extends Person {
+  _id: string | number | null;
+  _instance: string;
+  _extra: { [key: string]: string };
+  nickname: string;
+  stale: string;
+  stage: string;
+  args: (string[] | number)[];
+}
+
+/** The caller's view of the directory, as {@link CallerRoot} reads and writes it. */
+interface CallerDirectory {
+  people: CallerPerson;
+}
+
+/** A document as a caller hands one to a write through {@link CallerRoot}. */
+export type WriteDocument = DeepPartial<CallerPerson>;
 
 export function WrittenSql(written: Written): string {
   return written.statement.sql;
@@ -552,7 +596,7 @@ export const EVERY_ROW =
  * `bind message supplies N parameters, but prepared statement requires M` that names nothing about
  * the query.
  */
-export function ExpectBalancedLedger(written: Written[]): void {
+export function expectBalancedLedger(written: Written[]): void {
   for (const one of written) {
     const ledger = ReadStatementLedger(one);
     expect(ledger.referenced).to.deep.equal(ledger.bound);

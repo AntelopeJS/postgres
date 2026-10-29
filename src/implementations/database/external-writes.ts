@@ -7,7 +7,8 @@ import { QualifiedName } from "./identifier";
 import type { ExternalRelation } from "./fields";
 import { FIRST_OPERAND } from "./stage";
 import { KeylessRefusal } from "./external-refusals";
-import { Render, SetProjection } from "./relation";
+import { SetProjection } from "./relation";
+import { Render } from "./render";
 import type { QueryStage } from "./utils";
 import { ID_COLUMN } from "./utils";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
@@ -37,6 +38,7 @@ import {
   type WriteStatement,
   type WriteTarget,
 } from "./writes-shared";
+import { IsString } from "./guards";
 
 const ALIAS = QuoteIdentifier(WRITE_ALIAS);
 const SOURCE_ALIAS = QuoteIdentifier("src");
@@ -46,7 +48,9 @@ const POSITION = QuoteIdentifier("position");
 const CONFLICT_MODES = ["update", "replace"];
 
 function ExternalOf(target: WriteTarget): ExternalRelation {
-  return target.origin.shape.external as ExternalRelation;
+  const { external } = target.origin.model;
+  assert(external, "An external write needs the relation it targets");
+  return external;
 }
 
 /** The key a write needs: a relation without one is read-only, as the read design's cases D–F. */
@@ -285,7 +289,7 @@ function ChangeWrite(mode: ExternalWriteMode): WriteCompiler {
     RequireKey(target);
     const payload = SplitExternalPayload(
       DocumentOf(stage),
-      target.origin.shape,
+      target.origin.model,
       context,
       mode,
     );
@@ -319,7 +323,7 @@ function ConflictOf(stage: QueryStage): string | undefined {
     return undefined;
   }
   assert(
-    typeof conflict === "string" && CONFLICT_MODES.includes(conflict),
+    IsString(conflict) && CONFLICT_MODES.includes(conflict),
     `The '${stage.stage}' stage takes a conflict mode of ${CONFLICT_MODES.join(" or ")}, received ${JSON.stringify(conflict)}`,
   );
   return conflict;
@@ -391,8 +395,12 @@ function ConflictClause(
   );
   if (conflict === "replace") {
     const named = new Set(assigned.map((column) => column.column));
-    for (const spec of Object.values(target.origin.shape.fields)) {
-      const descriptor = spec.native as ColumnDescriptor;
+    for (const spec of Object.values(target.origin.model.fields)) {
+      const descriptor = spec.native;
+      assert(
+        descriptor,
+        "An external field needs the column it was resolved to",
+      );
       if (
         !named.has(descriptor.column) &&
         !keyColumns.has(descriptor.column) &&
@@ -451,7 +459,7 @@ const ExternalInsert: WriteCompiler = (target, stage, context) => {
   const rows = documents.map((document) => {
     const payload = SplitExternalPayload(
       document,
-      target.origin.shape,
+      target.origin.model,
       context,
       "insert",
     );
@@ -478,14 +486,20 @@ const ExternalInsert: WriteCompiler = (target, stage, context) => {
 };
 
 /** The writes of an external relation, which `writes.ts` dispatches to by the target's shape. */
-export const EXTERNAL_WRITES: Record<string, WriteCompiler> = {
+export const EXTERNAL_WRITES = {
   insert: ExternalInsert,
   update: ChangeWrite("update"),
   replace: ChangeWrite("replace"),
   delete: ExternalDelete,
-};
+} satisfies Record<string, WriteCompiler>;
+
+export function IsExternalWriteStage(
+  name: string,
+): name is keyof typeof EXTERNAL_WRITES {
+  return Object.hasOwn(EXTERNAL_WRITES, name);
+}
 
 /** Whether a write target is a relation the adapter did not create. */
 export function IsExternalTarget(target: WriteTarget): boolean {
-  return target.origin.shape.external !== undefined;
+  return target.origin.model.external !== undefined;
 }

@@ -8,6 +8,7 @@ import type { InstanceScope, RootSelection } from "./selection";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import { type Relation, RequireOrigin, type TableOrigin } from "./relation";
 import { AliasedColumns, ColumnRowSource, type RowSource } from "./row-source";
+import { IsObject } from "./guards";
 
 /**
  * The rows a write changes, and everything it may know about them.
@@ -115,7 +116,7 @@ export function WriteTable(origin: TableOrigin): string {
  * semantics a mapper wants.
  */
 export function WriteRowSource(origin: TableOrigin): RowSource {
-  return new ColumnRowSource(AliasedColumns(WRITE_ALIAS), origin.shape);
+  return new ColumnRowSource(AliasedColumns(WRITE_ALIAS), origin.model);
 }
 
 /**
@@ -169,7 +170,7 @@ export function DescribeKind(value: unknown): string {
 export function AsDocument(
   value: unknown,
 ): Record<string, unknown> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!IsObject(value) || Array.isArray(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;

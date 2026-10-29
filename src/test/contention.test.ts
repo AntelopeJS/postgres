@@ -105,7 +105,7 @@ describe("legacy conditional writes under contention", () => {
       _id: ID,
       revision: "old",
       value: "initial",
-    } as RecordValue);
+    });
   });
 
   it("reproduces two different patches matching one stale revision", async () => {
@@ -134,7 +134,7 @@ describe("atomic mutations under contention", () => {
       _id: ID,
       revision: "old",
       value: "initial",
-    } as RecordValue);
+    });
   });
 
   function Winner() {

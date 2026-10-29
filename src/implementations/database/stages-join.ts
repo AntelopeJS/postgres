@@ -21,23 +21,26 @@ import {
   IsArray,
   IsOpaque,
   JsonOf,
-  MergeShapes,
+  MergeKeyTypes,
   type SqlType,
 } from "./types";
 import {
   CurrentValue,
-  HasFlag,
   type JoinKind,
-  Nested,
   OUTPUT_COLUMN,
-  Prepare,
   type Relation,
+  SetProjection,
+} from "./relation";
+import {
+  HasFlag,
+  Nested,
+  Prepare,
   type RelationFlag,
   Render,
-  SetProjection,
   SINGLE_ROW,
   WHERE_BLOCKERS,
-} from "./relation";
+} from "./render";
+import { IsString } from "./guards";
 
 const MAPPER_OPERAND = 2;
 
@@ -158,7 +161,7 @@ function KeysOf(stage: QueryStage): LookupKeys {
   const localKey = stage.options?.localKey;
   const otherKey = stage.options?.otherKey;
   assert(
-    typeof localKey === "string" && typeof otherKey === "string",
+    IsString(localKey) && IsString(otherKey),
     "The 'lookup' stage names the local key and the other key with strings",
   );
   return { localKey, otherKey };
@@ -279,7 +282,7 @@ function Replaced(document: Compiled, key: string, value: Compiled): Compiled {
   const member = `jsonb_build_object(${QuoteLiteral(key)}, ${value.sql})`;
   return {
     sql: `(${AsJson(document).sql} || ${member})`,
-    type: MergeShapes(document.type, JsonOf({ [key]: value.type })),
+    type: MergeKeyTypes(document.type, JsonOf({ [key]: value.type })),
   };
 }
 

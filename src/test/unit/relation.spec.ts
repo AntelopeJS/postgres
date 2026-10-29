@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
 import { Occurrences, RefusingCompilers } from "./spec-fixture";
-import type { TableShape } from "../../implementations/database/fields";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import {
   FLOAT,
@@ -10,21 +10,23 @@ import {
   TEXT,
 } from "../../implementations/database/types";
 import {
-  AbsorbOrder,
   CurrentValue,
   type JoinClause,
-  Nested,
-  Prepare,
   type Relation,
-  Render,
   ScanColumns,
   SetProjection,
   type TableOrigin,
   TableRelation,
   ValueRelation,
 } from "../../implementations/database/relation";
+import {
+  AbsorbOrder,
+  Nested,
+  Prepare,
+  Render,
+} from "../../implementations/database/render";
 
-const VEHICLES: TableShape = {
+const VEHICLES: TableModel = {
   fields: {
     car: { column: "car", type: TEXT },
     price: { column: "price", type: FLOAT },
@@ -60,7 +62,7 @@ function NewOrigin(): TableOrigin {
   return {
     schemaId: "shop",
     tableId: "vehicles",
-    shape: VEHICLES,
+    model: VEHICLES,
     index: (name) => [name],
   };
 }

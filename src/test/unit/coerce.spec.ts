@@ -13,7 +13,6 @@ import {
   BOOL,
   FLOAT,
   JsonOf,
-  type JsonType,
   OPAQUE,
   TEXT,
   TIMESTAMP,
@@ -30,9 +29,9 @@ describe("Unify", () => {
   });
 
   it("keeps a shaped json when unified against the bottom", () => {
-    const shaped = JsonOf({ a: TEXT });
-    expect(Unify(OPAQUE, shaped)).to.equal(shaped);
-    expect(Unify(shaped, OPAQUE)).to.equal(shaped);
+    const keyedJson = JsonOf({ a: TEXT });
+    expect(Unify(OPAQUE, keyedJson)).to.equal(keyedJson);
+    expect(Unify(keyedJson, OPAQUE)).to.equal(keyedJson);
   });
 
   it("falls back to the bottom for distinct concrete kinds", () => {
@@ -117,15 +116,15 @@ describe("Widen", () => {
   });
 
   it("takes the shaped side when the other is unshaped", () => {
-    const shaped = JsonOf({ a: TEXT });
-    expect(Widen(OPAQUE, shaped)).to.equal(shaped);
-    expect(Widen(shaped, OPAQUE)).to.equal(shaped);
+    const keyedJson = JsonOf({ a: TEXT });
+    expect(Widen(OPAQUE, keyedJson)).to.equal(keyedJson);
+    expect(Widen(keyedJson, OPAQUE)).to.equal(keyedJson);
   });
 
   it("does not treat a key inherited from Object.prototype as a collision", () => {
     const widened = Widen(JsonOf({ a: TEXT }), JsonOf({ toString: FLOAT }));
     expect(widened.kind).to.equal("json");
-    expect((widened as JsonType).shape?.toString).to.equal(FLOAT);
+    expect(widened).to.have.nested.property("keys.toString", FLOAT);
   });
 });
 

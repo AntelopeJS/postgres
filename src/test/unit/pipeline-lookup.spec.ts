@@ -13,6 +13,7 @@ import {
   ProfilesRoot,
   ReadParamLedger,
   ROOT_ALIAS,
+  CallerRoot,
   Root,
   Sql,
   TABLE,
@@ -128,7 +129,7 @@ function OpaqueLookup() {
  * schema, which is an independent declaration, so it reaches this compiler bottom-typed.
  */
 function UndeclaredLookup() {
-  return (Root() as any).lookup(Other(), "nickname", "name");
+  return CallerRoot().lookup(Other(), "nickname", "name");
 }
 
 function ArrayLookup() {
@@ -137,7 +138,7 @@ function ArrayLookup() {
 
 /** The mirror of {@link ArrayLookup}: a scalar local key against a list on the other side. */
 function ArrayOtherLookup() {
-  return Root().lookup(ProfilesRoot() as any, "name", "skills");
+  return Root().lookup(ProfilesRoot(), "name", "skills");
 }
 
 function LookupOnGet() {
@@ -228,10 +229,10 @@ describe("the lookup stage", () => {
 
   it("types the replaced key as the document the lateral answers with", () => {
     const { relation } = Apply(ScalarLookup());
-    const shape = relation.projection?.type;
-    expect(shape?.kind).to.equal("json");
-    expect(shape).to.have.nested.property("shape.name.kind", "json");
-    expect(shape).to.have.nested.property("shape.age.kind", "float");
+    const projected = relation.projection?.type;
+    expect(projected?.kind).to.equal("json");
+    expect(projected).to.have.nested.property("keys.name.kind", "json");
+    expect(projected).to.have.nested.property("keys.age.kind", "float");
   });
 });
 
@@ -268,11 +269,11 @@ describe("a lookup on a local key declared as an array", () => {
   it("types the replaced key as an array of the documents it collected", () => {
     const { relation } = Apply(ArrayLookup(), NewProfiles());
     expect(relation.projection?.type).to.have.nested.property(
-      "shape.skills.kind",
+      "keys.skills.kind",
       "array",
     );
     expect(relation.projection?.type).to.have.nested.property(
-      "shape.skills.elem.kind",
+      "keys.skills.elem.kind",
       "json",
     );
   });

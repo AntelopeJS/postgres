@@ -5,7 +5,8 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 import { Occurrences, RefusingCompilers } from "./spec-fixture";
 import { Moment } from "../../implementations/database/readings";
 import type { Compiled } from "../../implementations/database/sql";
-import type { TableShape } from "../../implementations/database/fields";
+import { AsValue } from "../../implementations/database/stage";
+import type { TableModel } from "../../implementations/database/fields";
 import { DecodingContext } from "../../implementations/database/context";
 import {
   CompileExpression,
@@ -27,7 +28,7 @@ import {
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
 
-const users: TableShape = {
+const users: TableModel = {
   fields: {
     createdAt: { column: "createdAt", type: TIMESTAMP },
     age: { column: "age", type: FLOAT },
@@ -217,7 +218,7 @@ describe("date_with_timezone", () => {
       stage,
       NewContext(),
     );
-    expect((out.current as Compiled).sql).to.equal(CREATED);
+    expect(AsValue(out).sql).to.equal(CREATED);
     expect(out.timezone).to.equal(NEW_YORK);
   });
 
@@ -360,7 +361,7 @@ describe("date_epoch", () => {
       stage,
       NewContext(),
     );
-    expect((out.current as Compiled).sql).to.not.contain("AT TIME ZONE");
+    expect(AsValue(out).sql).to.not.contain("AT TIME ZONE");
   });
 });
 
@@ -384,7 +385,7 @@ describe("date_during", () => {
       stage,
       NewContext(),
     );
-    expect((out.current as Compiled).sql).to.not.contain("AT TIME ZONE");
+    expect(AsValue(out).sql).to.not.contain("AT TIME ZONE");
   });
 
   it("reads both bounds as moments", () => {

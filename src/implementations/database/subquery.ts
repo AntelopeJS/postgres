@@ -4,16 +4,9 @@ import { AsJson } from "./readings";
 import type { Compiled } from "./sql";
 import { FIRST_OPERAND } from "./stage";
 import type { QueryStage } from "./utils";
-import type { DecodingContext } from "./context";
-import {
-  AbsorbOrder,
-  CurrentValue,
-  Prepare,
-  type Relation,
-  type RelationFlag,
-  Render,
-  SetProjection,
-} from "./relation";
+import { type DecodingContext, IsSubqueryProvider } from "./context";
+import { CurrentValue, type Relation, SetProjection } from "./relation";
+import { AbsorbOrder, Prepare, type RelationFlag, Render } from "./render";
 
 /**
  * What has already decided *which* rows there are blocks the aggregate from absorbing.
@@ -53,7 +46,7 @@ function ProvidedSubquery(
     return undefined;
   }
   const binding = context.arg(head.args[FIRST_OPERAND]);
-  return typeof binding === "function" ? binding(rest) : undefined;
+  return IsSubqueryProvider(binding) ? binding(rest) : undefined;
 }
 
 /**

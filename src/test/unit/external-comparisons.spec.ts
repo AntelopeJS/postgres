@@ -5,14 +5,14 @@ import {
   type StagedObject,
 } from "@antelopejs/interface-database/common";
 
-import { Render } from "../../implementations/database/relation";
+import { Render } from "../../implementations/database/render";
 import { BuildRoot } from "../../implementations/database/selection";
 import { DecodingContext } from "../../implementations/database/context";
 import { CompileSubquery } from "../../implementations/database/subquery";
 import { CompileExpression } from "../../implementations/database/expression";
 import {
   ParseFieldType,
-  type TableShape,
+  type SchemaModel,
 } from "../../implementations/database/fields";
 import type { CatalogColumn } from "../../implementations/database/external-catalog";
 import {
@@ -65,9 +65,7 @@ function Field({ column, declared }: Declared) {
 }
 
 function Key(columns: NativeColumn[]): ColumnDescriptor[] {
-  return columns.map(
-    (column) => DescribeKey(Catalog(column)) as ColumnDescriptor,
-  );
+  return columns.flatMap((column) => DescribeKey(Catalog(column)) ?? []);
 }
 
 const ID: NativeColumn = { name: "id", typname: "int8", castType: "bigint" };
@@ -94,7 +92,7 @@ const LINE_NO: NativeColumn = {
   castType: "integer",
 };
 
-const SHAPES: Record<string, TableShape> = {
+const MODELS: SchemaModel = {
   accounts: {
     fields: {
       id: Field({ column: ID, declared: "string" }),
@@ -117,9 +115,13 @@ const SHAPES: Record<string, TableShape> = {
   },
 };
 
-type Tables = Record<string, Record<string, unknown>>;
+interface Tables {
+  accounts: { _id: string; score: number; revenue: number };
+  contacts: { account_id: string };
+  order_lines: { line_no: number };
+}
 
-function Table(tableId: string) {
+function Table<K extends keyof Tables>(tableId: K) {
   const schema = new SchemaInstance<Tables>(
     QueryStage("schema", { id: "sales" }),
   );
@@ -140,7 +142,7 @@ function Sql(query: StagedObject): string {
     (schemaId, tableId) => ({
       schemaId,
       tableId,
-      shape: SHAPES[tableId],
+      model: MODELS[tableId],
       index: (name) => [name],
     }),
   );

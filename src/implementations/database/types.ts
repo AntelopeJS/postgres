@@ -1,4 +1,4 @@
-export interface SqlShape {
+export interface KeyTypes {
   readonly [field: string]: SqlType;
 }
 
@@ -20,7 +20,7 @@ export interface ArrayType {
 }
 export interface JsonType {
   readonly kind: "json";
-  readonly shape?: SqlShape;
+  readonly keys?: KeyTypes;
 }
 
 export type SqlType =
@@ -55,11 +55,11 @@ export function ArrayOf(elem: SqlType): ArrayType {
  * second declares nothing about them. Only the second is {@link OPAQUE} — conflating them makes
  * `merge({})` erase what the left side declared, and a declared date then reads back as text.
  */
-export function JsonOf(shape?: SqlShape): JsonType {
-  if (!shape) {
+export function JsonOf(keyTypes?: KeyTypes): JsonType {
+  if (!keyTypes) {
     return OPAQUE;
   }
-  return { kind: "json", shape };
+  return { kind: "json", keys: keyTypes };
 }
 
 export function PhysicalType(type: SqlType): string {
@@ -67,7 +67,7 @@ export function PhysicalType(type: SqlType): string {
 }
 
 export function IsOpaque(type: SqlType): boolean {
-  return type.kind === "json" && !type.shape;
+  return type.kind === "json" && !type.keys;
 }
 
 export function IsJsonBacked(type: SqlType): type is ArrayType | JsonType {
@@ -87,8 +87,8 @@ export function IsArray(type: SqlType): type is ArrayType {
 }
 
 /** The declared members of a json type, or nothing for any type whose members are unknown. */
-export function ShapeOf(type: SqlType): SqlShape | undefined {
-  return type.kind === "json" ? type.shape : undefined;
+export function KeyTypesOf(type: SqlType): KeyTypes | undefined {
+  return type.kind === "json" ? type.keys : undefined;
 }
 
 /**
@@ -101,9 +101,9 @@ export function ShapeOf(type: SqlType): SqlShape | undefined {
  * shared: the two callers emit deliberately different SQL, guarding unconditionally in one and
  * conditionally in the other.
  */
-export function MergeShapes(left: SqlType, right: SqlType): SqlType {
-  const known = ShapeOf(left);
-  const overriding = ShapeOf(right);
+export function MergeKeyTypes(left: SqlType, right: SqlType): SqlType {
+  const known = KeyTypesOf(left);
+  const overriding = KeyTypesOf(right);
   if (!known || !overriding) {
     return OPAQUE;
   }

@@ -10,14 +10,13 @@ import { ID_COLUMN, INSTANCE_COLUMN, type QueryStage } from "./utils";
 import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import { KeylessRefusal } from "./external-refusals";
 import {
-  Prepare,
   type Relation,
   type TableOrigin,
   RequireOrigin,
   ScanColumns,
-  SINGLE_ROW,
-  WHERE_BLOCKERS,
 } from "./relation";
+import { Prepare, SINGLE_ROW, WHERE_BLOCKERS } from "./render";
+import { IsString } from "./guards";
 
 const NO_KEYS = "FALSE";
 const EQUALITY = "=";
@@ -65,7 +64,7 @@ function Selected(
 
 /** Refuses reading by `_id` a relation that has no key to alias, rather than matching nothing. */
 function RequireKey(origin: TableOrigin, indexId: string | undefined): void {
-  const external = origin.shape.external;
+  const external = origin.model.external;
   const byKey = indexId === undefined || indexId === ID_COLUMN;
   if (external && !external.key && byKey) {
     throw KeylessRefusal(external);
@@ -86,7 +85,7 @@ function IndexOption(stage: QueryStage): string | undefined {
     return undefined;
   }
   assert(
-    typeof name === "string",
+    IsString(name),
     `The '${stage.stage}' stage names its index with a string, received ${typeof name}`,
   );
   return name;

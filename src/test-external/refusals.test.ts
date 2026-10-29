@@ -13,13 +13,16 @@ async function Refusal(work: () => PromiseLike<unknown>): Promise<string> {
   try {
     await work();
   } catch (err) {
-    return (err as Error).message;
+    if (!(err instanceof Error)) throw err;
+    return err.message;
   }
   throw new Error("the request was expected to be refused");
 }
 
 /** The first event a feed would deliver, which is where an iterated query first reaches the module. */
-async function FirstEvent(feed: AsyncIterable<unknown>): Promise<unknown> {
+async function FirstEvent<T>(
+  feed: AsyncIterable<T>,
+): Promise<IteratorResult<T>> {
   const iterator = feed[Symbol.asyncIterator]();
   try {
     return await iterator.next();
@@ -42,14 +45,20 @@ describe("what an external relation refuses", () => {
 
   after(AccountsUnchanged);
 
-  const WRITES: [string, () => PromiseLike<unknown>][] = [
-    ["insert", () => Accounts().insert({ name: "New" })],
-    ["update", () => Accounts().get("1").update({ name: "Changed" })],
-    ["replace", () => Accounts().get("1").replace({ name: "Replaced" })],
-    ["delete", () => Accounts().get("1").delete()],
-    [
-      "atomicMutation",
-      () =>
+  const WRITES = [
+    { stage: "insert", write: () => Accounts().insert({ name: "New" }) },
+    {
+      stage: "update",
+      write: () => Accounts().get("1").update({ name: "Changed" }),
+    },
+    {
+      stage: "replace",
+      write: () => Accounts().get("1").replace({ name: "Replaced" }),
+    },
+    { stage: "delete", write: () => Accounts().get("1").delete() },
+    {
+      stage: "atomicMutation",
+      write: () =>
         Accounts().atomicMutation("1", {
           type: "update",
           revisionField: "name",
@@ -57,21 +66,19 @@ describe("what an external relation refuses", () => {
           nextRevision: "Acct one",
           patch: {},
         }),
-    ],
+    },
   ];
 
-  for (const [stage, write] of WRITES) {
+  for (const { stage, write } of WRITES) {
     const expected = stage === "atomicMutation" ? stage : "may not write to";
     it(`refuses ${stage} on a relation the connected role may not write, naming it, and writes nothing`, async () => {
-      const message = await Refusal(write);
+      const message = await Refusal(() => write());
       expect(message).to.contain(expected).and.to.contain('"sales"."accounts"');
     });
   }
 
   it("refuses changes(), since the adapter keeps no change log on the client's database", async () => {
-    const message = await Refusal(() =>
-      FirstEvent(Accounts().changes() as never),
-    );
+    const message = await Refusal(() => FirstEvent(Accounts().changes()));
     expect(message)
       .to.contain("changes()")
       .and.to.contain('"sales"."accounts"');
@@ -90,19 +97,22 @@ describe("what an external relation refuses", () => {
     expect(await sales.listInstances()).to.deep.equal([]);
   });
 
-  for (const [description, read] of [
-    ["get", () => sales.instance().table("raw_log").get("1")],
-    [
-      "getAll without an index",
-      () => sales.instance().table("raw_log").getAll(["1"]),
-    ],
-    [
-      "getAll by _id",
-      () => sales.instance().table("raw_log").getAll(["1"], "_id"),
-    ],
-  ] as [string, () => PromiseLike<unknown>][]) {
+  for (const { description, read } of [
+    {
+      description: "get",
+      read: () => sales.instance().table("raw_log").get("1"),
+    },
+    {
+      description: "getAll without an index",
+      read: () => sales.instance().table("raw_log").getAll(["1"]),
+    },
+    {
+      description: "getAll by _id",
+      read: () => sales.instance().table("raw_log").getAll(["1"], "_id"),
+    },
+  ]) {
     it(`refuses ${description} on a relation with no key, naming it`, async () => {
-      const message = await Refusal(read);
+      const message = await Refusal(() => read());
       expect(message).to.contain('"sales"."raw_log"').and.to.contain("no _id");
     });
   }

@@ -1,20 +1,16 @@
 import { expect } from "chai";
 import { QueryStage } from "@antelopejs/interface-database/common";
-import type {
-  DeepPartial,
-  InsertOptions,
-} from "@antelopejs/interface-database/common";
+import type { InsertOptions } from "@antelopejs/interface-database/common";
 
 import { SplitWrite } from "../../implementations/database/writes";
 import {
   CrossInstanceRoot,
-  ExpectBalancedLedger,
+  expectBalancedLedger,
   NOTES_TABLE,
-  type Note,
   NotesRoot,
   Occurrences,
-  type Person,
   Root,
+  CallerRoot,
   WrittenSql as Sql,
   Stages,
   TABLE,
@@ -44,19 +40,12 @@ function Group(index: number, statement: string): string {
   return `"g${index}" AS (${statement})`;
 }
 
-/**
- * One recorded insert, through the contract's own builder.
- *
- * The cast is what lets a document carry `_id` and undeclared keys: `DeepPartial<Person>` has a
- * spelling for neither, and both are exactly what the key column and the overflow column exist for.
- */
+/** One recorded insert, through the contract's own builder. */
 function Insert(
   documents: WriteDocument | WriteDocument[],
   options?: InsertOptions,
 ): Written {
-  return Write(
-    Root().insert(documents as unknown as DeepPartial<Person>, options),
-  );
+  return Write(CallerRoot().insert(documents, options));
 }
 
 /** A pipeline stage the builders record without allocating a lambda id. */
@@ -121,9 +110,7 @@ describe("the insert statement", () => {
   });
 
   it("names a declared field by its column rather than by its field name", () => {
-    const written = Write(
-      NotesRoot().insert({ summary: "s" } as unknown as DeepPartial<Note>),
-    );
+    const written = Write(NotesRoot().insert({ summary: "s" }));
     expect(Sql(written)).to.equal(
       `INSERT INTO ${NOTES_TABLE} AS "w0" ("_id", "_instance", "summ", "_extra")` +
         ` VALUES (($2::text), ($1::text), ($3::text), ${EMPTY_EXTRA})`,
@@ -391,7 +378,7 @@ describe("splitting a terminal write off the pipeline", () => {
 
 describe("the insert statement's parameter ledger", () => {
   it("references every parameter it binds, and binds every one it references", () => {
-    ExpectBalancedLedger([
+    expectBalancedLedger([
       Insert({ name: "a", age: 3 }),
       Insert([{ name: "a" }, { age: 3, nickname: "z" }]),
       Insert({ _id: "k", name: "a" }, { conflict: "update" }),
