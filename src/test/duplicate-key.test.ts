@@ -67,7 +67,7 @@ async function Refusal(write: PromiseLike<unknown>): Promise<unknown> {
   return expect.fail("the write should have been refused");
 }
 
-async function ExpectDuplicate(
+async function expectDuplicate(
   write: PromiseLike<unknown>,
   index: string,
   fields: string[],
@@ -89,7 +89,7 @@ describe("duplicate keys", () => {
 
   it("refuses a second row with the same _id as a duplicate of _id", async () => {
     await Accounts(schema).insert(Row("a", "a@x", 1));
-    await ExpectDuplicate(
+    await expectDuplicate(
       Accounts(schema).insert(Row("a", "other@x", 2)),
       "_id",
       ["_id"],
@@ -105,12 +105,12 @@ describe("duplicate keys", () => {
 
   it("refuses an insert that clashes on a unique secondary index, conflict mode or not", async () => {
     await Accounts(schema).insert(Row("a", "a@x", 1));
-    await ExpectDuplicate(
+    await expectDuplicate(
       Accounts(schema).insert(Row("b", "a@x", 2)),
       "email",
       ["email"],
     );
-    await ExpectDuplicate(
+    await expectDuplicate(
       Accounts(schema).insert(Row("b", "a@x", 2), { conflict: "update" }),
       "email",
       ["email"],
@@ -120,12 +120,12 @@ describe("duplicate keys", () => {
 
   it("refuses an update and a replace that clash on a unique index", async () => {
     await Accounts(schema).insert([Row("a", "a@x", 1), Row("b", "b@x", 2)]);
-    await ExpectDuplicate(
+    await expectDuplicate(
       Accounts(schema).get("b").update({ email: "a@x" }),
       "email",
       ["email"],
     );
-    await ExpectDuplicate(
+    await expectDuplicate(
       Accounts(schema)
         .get("b")
         .replace(Row("b", "b@x", 1)),
@@ -145,7 +145,7 @@ describe("duplicate keys", () => {
       team: "ops",
       seat: 1,
     });
-    await ExpectDuplicate(
+    await expectDuplicate(
       Accounts(schema).insert(Row("d", "d@x", 1)),
       "teamSeat",
       ["team", "seat"],

@@ -196,19 +196,15 @@ describe("external column readings", () => {
       expect(DescribeDeclared(declared, type).value(COLUMN)).to.equal(value);
     });
 
-    it(
-      lossy
-        ? `accepts ${name} and reports what it loses`
-        : `accepts ${name} losslessly`,
-      () => {
-        const reported = DescribeDeclared(declared, type).lossy;
-        if (lossy) {
-          expect(reported).to.match(lossy);
-        } else {
-          expect(reported).to.equal(undefined);
-        }
-      },
-    );
+    const losing = lossy ? " and reports what it loses" : " losslessly";
+    it(`accepts ${name}${losing}`, () => {
+      const reported = DescribeDeclared(declared, type).lossy;
+      if (lossy) {
+        expect(reported).to.match(lossy);
+      } else {
+        expect(reported).to.equal(undefined);
+      }
+    });
   }
 
   for (const { declared, type, hint } of REFUSED) {

@@ -552,7 +552,7 @@ export const EVERY_ROW =
  * `bind message supplies N parameters, but prepared statement requires M` that names nothing about
  * the query.
  */
-export function ExpectBalancedLedger(written: Written[]): void {
+export function expectBalancedLedger(written: Written[]): void {
   for (const one of written) {
     const ledger = ReadStatementLedger(one);
     expect(ledger.referenced).to.deep.equal(ledger.bound);

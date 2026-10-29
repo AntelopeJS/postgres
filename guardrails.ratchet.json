@@ -1,20 +1,16 @@
 {
   "rules": {
     "antelopejs/no-comments": 5,
-    "antelopejs/no-fs-read-in-tests": 1,
-    "antelopejs/no-typeof-function-only-test": 3,
-    "antelopejs/require-assertion": 9,
     "anti-slop/no-chained-type-assertions": 34,
     "anti-slop/no-known-value-widening": 45,
     "anti-slop/no-object-parameters": 2,
-    "anti-slop/no-runtime-typeof": 49,
+    "anti-slop/no-runtime-typeof": 48,
     "anti-slop/no-shape-in-symbol-names": 390,
     "anti-slop/no-unknown-parameters": 62,
     "anti-slop/no-unknown-returns": 26,
     "anti-slop/no-unsafe-dictionary-type": 42,
     "anti-slop/require-safety-comment-for-type-assertion": 226,
     "eslint/max-lines-per-function": 5,
-    "jest/valid-title": 1,
     "typescript/no-base-to-string": 1,
     "typescript/no-redundant-type-constituents": 1,
     "typescript/unbound-method": 2

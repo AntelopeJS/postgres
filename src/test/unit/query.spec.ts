@@ -327,8 +327,9 @@ describe("the statement a cursor declares", () => {
     expect(ledger.referenced).to.deep.equal(ledger.bound);
   });
 
-  it("closes a reqId that never opened, without throwing", async () => {
+  it("closes a reqId that never opened, without throwing or touching the open cursors", async () => {
     await CloseCursor(UNOPENED_REQ_ID);
     await CloseCursor(UNOPENED_REQ_ID);
+    expect(CountOpenCursors()).to.equal(baseline);
   });
 });
