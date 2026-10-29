@@ -138,7 +138,7 @@ function ArrayLookup() {
 
 /** The mirror of {@link ArrayLookup}: a scalar local key against a list on the other side. */
 function ArrayOtherLookup() {
-  return Root().lookup(ProfilesRoot() as any, "name", "skills");
+  return Root().lookup(ProfilesRoot(), "name", "skills");
 }
 
 function LookupOnGet() {

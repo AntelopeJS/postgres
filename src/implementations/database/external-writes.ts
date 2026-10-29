@@ -395,7 +395,11 @@ function ConflictClause(
   if (conflict === "replace") {
     const named = new Set(assigned.map((column) => column.column));
     for (const spec of Object.values(target.origin.model.fields)) {
-      const descriptor = spec.native as ColumnDescriptor;
+      const descriptor = spec.native;
+      assert(
+        descriptor,
+        "An external field needs the column it was resolved to",
+      );
       if (
         !named.has(descriptor.column) &&
         !keyColumns.has(descriptor.column) &&

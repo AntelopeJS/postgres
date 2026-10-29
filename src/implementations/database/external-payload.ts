@@ -274,7 +274,8 @@ function TakeReadOnly(
 
 function TakeField(walk: ExternalWalk, name: string, value: unknown): void {
   const spec = walk.model.fields[name];
-  const descriptor = spec.native as ColumnDescriptor;
+  const descriptor = spec.native;
+  assert(descriptor, "An external field needs the column it was resolved to");
   if (KeyColumn(walk, descriptor.column)) {
     if (IsReadOnly(descriptor)) {
       TakeReadOnly(walk, name, descriptor, value);
@@ -336,7 +337,8 @@ function ClearSilentFields(
   document: Record<string, unknown>,
 ): void {
   for (const [name, spec] of Object.entries(walk.model.fields)) {
-    const descriptor = spec.native as ColumnDescriptor;
+    const descriptor = spec.native;
+    assert(descriptor, "An external field needs the column it was resolved to");
     const silent = !Object.hasOwn(document, name);
     if (
       silent &&

@@ -56,10 +56,14 @@ interface ConflictMode {
 
 const EXCLUDED_EXTRA = Excluded(EXTRA_COLUMN);
 
-const CONFLICT_MODES: Record<string, ConflictMode> = {
+const CONFLICT_MODES = {
   update: { everyColumn: false, extra: MergeExtra(EXCLUDED_EXTRA) },
   replace: { everyColumn: true, extra: EXCLUDED_EXTRA },
-};
+} satisfies Record<string, ConflictMode>;
+
+function IsConflictMode(name: string): name is keyof typeof CONFLICT_MODES {
+  return Object.hasOwn(CONFLICT_MODES, name);
+}
 
 function ConflictModeOf(stage: QueryStage): ConflictMode | undefined {
   const conflict = stage.options?.conflict;
@@ -67,7 +71,7 @@ function ConflictModeOf(stage: QueryStage): ConflictMode | undefined {
     return undefined;
   }
   assert(
-    IsString(conflict) && Object.hasOwn(CONFLICT_MODES, conflict),
+    IsString(conflict) && IsConflictMode(conflict),
     `The '${stage.stage}' stage takes a conflict mode of ${Object.keys(CONFLICT_MODES).join(" or ")}, received ${JSON.stringify(conflict)}`,
   );
   return CONFLICT_MODES[conflict];

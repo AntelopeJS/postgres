@@ -1,12 +1,12 @@
 {
   "rules": {
-    "anti-slop/no-chained-type-assertions": 18,
-    "anti-slop/no-known-value-widening": 12,
+    "anti-slop/no-chained-type-assertions": 16,
+    "anti-slop/no-known-value-widening": 11,
     "anti-slop/no-runtime-typeof": 10,
     "anti-slop/no-unknown-parameters": 55,
     "anti-slop/no-unknown-returns": 12,
     "anti-slop/no-unsafe-dictionary-type": 25,
-    "anti-slop/require-safety-comment-for-type-assertion": 72,
+    "anti-slop/require-safety-comment-for-type-assertion": 64,
     "eslint/max-lines-per-function": 5,
     "typescript/unbound-method": 1
   },

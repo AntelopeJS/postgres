@@ -11,9 +11,9 @@ import {
 
 const INHERITED = "constructor";
 
-const BAD_SCHEMA = {
+const BAD_SCHEMA: SchemaDefinition = {
   orders: { fields: { ref: "uuid" }, indexes: {} },
-} as unknown as SchemaDefinition;
+};
 
 async function Rejection(promise: Promise<unknown>): Promise<Error> {
   try {

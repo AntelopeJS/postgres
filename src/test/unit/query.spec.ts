@@ -178,9 +178,9 @@ interface OpenLog {
 const GATED_SCHEMA_ID = "cursor-gate";
 const UNPARSEABLE_TYPE = "uuid";
 
-const BAD_SCHEMA = {
+const BAD_SCHEMA: SchemaDefinition = {
   [TABLE_ID]: { fields: { name: UNPARSEABLE_TYPE }, indexes: {} },
-} as unknown as SchemaDefinition;
+};
 
 const WRITE_STAGE = "'insert'";
 const CURSOR_HINT = "cursor";
