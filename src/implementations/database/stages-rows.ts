@@ -14,16 +14,18 @@ import {
   CurrentValue,
   ScanColumns,
   type OrderTerm,
-  Prepare,
   type Relation,
+  SetProjection,
+  ValueRelation,
+} from "./relation";
+import {
+  Prepare,
   type RelationFlag,
   Render,
   RowBound,
-  SetProjection,
   SINGLE_ROW,
-  ValueRelation,
   WHERE_BLOCKERS,
-} from "./relation";
+} from "./render";
 import { IsString } from "./guards";
 
 /**

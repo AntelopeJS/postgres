@@ -3,9 +3,9 @@ import assert from "node:assert";
 
 import {
   type Relation,
-  Render,
   SetProjection,
 } from "../../implementations/database/relation";
+import { Render } from "../../implementations/database/render";
 import {
   BOOL,
   FLOAT,
@@ -360,7 +360,9 @@ describe("the union stage", () => {
       expect(ledger.referenced).to.deep.equal(ledger.bound);
     }
   });
+});
 
+describe("the union stage", () => {
   it("widens the two shapes instead of intersecting them", () => {
     const keyTypes = UnionKeyTypes(Apply(Root().union(Other())).relation);
     expect(Object.keys(keyTypes).sort()).to.deep.equal(WIDENED_KEYS);

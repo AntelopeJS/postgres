@@ -1,6 +1,6 @@
 import type { ClientBase, QueryResultRow } from "pg";
 
-import type { ActualColumn, ActualIndex, ActualTable } from "./ddl";
+import type { ActualColumn, ActualIndex, ActualTable } from "./convergence";
 
 interface ColumnRow extends ActualColumn, QueryResultRow {}
 

@@ -27,11 +27,10 @@ import {
 import {
   CurrentValue,
   IndexColumns,
-  Prepare,
   type Relation,
-  type RelationFlag,
   SetProjection,
 } from "./relation";
+import { Prepare, type RelationFlag } from "./render";
 import { IsString } from "./guards";
 
 /**

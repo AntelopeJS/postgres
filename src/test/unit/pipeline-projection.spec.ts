@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
 
-import { Render } from "../../implementations/database/relation";
+import { Render } from "../../implementations/database/render";
 import {
   Apply,
   CallerRoot,

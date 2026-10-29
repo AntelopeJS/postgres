@@ -5,7 +5,7 @@ import {
   type StagedObject,
 } from "@antelopejs/interface-database/common";
 
-import { Render } from "../../implementations/database/relation";
+import { Render } from "../../implementations/database/render";
 import { BuildRoot } from "../../implementations/database/selection";
 import { DecodingContext } from "../../implementations/database/context";
 import { CompileSubquery } from "../../implementations/database/subquery";

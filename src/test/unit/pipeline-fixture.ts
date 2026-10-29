@@ -31,9 +31,9 @@ import {
 } from "../../implementations/database/selection";
 import {
   type Relation,
-  Render,
   TableRelation,
 } from "../../implementations/database/relation";
+import { Render } from "../../implementations/database/render";
 import {
   type WriteStatement,
   WriteTargetOf,

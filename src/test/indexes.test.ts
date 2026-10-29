@@ -9,7 +9,7 @@ import {
 
 import { Logger } from "../logger";
 import { AcquireClient, Query } from "../connection";
-import { Render } from "../implementations/database/relation";
+import { Render } from "../implementations/database/render";
 import { ParseSchema } from "../implementations/database/fields";
 import { QuoteIdentifier } from "../implementations/database/sql";
 import { BuildRoot } from "../implementations/database/selection";
