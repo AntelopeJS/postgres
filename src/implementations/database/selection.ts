@@ -89,7 +89,7 @@ function RootStage(
 }
 
 function RootId(stage: QueryStage): string {
-  const id = stage.options?.id;
+  const id: unknown = stage.options?.id;
   assert(
     IsString(id),
     `The '${stage.stage}' stage of a table query is missing its id`,
@@ -102,9 +102,10 @@ function RootId(stage: QueryStage): string {
  * An absent id is the empty string; `CROSS_INSTANCE` binds nothing and contributes no predicate.
  */
 function RootInstanceScope(
-  id: unknown,
+  instance: QueryStage,
   context: DecodingContext,
 ): InstanceScope {
+  const id: unknown = instance.options?.id;
   if (id === CROSS_INSTANCE) {
     return CROSS_INSTANCE;
   }
@@ -120,18 +121,16 @@ function InstancePredicate(alias: string, value: Compiled): string {
   return `(${QualifiedColumn(alias, INSTANCE_COLUMN)} = ${value.sql})`;
 }
 
-function NamedInstance(external: ExternalRelation, id: unknown): Error {
-  return new Error(
-    `${QualifiedName(external.schema, external.table)} is an external relation and has no instances, so instance '${String(id)}' names nothing: read it through the default instance`,
-  );
-}
-
 /**
  * The scope of a read over a relation the adapter did not create, which has no instances: the
  * default instance and `CROSS_INSTANCE` both read every row, and a named instance is refused rather
  * than answered with rows nobody scoped to it.
  */
-function RefuseNamedInstance(external: ExternalRelation, id: unknown): void {
+function RefuseNamedInstance(
+  external: ExternalRelation,
+  instance: QueryStage,
+): void {
+  const id: unknown = instance.options?.id;
   const unscoped: readonly unknown[] = [
     undefined,
     null,
@@ -139,7 +138,9 @@ function RefuseNamedInstance(external: ExternalRelation, id: unknown): void {
     DEFAULT_INSTANCE_ID,
   ];
   if (!unscoped.includes(id)) {
-    throw NamedInstance(external, id);
+    throw new Error(
+      `${QualifiedName(external.schema, external.table)} is an external relation and has no instances, so instance '${String(id)}' names nothing: read it through the default instance`,
+    );
   }
 }
 
@@ -147,10 +148,10 @@ function RefuseNamedInstance(external: ExternalRelation, id: unknown): void {
 function ExternalRoot(
   origin: TableOrigin,
   external: ExternalRelation,
-  instanceId: unknown,
+  instance: QueryStage,
   context: DecodingContext,
 ): Relation {
-  RefuseNamedInstance(external, instanceId);
+  RefuseNamedInstance(external, instance);
   const from = QualifiedName(external.schema, external.table);
   return TableRelation(from, context.nextAlias(), origin);
 }
@@ -173,12 +174,7 @@ export function BuildRoot(
   const rest = stages.slice(ROOT_STAGES.length);
   const external = origin.model.external;
   if (external) {
-    const relation = ExternalRoot(
-      origin,
-      external,
-      instance.options?.id,
-      context,
-    );
+    const relation = ExternalRoot(origin, external, instance, context);
     return { relation, rest, instance: CROSS_INSTANCE, external };
   }
   const alias = context.nextAlias();
@@ -187,7 +183,7 @@ export function BuildRoot(
     alias,
     origin,
   );
-  const scope = RootInstanceScope(instance.options?.id, context);
+  const scope = RootInstanceScope(instance, context);
   relation.crossInstance = scope === CROSS_INSTANCE;
   if (scope !== CROSS_INSTANCE) {
     relation.where.push(InstancePredicate(alias, scope));
@@ -229,8 +225,9 @@ function CollectValue(value: unknown, walk: SchemaWalk): void {
 
 function CollectInto(stages: QueryStage[], walk: SchemaWalk): void {
   for (const stage of stages) {
-    if (stage.stage === SCHEMA_STAGE && IsString(stage.options?.id)) {
-      walk.ids.add(stage.options.id);
+    const id: unknown = stage.options?.id;
+    if (stage.stage === SCHEMA_STAGE && IsString(id)) {
+      walk.ids.add(id);
     }
     for (const arg of stage.args ?? []) {
       CollectValue(arg, walk);

@@ -2,7 +2,12 @@ import { AsJson } from "./readings";
 import { WithDefault } from "./coerce";
 import { type Compiled, QuoteLiteral } from "./sql";
 import { JsonOf, OPAQUE, KeyTypesOf, type SqlType } from "./types";
-import { DecodeFunction, DecodeValue, NULL_JSON } from "./value";
+import {
+  DecodeFunction,
+  DecodeValue,
+  NULL_JSON,
+  RecordedLambda,
+} from "./value";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { BuildDocument, type DocumentMember } from "./row-source";
 import { ARRAY_TYPEOF, HeldOnce, OBJECT_TYPEOF, TextArray } from "./jsonb";
@@ -38,7 +43,7 @@ const DefaultStage: PipelineStage = (relation, stage, context) => {
  */
 const MapStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, PROJECTION_BLOCKERS, context);
-  const body = DecodeFunction(stage.args[FIRST_OPERAND], context, [
+  const body = DecodeFunction(RecordedLambda(stage, FIRST_OPERAND), context, [
     prepared.source,
   ]);
   return SetProjection(prepared, RequireOperand(body, stage, FIRST_OPERAND));

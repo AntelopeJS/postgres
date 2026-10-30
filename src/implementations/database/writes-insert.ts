@@ -54,25 +54,22 @@ interface ConflictMode {
 
 const EXCLUDED_EXTRA = Excluded(EXTRA_COLUMN);
 
-const CONFLICT_MODES = {
-  update: { everyColumn: false, extra: MergeExtra(EXCLUDED_EXTRA) },
-  replace: { everyColumn: true, extra: EXCLUDED_EXTRA },
-} satisfies Record<string, ConflictMode>;
-
-function IsConflictMode(name: string): name is keyof typeof CONFLICT_MODES {
-  return Object.hasOwn(CONFLICT_MODES, name);
-}
+const CONFLICT_MODES = new Map<string, ConflictMode>([
+  ["update", { everyColumn: false, extra: MergeExtra(EXCLUDED_EXTRA) }],
+  ["replace", { everyColumn: true, extra: EXCLUDED_EXTRA }],
+]);
 
 function ConflictModeOf(stage: QueryStage): ConflictMode | undefined {
-  const conflict = stage.options?.conflict;
+  const conflict: unknown = stage.options?.conflict;
   if (conflict === undefined || conflict === null) {
     return undefined;
   }
+  const mode = IsString(conflict) ? CONFLICT_MODES.get(conflict) : undefined;
   assert(
-    IsString(conflict) && IsConflictMode(conflict),
-    `The '${stage.stage}' stage takes a conflict mode of ${Object.keys(CONFLICT_MODES).join(" or ")}, received ${JSON.stringify(conflict)}`,
+    mode,
+    `The '${stage.stage}' stage takes a conflict mode of ${[...CONFLICT_MODES.keys()].join(" or ")}, received ${JSON.stringify(conflict)}`,
   );
-  return CONFLICT_MODES[conflict];
+  return mode;
 }
 
 interface InsertRow {

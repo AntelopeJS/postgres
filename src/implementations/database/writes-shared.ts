@@ -167,7 +167,7 @@ export function DescribeKind(value: unknown): string {
 export function InsertedDocuments(
   stage: QueryStage,
 ): Record<string, unknown>[] {
-  const argument = stage.args[FIRST_OPERAND];
+  const argument: unknown = stage.args[FIRST_OPERAND];
   const list = Array.isArray(argument) ? argument : [argument];
   return list.map((entry, position) => {
     assert(

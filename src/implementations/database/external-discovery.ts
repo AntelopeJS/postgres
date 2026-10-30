@@ -1,3 +1,5 @@
+import assert from "node:assert";
+
 import type {
   CatalogInfo,
   ColumnDescription,
@@ -142,13 +144,22 @@ const INFO_SQL = `
   SELECT current_setting('server_version') AS version, current_database() AS database,
     current_user AS role`;
 
-const KINDS: Record<string, RelationKind> = {
-  r: "table",
-  p: "partitioned",
-  v: "view",
-  m: "materialized",
-  f: "foreign",
-};
+const KINDS = new Map<string, RelationKind>([
+  ["r", "table"],
+  ["p", "partitioned"],
+  ["v", "view"],
+  ["m", "materialized"],
+  ["f", "foreign"],
+]);
+
+function KindOf(row: RelationRow): RelationKind {
+  const kind = KINDS.get(row.kind);
+  assert(
+    kind,
+    `Relation ${RelationName(row)} has the unlisted kind '${row.kind}'`,
+  );
+  return kind;
+}
 
 const PARTIAL_GRANTS = "SELECT is granted on some of its columns only";
 const NOT_READABLE = "the connected role cannot SELECT from it";
@@ -237,7 +248,7 @@ async function SummaryOf(
   return {
     schema: row.schema,
     name: row.name,
-    kind: KINDS[row.kind],
+    kind: KindOf(row),
     ...(await EstimateOf(row)),
     key,
     unmappable: UnmappableReason(row),

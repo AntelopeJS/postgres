@@ -89,7 +89,7 @@ export function FieldNames(
   stage: QueryStage,
   index: number = FIRST_OPERAND,
 ): string[] {
-  const fields = stage.args[index];
+  const fields: unknown = stage.args[index];
   const named = Array.isArray(fields) && fields.every(IsString);
   if (!named) {
     throw new Error(`Stage '${stage.stage}' requires a list of field names`);
@@ -157,7 +157,7 @@ export function FieldOf(
   context: DecodingContext,
 ): Compiled {
   const def = DecodeValue(stage.args[SECOND_OPERAND], context);
-  const name = stage.args[FIRST_OPERAND];
+  const name: unknown = stage.args[FIRST_OPERAND];
   if (IsString(name)) {
     return source.field(name, def);
   }

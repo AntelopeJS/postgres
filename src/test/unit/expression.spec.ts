@@ -130,10 +130,25 @@ describe("arg", () => {
 
   it("does not resolve a binding inherited from Object.prototype", () => {
     for (const key of ["valueOf", "constructor", "__proto__", "toString"]) {
-      expect(() =>
-        CompileExpression(ValueProxy.arg(key as never).build(), NewContext()),
-      ).to.throw(`Unbound lambda parameter ${key}`);
+      expect(() => NewContext().arg(key)).to.throw(
+        `Unbound lambda parameter ${key}`,
+      );
     }
+  });
+
+  it("reads a text parameter id as unbound rather than refusing it", () => {
+    expect(() =>
+      CompileExpression(
+        [QueryStage("arg", undefined, "valueOf")],
+        NewContext(),
+      ),
+    ).to.throw("Unbound lambda parameter valueOf");
+  });
+
+  it("reads an arg stage whose parameter id is neither a number nor a text as unbound", () => {
+    expect(() =>
+      CompileExpression([QueryStage("arg", undefined, true)], NewContext()),
+    ).to.throw("Unbound lambda parameter true");
   });
 
   it("clears a pending timezone", () => {

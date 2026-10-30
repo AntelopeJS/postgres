@@ -41,13 +41,7 @@ const VEHICLES: TableModel = {
   },
 };
 
-const INDEXES = {
-  byCar: ["car", "price"],
-} satisfies Record<string, string[]>;
-
-function IsIndexKey(name: string): name is keyof typeof INDEXES {
-  return Object.hasOwn(INDEXES, name);
-}
+const INDEXES = new Map<string, string[]>([["byCar", ["car", "price"]]]);
 
 type InstanceId = string | typeof CROSS_INSTANCE | undefined;
 
@@ -56,7 +50,7 @@ function StubOrigin(schemaId: string, tableId: string): TableOrigin {
     schemaId,
     tableId,
     model: VEHICLES,
-    index: (name) => (IsIndexKey(name) ? INDEXES[name] : [name]),
+    index: (name) => INDEXES.get(name) ?? [name],
   };
 }
 

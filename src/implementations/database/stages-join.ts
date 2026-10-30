@@ -4,7 +4,7 @@ import type { QueryStage } from "@antelopejs/interface-database/common";
 
 import { EMPTY_ARRAY } from "./jsonb";
 import { UnifyOperands } from "./coerce";
-import { DecodeFunction } from "./value";
+import { DecodeFunction, RecordedLambda } from "./value";
 import { AsJson, Predicate } from "./readings";
 import type { DecodingContext } from "./context";
 import { NullableRowSource, type RowSource } from "./row-source";
@@ -77,7 +77,7 @@ function FlavourOf(stage: QueryStage): JoinFlavour {
  * Read off the stage directly, and nested unconditionally since nothing the right carries splices.
  */
 function JoinedRelation(stage: QueryStage, context: DecodingContext): Relation {
-  const right = stage.args[FIRST_OPERAND];
+  const right: unknown = stage.args[FIRST_OPERAND];
   assert(
     right instanceof Query,
     "The 'join' stage takes another query to join against",
@@ -94,7 +94,11 @@ function Condition(
   sources: RowSource[],
   context: DecodingContext,
 ): string {
-  const body = DecodeFunction(stage.args[SECOND_OPERAND], context, sources);
+  const body = DecodeFunction(
+    RecordedLambda(stage, SECOND_OPERAND),
+    context,
+    sources,
+  );
   const matched = RequireOperand(body, stage, SECOND_OPERAND);
   return `(${Predicate(matched).sql})`;
 }
@@ -124,10 +128,11 @@ const JoinStage: PipelineStage = (relation, stage, context) => {
     alias: right.alias,
     on: Condition(stage, [prepared.source, right.source], context),
   });
-  const mapped = DecodeFunction(stage.args[MAPPER_OPERAND], context, [
-    prepared.source,
-    MapperSource(right, flavour),
-  ]);
+  const mapped = DecodeFunction(
+    RecordedLambda(stage, MAPPER_OPERAND),
+    context,
+    [prepared.source, MapperSource(right, flavour)],
+  );
   return SetProjection(prepared, RequireOperand(mapped, stage, MAPPER_OPERAND));
 };
 
@@ -158,8 +163,8 @@ interface LookupKeys {
 }
 
 function KeysOf(stage: QueryStage): LookupKeys {
-  const localKey = stage.options?.localKey;
-  const otherKey = stage.options?.otherKey;
+  const localKey: unknown = stage.options?.localKey;
+  const otherKey: unknown = stage.options?.otherKey;
   assert(
     IsString(localKey) && IsString(otherKey),
     "The 'lookup' stage names the local key and the other key with strings",
@@ -230,7 +235,7 @@ function FormOf(local: Compiled, key: string): LookupForm {
  * Prepared rather than nested, so the correlation absorbs and the lateral stays one `SELECT`.
  */
 function LookedUp(stage: QueryStage, context: DecodingContext): Relation {
-  const other = stage.args[FIRST_OPERAND];
+  const other: unknown = stage.args[FIRST_OPERAND];
   assert(
     other instanceof Query,
     "The 'lookup' stage takes another query to read the key from",

@@ -63,7 +63,7 @@ export type Aggregation = (operand: Compiled, distinct?: boolean) => Compiled;
  * shapes with the same words, so it reads them through here.
  */
 export function NamedField(stage: QueryStage): string | undefined {
-  const field = stage.options?.field;
+  const field: unknown = stage.options?.field;
   if (field === undefined) {
     return undefined;
   }

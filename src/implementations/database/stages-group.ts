@@ -4,7 +4,7 @@ import { ArrayOf } from "./types";
 import { Collected } from "./jsonb";
 import { AsJson } from "./readings";
 import type { Compiled } from "./sql";
-import { DecodeFunction } from "./value";
+import { DecodeFunction, RecordedLambda } from "./value";
 import type { QueryStage } from "./utils";
 import { FIRST_OPERAND, RequireOperand } from "./stage";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
@@ -62,8 +62,6 @@ type SubStreamStage = (
   context: DecodingContext,
 ) => SubStream | Compiled;
 
-type SubStreamStageMap = Record<string, SubStreamStage>;
-
 const MAP = "map";
 const DISTINCT = "distinct";
 const COUNT = "count";
@@ -88,7 +86,7 @@ function Revalued(state: SubStream, value: Compiled): SubStream {
 }
 
 const MapSubStream: SubStreamStage = (state, stage, context) => {
-  const body = DecodeFunction(stage.args[FIRST_OPERAND], context, [
+  const body = DecodeFunction(RecordedLambda(stage, FIRST_OPERAND), context, [
     state.source,
   ]);
   return Revalued(state, RequireOperand(body, stage, FIRST_OPERAND));
@@ -147,21 +145,15 @@ function AggregateSubStream(aggregate: Aggregation): SubStreamStage {
  * says it is the sub-stream position that cannot take it, because the same stage is perfectly
  * legal on the query one level out.
  */
-const SUB_STREAM_STAGES = {
-  [MAP]: MapSubStream,
-  [DISTINCT]: DistinctSubStream,
-  [COUNT]: CountSubStream,
-  [SUM]: AggregateSubStream(Total),
-  [AVERAGE]: AggregateSubStream(Mean),
-  [MINIMUM]: AggregateSubStream(Minimum),
-  [MAXIMUM]: AggregateSubStream(Maximum),
-} satisfies SubStreamStageMap;
-
-function IsSubStreamStage(
-  name: string,
-): name is keyof typeof SUB_STREAM_STAGES {
-  return Object.hasOwn(SUB_STREAM_STAGES, name);
-}
+const SUB_STREAM_STAGES = new Map<string, SubStreamStage>([
+  [MAP, MapSubStream],
+  [DISTINCT, DistinctSubStream],
+  [COUNT, CountSubStream],
+  [SUM, AggregateSubStream(Total)],
+  [AVERAGE, AggregateSubStream(Mean)],
+  [MINIMUM, AggregateSubStream(Minimum)],
+  [MAXIMUM, AggregateSubStream(Maximum)],
+]);
 
 function IsTerminal(step: SubStream | Compiled): step is Compiled {
   return "sql" in step;
@@ -197,10 +189,11 @@ function StepSubStream(
   if (IsTerminal(state)) {
     RefuseSecondTerminal(stage);
   }
-  if (!IsSubStreamStage(stage.stage)) {
+  const handler = SUB_STREAM_STAGES.get(stage.stage);
+  if (!handler) {
     RefuseSubStreamStage(stage);
   }
-  return SUB_STREAM_STAGES[stage.stage](state, stage, context);
+  return handler(state, stage, context);
 }
 
 /** A run of `map`s ending in a field-less `count`, whose answer is `count(*)` whatever they did. */
@@ -280,7 +273,7 @@ const SINGLE_COLUMN = 1;
 const ONLY_COLUMN = 0;
 
 function GroupName(stage: QueryStage): string {
-  const name = stage.options?.index;
+  const name: unknown = stage.options?.index;
   assert(
     IsString(name),
     "The 'group' stage is missing the index or field to group on",
@@ -300,7 +293,7 @@ const GroupStage: PipelineStage = (relation, stage, context) => {
   const columns = IndexColumns(prepared, GroupName(stage));
   const value = GroupValue(columns);
   prepared.groupBy.push(...columns);
-  const mapped = DecodeFunction(stage.args[FIRST_OPERAND], context, [
+  const mapped = DecodeFunction(RecordedLambda(stage, FIRST_OPERAND), context, [
     SubStreamProvider(prepared, context),
     value,
   ]);

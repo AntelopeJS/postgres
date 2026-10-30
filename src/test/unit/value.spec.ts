@@ -1,3 +1,4 @@
+import assert from "node:assert";
 import { expect } from "chai";
 import { QueryStage } from "@antelopejs/interface-database/common";
 import { Datum, Query, ValueProxy } from "@antelopejs/interface-database";
@@ -18,6 +19,9 @@ import {
 import {
   DecodeFunction,
   DecodeValue,
+  IsRecordedFunction,
+  RecordedLambda,
+  type RecordedFunction,
   WithBoundArguments,
 } from "../../implementations/database/value";
 import {
@@ -48,7 +52,7 @@ function NewContext(recorded: Recorded): DecodingContext {
     expression: (stages, context) => {
       recorded.expressions.push(stages);
       if (stages[0]?.stage === "arg") {
-        recorded.bindings.push(context.arg(stages[0].args[0]));
+        recorded.bindings.push(context.arg(String(stages[0].args[0])));
       }
       return STUB_EXPRESSION;
     },
@@ -187,6 +191,11 @@ describe("DecodeValue", () => {
   });
 });
 
+function LambdaStage(func: QueryStage): RecordedFunction {
+  assert(IsRecordedFunction(func), "the builder records a lambda this way");
+  return func;
+}
+
 describe("DecodeFunction", () => {
   const emptyTable = { fields: {} };
 
@@ -194,7 +203,9 @@ describe("DecodeFunction", () => {
     const recorded = NewRecorded();
     const context = NewContext(recorded);
     const source = new ColumnRowSource(AliasedColumns("t"), emptyTable);
-    const func = QueryStage("func", undefined, [7], ValueProxy.arg(7));
+    const func = LambdaStage(
+      QueryStage("func", undefined, [7], ValueProxy.arg(7)),
+    );
 
     const out = DecodeFunction(func, context, [source]);
 
@@ -209,11 +220,13 @@ describe("DecodeFunction", () => {
     const context = NewContext(recorded);
     const left = new ColumnRowSource(AliasedColumns("l"), emptyTable);
     const right = new ColumnRowSource(AliasedColumns("r"), emptyTable);
-    const func = QueryStage(
-      "func",
-      undefined,
-      [3, 4],
-      [ValueProxy.arg(3), ValueProxy.arg(4)],
+    const func = LambdaStage(
+      QueryStage(
+        "func",
+        undefined,
+        [3, 4],
+        [ValueProxy.arg(3), ValueProxy.arg(4)],
+      ),
     );
 
     DecodeFunction(func, context, [left, right]);
@@ -225,18 +238,22 @@ describe("DecodeFunction", () => {
 
   it("rejects a lambda parameter with no binding", () => {
     const context = NewContext(NewRecorded());
-    const func = QueryStage("func", undefined, [7], ValueProxy.arg(7));
+    const func = LambdaStage(
+      QueryStage("func", undefined, [7], ValueProxy.arg(7)),
+    );
     expect(() => DecodeFunction(func, context, [])).to.throw(/Missing binding/);
   });
 
   it("binds nothing when a later parameter has no binding", () => {
     const context = NewContext(NewRecorded());
     const left = new ColumnRowSource(AliasedColumns("l"), emptyTable);
-    const func = QueryStage(
-      "func",
-      undefined,
-      [3, 4],
-      [ValueProxy.arg(3), ValueProxy.arg(4)],
+    const func = LambdaStage(
+      QueryStage(
+        "func",
+        undefined,
+        [3, 4],
+        [ValueProxy.arg(3), ValueProxy.arg(4)],
+      ),
     );
 
     expect(() => DecodeFunction(func, context, [left])).to.throw(
@@ -249,10 +266,27 @@ describe("DecodeFunction", () => {
   it("unbinds even when the body fails to decode", () => {
     const context = NewContext(NewRecorded());
     const source = new ColumnRowSource(AliasedColumns("t"), emptyTable);
-    const func = QueryStage("func", undefined, [7], () => 1);
+    const func = LambdaStage(QueryStage("func", undefined, [7], () => 1));
 
     expect(() => DecodeFunction(func, context, [source])).to.throw(/function/);
     expect(() => context.arg(7)).to.throw(/7/);
+  });
+});
+
+describe("RecordedLambda", () => {
+  it("accepts the text parameter ids of a func rebuilt from JSON", () => {
+    const stage = QueryStage(
+      "filter",
+      undefined,
+      QueryStage("func", undefined, ["a"], true),
+    );
+    expect(RecordedLambda(stage, 0).args[0]).to.deep.equal(["a"]);
+  });
+
+  it("does not take text parameter ids for a lambda where a document is allowed", () => {
+    expect(
+      IsRecordedFunction(QueryStage("func", undefined, ["a"], true)),
+    ).to.equal(false);
   });
 });
 
@@ -263,7 +297,9 @@ describe("WithBoundArguments", () => {
   it("unbinds even when a compilation that is not a decode throws", () => {
     const context = NewContext(NewRecorded());
     const source = new ColumnRowSource(AliasedColumns("t"), emptyTable);
-    const func = QueryStage("func", undefined, [7], ValueProxy.arg(7));
+    const func = LambdaStage(
+      QueryStage("func", undefined, [7], ValueProxy.arg(7)),
+    );
 
     expect(() =>
       WithBoundArguments(func, context, [source], () => {

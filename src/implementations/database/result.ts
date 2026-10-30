@@ -1,5 +1,5 @@
 import type { TableModel } from "./fields";
-import type { KeyTypes, SqlType } from "./types";
+import type { SqlType } from "./types";
 import {
   DEFAULT_INSTANCE_ID,
   EXTRA_COLUMN,
@@ -27,24 +27,21 @@ export function ReviveValue(value: unknown, type: SqlType): unknown {
       return Array.isArray(value)
         ? value.map((item) => ReviveValue(item, type.elem))
         : value;
-    case "json":
-      return ReviveKeyTypes(value, type.keys);
+    case "json": {
+      if (!type.keys || !IsDocument(value)) {
+        return value;
+      }
+      const result = { ...value };
+      for (const [name, keyType] of Object.entries(type.keys)) {
+        if (Object.hasOwn(result, name)) {
+          result[name] = ReviveValue(result[name], keyType);
+        }
+      }
+      return result;
+    }
     default:
       return value;
   }
-}
-
-function ReviveKeyTypes(value: unknown, keyTypes?: KeyTypes): unknown {
-  if (!keyTypes || !IsDocument(value)) {
-    return value;
-  }
-  const result = { ...value };
-  for (const [name, type] of Object.entries(keyTypes)) {
-    if (Object.hasOwn(result, name)) {
-      result[name] = ReviveValue(result[name], type);
-    }
-  }
-  return result;
 }
 
 export function DecodeRow(
@@ -52,11 +49,14 @@ export function DecodeRow(
   table: TableModel,
 ): Record<string, unknown> {
   const document: Record<string, unknown> = {};
-  const id = row[ID_COLUMN];
+  const {
+    [ID_COLUMN]: id,
+    [INSTANCE_COLUMN]: instance,
+    [EXTRA_COLUMN]: overflow,
+  } = row;
   if (id !== null && id !== undefined) {
     document[ID_COLUMN] = id;
   }
-  const instance = row[INSTANCE_COLUMN];
   if (
     instance !== null &&
     instance !== undefined &&
@@ -65,14 +65,16 @@ export function DecodeRow(
     document[INSTANCE_COLUMN] = instance;
   }
   for (const [name, spec] of Object.entries(table.fields)) {
-    const value = row[spec.column];
+    const value = Object.hasOwn(row, spec.column)
+      ? row[spec.column]
+      : undefined;
     if (value === null || value === undefined) {
       continue;
     }
     document[name] = ReviveValue(value, spec.type);
   }
   const extra = {
-    ...(row[EXTRA_COLUMN] as Record<string, unknown> | null),
+    ...(overflow as Record<string, unknown> | null),
   };
   delete extra[ID_COLUMN];
   delete extra[INSTANCE_COLUMN];

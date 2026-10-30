@@ -109,11 +109,6 @@ function Decoded(walk: ExternalWalk, value: unknown): Compiled {
   return decoded;
 }
 
-/** Whether a value is the caller's own constant, as opposed to an expression over the row. */
-function IsConstant(value: unknown): boolean {
-  return !(value instanceof StagedObject);
-}
-
 function Undeclared(walk: ExternalWalk, name: string): Error {
   return new Error(
     `Payload key '${name}' is not a field of '${walk.path}': ${QualifiedName(walk.external.schema, walk.external.table)} is an external relation, and only its declared fields can be written`,
@@ -138,12 +133,6 @@ function KeyDisagreement(
 ): Error {
   return new Error(
     `Payload of '${walk.path}' claims two values for key column "${column}", through '${first}' and '${second}'`,
-  );
-}
-
-function MalformedId(walk: ExternalWalk, value: unknown): Error {
-  return new Error(
-    `Payload key '_id' of '${walk.path}' is ${JSON.stringify(value)}, which is not a key of this relation: a key of ${walk.external.key?.length ?? 0} columns is spelled as a JSON array of their texts`,
   );
 }
 
@@ -176,7 +165,9 @@ function IdParts(walk: ExternalWalk, value: unknown): string[] {
     parts.length !== width ||
     !parts.every((part): part is string => typeof part === "string")
   ) {
-    throw MalformedId(walk, value);
+    throw new Error(
+      `Payload key '_id' of '${walk.path}' is ${JSON.stringify(value)}, which is not a key of this relation: a key of ${walk.external.key?.length ?? 0} columns is spelled as a JSON array of their texts`,
+    );
   }
   return parts;
 }
@@ -306,7 +297,7 @@ function TakeField(walk: ExternalWalk, name: string, value: unknown): void {
     descriptor,
     value: written,
     raw:
-      value !== undefined && value !== null && IsConstant(value)
+      value !== undefined && value !== null && !(value instanceof StagedObject)
         ? value
         : undefined,
   });

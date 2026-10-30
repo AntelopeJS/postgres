@@ -33,7 +33,7 @@ const ORDERING_OPERATORS = {
 };
 
 const ArgStage: StageHandler = (_state, stage, context) => {
-  const binding = context.arg(stage.args[FIRST_OPERAND]);
+  const binding = context.arg(String(stage.args[FIRST_OPERAND]));
   if (IsSubqueryProvider(binding)) {
     return { current: binding([stage]) };
   }

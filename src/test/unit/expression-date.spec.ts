@@ -1,6 +1,9 @@
 import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
-import { QueryStage } from "@antelopejs/interface-database/common";
+import {
+  QueryStage,
+  type StagedObject,
+} from "@antelopejs/interface-database/common";
 
 import { Occurrences, RefusingCompilers } from "./spec-fixture";
 import { Moment } from "../../implementations/database/readings";
@@ -39,7 +42,7 @@ const users: TableModel = {
   },
 };
 
-type Builder = (doc: any) => any;
+type Builder = (doc: ValueProxy<any>) => ValueProxy<any>;
 
 function NewContext(): DecodingContext {
   const context = new DecodingContext({
@@ -52,6 +55,20 @@ function NewContext(): DecodingContext {
 
 function CompileIn(context: DecodingContext, build: Builder): Compiled {
   return CompileExpression(build(ValueProxy.arg(ROW_ID)).build(), context);
+}
+
+type LooseBuilder = (doc: any) => StagedObject;
+
+function CompileInLoose(
+  context: DecodingContext,
+  build: LooseBuilder,
+): Compiled {
+  return CompileExpression(build(ValueProxy.arg(ROW_ID)).build(), context);
+}
+
+function LastStageLoose(build: LooseBuilder): QueryStage {
+  const stages = build(ValueProxy.arg(ROW_ID)).build();
+  return stages[stages.length - 1];
 }
 
 function Compile(build: Builder): Compiled {
@@ -210,7 +227,7 @@ describe("date parts", () => {
 
 describe("date_with_timezone", () => {
   it("records the zone without transforming the value", () => {
-    const stage = LastStage((doc) =>
+    const stage = LastStageLoose((doc) =>
       doc.key("createdAt").withTimezone(NEW_YORK_NAME),
     );
     const out = STAGES[stage.stage](
@@ -223,14 +240,14 @@ describe("date_with_timezone", () => {
   });
 
   it("leaves a row accumulator addressable, so a column keeps its index", () => {
-    const stage = LastStage((doc) => doc.withTimezone(NEW_YORK_NAME));
+    const stage = LastStageLoose((doc) => doc.withTimezone(NEW_YORK_NAME));
     const source = new ColumnRowSource(AliasedColumns("t"), users);
     const out = STAGES[stage.stage]({ current: source }, stage, NewContext());
     expect(out.current).to.equal(source);
   });
 
   it("reaches a native column through a zone, not a materialized document", () => {
-    const out = Compile((doc) =>
+    const out = CompileInLoose(NewContext(), (doc) =>
       doc.withTimezone(NEW_YORK_NAME).key("createdAt").day(),
     );
     expect(out.sql).to.equal(Part("DAY", CREATED));
@@ -243,7 +260,7 @@ describe("date_with_timezone", () => {
   });
 
   it("lets a second zone override the first", () => {
-    const out = Compile((doc) =>
+    const out = CompileInLoose(NewContext(), (doc) =>
       doc.key("createdAt").withTimezone(NEW_YORK_NAME).year(PARIS_NAME),
     );
     expect(out.sql).to.equal(Part("YEAR", CREATED, PARIS));
@@ -262,7 +279,7 @@ describe("date_with_timezone", () => {
 
   it("binds nothing when the zone is dropped unread", () => {
     const context = NewContext();
-    const out = CompileIn(context, (doc) =>
+    const out = CompileInLoose(context, (doc) =>
       doc.key("createdAt").withTimezone(NEW_YORK_NAME).epoch(),
     );
     expect(context.params.all()).to.deep.equal([]);
@@ -307,7 +324,7 @@ describe("date_with_timezone", () => {
 
   it("is cleared by an unrelated stage between the zone and the part", () => {
     const context = NewContext();
-    const out = CompileIn(context, (doc) =>
+    const out = CompileInLoose(context, (doc) =>
       doc
         .key("createdAt")
         .withTimezone(NEW_YORK_NAME)
@@ -389,7 +406,9 @@ describe("date_during", () => {
   });
 
   it("reads both bounds as moments", () => {
-    const out = Compile((doc) => doc.key("createdAt").during(0, 1));
+    const out = CompileInLoose(NewContext(), (doc) =>
+      doc.key("createdAt").during(0, 1),
+    );
     expect(out.sql).to.equal(
       `((${CREATED} >= ${FromEpoch("($1::double precision)")}) AND (${CREATED} < ${FromEpoch("($2::double precision)")}))`,
     );

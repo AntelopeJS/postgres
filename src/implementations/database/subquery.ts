@@ -45,7 +45,7 @@ function ProvidedSubquery(
   if (head?.stage !== ARG_STAGE) {
     return undefined;
   }
-  const binding = context.arg(head.args[FIRST_OPERAND]);
+  const binding = context.arg(String(head.args[FIRST_OPERAND]));
   return IsSubqueryProvider(binding) ? binding(rest) : undefined;
 }
 

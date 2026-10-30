@@ -6,6 +6,12 @@ import type { RowSource } from "./row-source";
 import type { OriginResolver } from "./selection";
 import { type Compiled, ParamCollector } from "./sql";
 
+/**
+ * The key a lambda parameter is bound under. A `func` rebuilt from JSON may carry an id of any
+ * shape, so callers pass `String(id)`, which is the key a plain object gave it.
+ */
+export type ParameterId = number | string;
+
 export type SubqueryProvider = (stages: QueryStage[]) => Compiled;
 
 export type ArgumentBinding = RowSource | SubqueryProvider | Compiled;
@@ -62,7 +68,7 @@ const ALIAS_PREFIX = "t";
 export class DecodingContext {
   public readonly params = new ParamCollector();
 
-  private readonly bindings: Record<number, ArgumentBinding> = {};
+  private readonly bindings: Record<ParameterId, ArgumentBinding> = {};
   private aliasCounter = 0;
 
   /**
@@ -90,15 +96,15 @@ export class DecodingContext {
     return `${ALIAS_PREFIX}${this.aliasCounter++}`;
   }
 
-  public bind(id: number, binding: ArgumentBinding): void {
+  public bind(id: ParameterId, binding: ArgumentBinding): void {
     this.bindings[id] = binding;
   }
 
-  public unbind(id: number): void {
+  public unbind(id: ParameterId): void {
     delete this.bindings[id];
   }
 
-  public arg(id: number): ArgumentBinding {
+  public arg(id: ParameterId): ArgumentBinding {
     const binding = Object.hasOwn(this.bindings, id)
       ? this.bindings[id]
       : undefined;

@@ -149,15 +149,17 @@ function DeclaresUniqueIndex(schema: SchemaDefinition): boolean {
 export const Schemas = {
   register(schemaId: string, schema: SchemaDefinition) {
     definitions[schemaId] = schema;
-    const pending: Promise<void> = initialize(schemaId, schema).catch((err) => {
-      if (ready[schemaId] === pending) {
-        delete definitions[schemaId];
-        delete schemaModels[schemaId];
-        delete scanNotices[schemaId];
-        guardedWrites.delete(schemaId);
-      }
-      throw err;
-    });
+    const pending: Promise<void> = initialize(schemaId, schema).catch(
+      (err: unknown) => {
+        if (Object.hasOwn(ready, schemaId) && ready[schemaId] === pending) {
+          delete definitions[schemaId];
+          delete schemaModels[schemaId];
+          delete scanNotices[schemaId];
+          guardedWrites.delete(schemaId);
+        }
+        throw err;
+      },
+    );
     ready[schemaId] = pending;
     pending.catch(() => {});
     return pending;

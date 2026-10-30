@@ -80,7 +80,7 @@ function Addressed(column: Compiled): Compiled {
 }
 
 function IndexOption(stage: QueryStage): string | undefined {
-  const name = stage.options?.index;
+  const name: unknown = stage.options?.index;
   if (name === undefined || name === null) {
     return undefined;
   }
@@ -116,10 +116,6 @@ function KeyList(argument: unknown): unknown[] {
   return Array.isArray(argument) ? argument : [argument];
 }
 
-function KeyArity(key: unknown): string {
-  return Array.isArray(key) ? `${key.length} values` : `a ${typeof key}`;
-}
-
 /**
  * One key, taken whole against a single-field index and element-wise against a compound one.
  * A hole inside a tuple is named by the index and the position it is missing from.
@@ -131,7 +127,7 @@ function KeyTuple(selection: KeySelection, key: unknown): string {
   }
   assert(
     Array.isArray(key) && key.length === columns.length,
-    `The '${selection.indexId}' index takes a key of ${columns.length} values, received ${KeyArity(key)}`,
+    `The '${selection.indexId}' index takes a key of ${columns.length} values, received ${Array.isArray(key) ? `${key.length} values` : `a ${typeof key}`}`,
   );
   const parts = key.map((part, position) => {
     assert(

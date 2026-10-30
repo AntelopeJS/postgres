@@ -239,21 +239,17 @@ const MODELS: SchemaModel = {
   [PROFILES_TABLE_ID]: PROFILES,
 };
 
-const INDEXES = {
-  byNameAge: ["name", "age"],
-  byNameSkills: ["name", "skills"],
-} satisfies Record<string, string[]>;
-
-function IsIndexKey(name: string): name is keyof typeof INDEXES {
-  return Object.hasOwn(INDEXES, name);
-}
+const INDEXES = new Map<string, string[]>([
+  ["byNameAge", ["name", "age"]],
+  ["byNameSkills", ["name", "skills"]],
+]);
 
 /** The stubbed {@link OriginResolver} a pipeline spec compiles against, registry and all. */
 const StubOrigin: OriginResolver = (schemaId, tableId) => ({
   schemaId,
   tableId,
   model: Object.hasOwn(MODELS, tableId) ? MODELS[tableId] : PEOPLE,
-  index: (name) => (IsIndexKey(name) ? INDEXES[name] : [name]),
+  index: (name) => INDEXES.get(name) ?? [name],
 });
 
 export function NewTable(): Relation {

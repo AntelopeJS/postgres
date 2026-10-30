@@ -1,3 +1,5 @@
+import assert from "node:assert";
+
 import { Query, ValueProxy } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
 
@@ -193,6 +195,12 @@ const FUNCTION_STAGE = "func";
 const PARAMETER_IDS = 0;
 const FUNCTION_BODY = 1;
 
+/** A lambda the query builder recorded: the ids of its parameters, then the body they are bound in. */
+export interface RecordedFunction extends QueryStage {
+  stage: typeof FUNCTION_STAGE;
+  args: [ids: unknown[], body: unknown];
+}
+
 /**
  * Whether a value is a lambda a caller recorded, for a stage that accepts either a lambda or a plain
  * document.
@@ -207,7 +215,17 @@ const FUNCTION_BODY = 1;
  * the value to the stage it tested, so a caller that goes on to compile the body reaches
  * {@link DecodeFunction} without asserting the same shape a second time.
  */
-export function IsRecordedFunction(value: unknown): value is QueryStage {
+export function IsRecordedFunction(value: unknown): value is RecordedFunction {
+  return IsLambdaStage(value) && value.args[PARAMETER_IDS].every(IsNumber);
+}
+
+/**
+ * Whether a value is a `func` stage whose parameter ids are a list. A stage that takes only a
+ * callback accepts whatever ids a `func` rebuilt from JSON may carry, which the adapter has always
+ * bound by their property-key text; {@link IsRecordedFunction} stays strict because `update` has to
+ * tell a lambda from a document.
+ */
+function IsLambdaStage(value: unknown): value is RecordedFunction {
   if (!IsPlainObject(value) || value.stage !== FUNCTION_STAGE) {
     return false;
   }
@@ -216,11 +234,27 @@ export function IsRecordedFunction(value: unknown): value is QueryStage {
     return false;
   }
   const ids: unknown = args[PARAMETER_IDS];
-  return Array.isArray(ids) && ids.every(IsNumber);
+  return Array.isArray(ids);
+}
+
+/**
+ * The lambda a stage records as its argument at `index`.
+ *
+ * `map`, `filter` and the other callback stages take nothing else, and the builder always records
+ * one, so a stage that carries any other value is refused here by name rather than failing on
+ * whatever the compiler reads from it first.
+ */
+export function RecordedLambda(
+  stage: QueryStage,
+  index: number,
+): RecordedFunction {
+  const lambda: unknown = stage.args[index];
+  assert(IsLambdaStage(lambda), `Stage '${stage.stage}' requires a callback`);
+  return lambda;
 }
 
 /** Whatever a recorded lambda returned, which is a value for most callers and a document for one. */
-export function FunctionBody(func: QueryStage): unknown {
+export function FunctionBody(func: RecordedFunction): unknown {
   return func.args[FUNCTION_BODY];
 }
 
@@ -235,24 +269,24 @@ export function FunctionBody(func: QueryStage): unknown {
  * document as one jsonb object and lose the columns.
  */
 export function WithBoundArguments<T>(
-  func: QueryStage,
+  func: RecordedFunction,
   context: DecodingContext,
   bindings: ArgumentBinding[],
   compile: () => T,
 ): T {
-  const ids: number[] = func.args[PARAMETER_IDS];
+  const ids = func.args[PARAMETER_IDS];
   const missing = ids.findIndex((_, index) => !bindings[index]);
   if (missing >= 0) {
     throw new Error(`Missing binding for lambda parameter ${missing}`);
   }
   ids.forEach((id, index) => {
-    context.bind(id, bindings[index]);
+    context.bind(String(id), bindings[index]);
   });
   try {
     return compile();
   } finally {
     ids.forEach((id) => {
-      context.unbind(id);
+      context.unbind(String(id));
     });
   }
 }
@@ -262,7 +296,7 @@ export function WithBoundArguments<T>(
  * given row sources or subquery providers for the duration of the decode.
  */
 export function DecodeFunction(
-  func: QueryStage,
+  func: RecordedFunction,
   context: DecodingContext,
   bindings: ArgumentBinding[],
 ): Compiled | undefined {

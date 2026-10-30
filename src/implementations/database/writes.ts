@@ -54,14 +54,12 @@ export const WRITE_STAGES = {
   delete: { compile: DeleteWrite, readsRelation: true },
 } satisfies WriteSpecMap;
 
-function IsWriteStage(name: string): name is keyof typeof WRITE_STAGES {
-  return Object.hasOwn(WRITE_STAGES, name);
-}
+const WRITE_SPECS = new Map<string, WriteSpec>(Object.entries(WRITE_STAGES));
 
 function RefuseWrites(stages: QueryStage[]): void {
   for (const stage of stages) {
     assert(
-      !Object.hasOwn(WRITE_STAGES, stage.stage),
+      !WRITE_SPECS.has(stage.stage),
       `The '${stage.stage}' stage writes and can only be the last stage of a query`,
     );
   }
@@ -96,13 +94,14 @@ function RefuseDiscardedStages(
  */
 export function SplitWrite(stages: QueryStage[]): WriteSplit {
   const last = stages[stages.length - 1];
-  if (!last || !IsWriteStage(last.stage)) {
+  const spec = last ? WRITE_SPECS.get(last.stage) : undefined;
+  if (!last || !spec) {
     RefuseWrites(stages);
     return { pipeline: stages };
   }
   const pipeline = stages.slice(0, -1);
   RefuseWrites(pipeline);
-  RefuseDiscardedStages(last, WRITE_STAGES[last.stage], pipeline);
+  RefuseDiscardedStages(last, spec, pipeline);
   return { pipeline, write: last };
 }
 
@@ -111,7 +110,8 @@ export function CompileWrite(
   stage: QueryStage,
   context: DecodingContext,
 ): WriteStatement {
-  assert(IsWriteStage(stage.stage), `Unsupported write stage '${stage.stage}'`);
+  const spec = WRITE_SPECS.get(stage.stage);
+  assert(spec, `Unsupported write stage '${stage.stage}'`);
   if (IsExternalTarget(target)) {
     assert(
       IsExternalWriteStage(stage.stage),
@@ -119,5 +119,5 @@ export function CompileWrite(
     );
     return EXTERNAL_WRITES[stage.stage](target, stage, context);
   }
-  return WRITE_STAGES[stage.stage].compile(target, stage, context);
+  return spec.compile(target, stage, context);
 }

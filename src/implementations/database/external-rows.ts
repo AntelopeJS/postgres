@@ -86,9 +86,10 @@ function Value(
 }
 
 function Row(columns: SampledColumn[], row: SampledRow): SampledValue[] {
-  return columns.map((column, index) =>
-    Value(column, row[`${COLUMN_ALIAS_PREFIX}${index}`] ?? null),
-  );
+  return columns.map((column, index) => {
+    const alias = `${COLUMN_ALIAS_PREFIX}${index}`;
+    return Value(column, Object.hasOwn(row, alias) ? row[alias] : null);
+  });
 }
 
 function FailureOf(measured: MeasureTimeout | MeasureError): string {
