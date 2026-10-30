@@ -241,7 +241,7 @@ export function RecordedLambda(
   const lambda: unknown = stage.args[index];
   assert(
     IsRecordedFunction(lambda),
-    `Stage '${stage.stage}' requires a callback at position ${index}`,
+    `Stage '${stage.stage}' requires a callback`,
   );
   return lambda;
 }
