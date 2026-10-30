@@ -52,11 +52,14 @@ export function DecodeRow(
   table: TableModel,
 ): Record<string, unknown> {
   const document: Record<string, unknown> = {};
-  const id = row[ID_COLUMN];
+  const {
+    [ID_COLUMN]: id,
+    [INSTANCE_COLUMN]: instance,
+    [EXTRA_COLUMN]: overflow,
+  } = row;
   if (id !== null && id !== undefined) {
     document[ID_COLUMN] = id;
   }
-  const instance = row[INSTANCE_COLUMN];
   if (
     instance !== null &&
     instance !== undefined &&
@@ -65,14 +68,16 @@ export function DecodeRow(
     document[INSTANCE_COLUMN] = instance;
   }
   for (const [name, spec] of Object.entries(table.fields)) {
-    const value = row[spec.column];
+    const value = Object.hasOwn(row, spec.column)
+      ? row[spec.column]
+      : undefined;
     if (value === null || value === undefined) {
       continue;
     }
     document[name] = ReviveValue(value, spec.type);
   }
   const extra = {
-    ...(row[EXTRA_COLUMN] as Record<string, unknown> | null),
+    ...(overflow as Record<string, unknown> | null),
   };
   delete extra[ID_COLUMN];
   delete extra[INSTANCE_COLUMN];
