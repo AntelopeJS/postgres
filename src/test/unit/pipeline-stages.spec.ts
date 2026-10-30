@@ -120,7 +120,7 @@ function OwnStageMethods(members: PropertyDescriptorMap): [string, Function][] {
 /** The stage methods a builder answers, each as the most derived level of its chain defines it. */
 function ChainMethods(builder: StagedObject): Map<string, Function> {
   const methods = new Map<string, Function>();
-  let level: object | null = Object.getPrototypeOf(builder);
+  let level: object | null = Reflect.getPrototypeOf(builder);
   while (level !== null && level !== Object.prototype) {
     for (const [name, method] of OwnStageMethods(
       Object.getOwnPropertyDescriptors(level),
@@ -129,7 +129,7 @@ function ChainMethods(builder: StagedObject): Map<string, Function> {
         methods.set(name, method);
       }
     }
-    level = Object.getPrototypeOf(level);
+    level = Reflect.getPrototypeOf(level);
   }
   return methods;
 }

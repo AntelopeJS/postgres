@@ -17,6 +17,7 @@ import {
   ROW_ID,
   NewContext,
   Compile,
+  CompileLoose,
   TAGS,
   EXTRA,
   Guarded,
@@ -66,9 +67,7 @@ function Aliases(sql: string): string[] {
 
 describe("arr_map", () => {
   it("binds the element at its declared type, not as a jsonb round trip", () => {
-    const out = Compile((doc) =>
-      doc.key("tags").map((tag: any) => tag.upcase()),
-    );
+    const out = Compile((doc) => doc.key("tags").map((tag) => tag.upcase()));
     const body = `(upper(${AsText(Element("t0"))}))`;
     const walk = Walk(TAGS, "t0", Collected("t0", `to_jsonb(${body})`));
     expect(out.sql).to.equal(Guarded(TAGS, walk));
@@ -76,23 +75,19 @@ describe("arr_map", () => {
   });
 
   it("carries the body type into the result array type", () => {
-    const out = Compile((doc) =>
-      doc.key("tags").map((tag: any) => tag.strlen()),
-    );
+    const out = Compile((doc) => doc.key("tags").map((tag) => tag.strlen()));
     expect(out.type).to.deep.equal(ArrayOf(FLOAT));
   });
 
   it("binds a bottom-typed element as raw jsonb", () => {
-    const out = Compile((doc) => doc.key("nope").map((item: any) => item));
+    const out = Compile((doc) => doc.key("nope").map((item) => item));
     const walk = Walk(EXTRA, "t0", Collected("t0", Element("t0")));
     expect(out.sql).to.equal(Guarded(EXTRA, walk));
     expect(out.type).to.deep.equal(ArrayOf(OPAQUE));
   });
 
   it("keeps a shaped element addressable as a row", () => {
-    const out = Compile((doc) =>
-      doc.key("entries").map((e: any) => e.key("at")),
-    );
+    const out = Compile((doc) => doc.key("entries").map((e) => e.key("at")));
     const level = `(${Element("t0")} -> 'at')`;
     const walk = Walk(
       ENTRIES,
@@ -107,15 +102,15 @@ describe("arr_map", () => {
     const out = Compile((doc) =>
       doc
         .key("tags")
-        .map((tag: any) => tag.upcase())
-        .eq(doc.key("tags").map((tag: any) => tag.downcase())),
+        .map((tag) => tag.upcase())
+        .eq(doc.key("tags").map((tag) => tag.downcase())),
     );
     expect(Aliases(out.sql)).to.deep.equal(["t0", "t1"]);
   });
 
   it("gives a nested walk an alias of its own", () => {
     const out = Compile((doc) =>
-      doc.key("nope").map((item: any) => item.map((inner: any) => inner)),
+      doc.key("nope").map((item) => item.map((inner) => inner)),
     );
     expect(Aliases(out.sql)).to.deep.equal(["t1", "t0"]);
   });
@@ -133,7 +128,7 @@ describe("arr_map", () => {
 describe("arr_filter", () => {
   it("aggregates the untouched element under the predicate", () => {
     const out = Compile((doc) =>
-      doc.key("scores").filter((score: any) => score.gt(2)),
+      doc.key("scores").filter((score) => score.gt(2)),
     );
     const predicate = ` WHERE (${AsNumber(Element("t0"))} > ${FLOAT_PARAM})`;
     const walk = Walk(SCORES, "t0", Collected("t0", Element("t0")), predicate);
@@ -143,13 +138,13 @@ describe("arr_filter", () => {
 
   it("keeps the element type, unlike map, since nothing transforms it", () => {
     const out = Compile((doc) =>
-      doc.key("tags").filter((tag: any) => tag.strlen().gt(2)),
+      doc.key("tags").filter((tag) => tag.strlen().gt(2)),
     );
     expect(out.type).to.deep.equal(ArrayOf(TEXT));
   });
 
   it("reads a non-boolean body as javascript truthiness", () => {
-    const out = Compile((doc) =>
+    const out = CompileLoose((doc: any) =>
       doc.key("scores").filter((score: any) => score),
     );
     expect(out.sql).to.contain(`WHERE (${AsNumber(Element("t0"))} <> 0)`);
@@ -167,7 +162,7 @@ describe("arr_filter", () => {
 
 describe("a lambda body closing over the outer row", () => {
   it("reaches the row's own column from inside a map body", () => {
-    const out = Compile((doc) =>
+    const out = CompileLoose((doc: any) =>
       doc.key("tags").map((tag: any) => tag.add(doc.key("name"))),
     );
     const body = `(${AsText(Element("t0"))} || ${NAME})`;
@@ -178,7 +173,7 @@ describe("a lambda body closing over the outer row", () => {
 
   it("reaches the row's own column from inside a filter predicate", () => {
     const out = Compile((doc) =>
-      doc.key("scores").filter((score: any) => score.gt(doc.key("age"))),
+      doc.key("scores").filter((score) => score.gt(doc.key("age"))),
     );
     const predicate = ` WHERE (${AsNumber(Element("t0"))} > ${AGE})`;
     const walk = Walk(SCORES, "t0", Collected("t0", Element("t0")), predicate);
@@ -189,7 +184,7 @@ describe("a lambda body closing over the outer row", () => {
     const out = Compile((doc) =>
       doc
         .key("tags")
-        .map((tag: any) => tag.upcase())
+        .map((tag) => tag.upcase())
         .count()
         .add(doc.key("age")),
     );
@@ -200,7 +195,7 @@ describe("a lambda body closing over the outer row", () => {
 describe("a walk whose body contains another walk", () => {
   it("nests an object walk inside a map and aliases it apart", () => {
     const out = Compile((doc) =>
-      doc.key("entries").map((entry: any) => entry.keys()),
+      doc.key("entries").map((entry) => entry.keys()),
     );
     const body = GuardedObject(Element("t0"), Keys(Element("t0"), "t1"));
     const walk = Walk(ENTRIES, "t0", Collected("t0", body));
@@ -210,7 +205,7 @@ describe("a walk whose body contains another walk", () => {
 
   it("aggregates inside a filter predicate", () => {
     const out = Compile((doc) =>
-      doc.key("nested").filter((row: any) => row.count().gt(1)),
+      doc.key("nested").filter((row) => row.count().gt(1)),
     );
     const length = `((jsonb_array_length(${Element("t0")}))::double precision)`;
     const counted = Guarded(Element("t0"), length);
@@ -221,9 +216,7 @@ describe("a walk whose body contains another walk", () => {
   });
 
   it("reduces inside a map body", () => {
-    const out = Compile((doc) =>
-      doc.key("nested").map((row: any) => row.sum()),
-    );
+    const out = Compile((doc) => doc.key("nested").map((row) => row.sum()));
     const summed = `COALESCE(sum(${AsNumber(Element("t1"))}), 0)`;
     const body = Guarded(Element("t0"), Walk(Element("t0"), "t1", summed));
     const walk = Walk(NESTED, "t0", Collected("t0", `to_jsonb(${body})`));
@@ -235,9 +228,7 @@ describe("a walk whose body contains another walk", () => {
     const out = Compile((doc) =>
       doc
         .key("nope")
-        .map((outer: any) =>
-          outer.map((middle: any) => middle.map((inner: any) => inner)),
-        ),
+        .map((outer) => outer.map((middle) => middle.map((inner) => inner))),
     );
     expect(Aliases(out.sql)).to.deep.equal(["t2", "t1", "t0"]);
     expect(out.type).to.deep.equal(ArrayOf(ArrayOf(ArrayOf(OPAQUE))));
@@ -260,48 +251,48 @@ describe("array reducers", () => {
   });
 
   it("compares a declared text array as text, since there is no min(jsonb)", () => {
-    const out = Compile((doc) => doc.key("tags").min());
+    const out = CompileLoose((doc: any) => doc.key("tags").min());
     const aggregate = `min(${AsText(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(TAGS, Walk(TAGS, "t0", aggregate)));
     expect(out.type).to.equal(TEXT);
   });
 
   it("compares a declared timestamp array as an instant", () => {
-    const out = Compile((doc) => doc.key("visits").max());
+    const out = CompileLoose((doc: any) => doc.key("visits").max());
     const aggregate = `max(${AsMoment(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(VISITS, Walk(VISITS, "t0", aggregate)));
     expect(out.type).to.equal(TIMESTAMP);
   });
 
   it("defaults an unknown element type to a number comparison", () => {
-    const out = Compile((doc) => doc.key("nope").min());
+    const out = CompileLoose((doc: any) => doc.key("nope").min());
     const aggregate = `min(${AsNumber(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(EXTRA, Walk(EXTRA, "t0", aggregate)));
     expect(out.type).to.equal(FLOAT);
   });
 
   it("skips an element the guard nulls, so min of ['x', 1, null, 'y'] is 'x'", () => {
-    const out = Compile((doc) => doc.key("tags").min());
+    const out = CompileLoose((doc: any) => doc.key("tags").min());
     expect(out.sql).to.contain(`min(${AsText(Element("t0"))})`);
     expect(out.sql).to.not.contain("COALESCE");
   });
 
   it("reads a declared bool array as a number, so min of it is null", () => {
-    const out = Compile((doc) => doc.key("flags").min());
+    const out = CompileLoose((doc: any) => doc.key("flags").min());
     const aggregate = `min(${AsNumber(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(FLAGS, Walk(FLAGS, "t0", aggregate)));
     expect(out.type).to.equal(FLOAT);
   });
 
   it("reads a declared array of arrays as a number, so max of it is null", () => {
-    const out = Compile((doc) => doc.key("nested").max());
+    const out = CompileLoose((doc: any) => doc.key("nested").max());
     const aggregate = `max(${AsNumber(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(NESTED, Walk(NESTED, "t0", aggregate)));
     expect(out.type).to.equal(FLOAT);
   });
 
   it("reads shaped object elements as a number, so min of them is null", () => {
-    const out = Compile((doc) => doc.key("entries").min());
+    const out = CompileLoose((doc: any) => doc.key("entries").min());
     const aggregate = `min(${AsNumber(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(ENTRIES, Walk(ENTRIES, "t0", aggregate)));
     expect(out.type).to.equal(FLOAT);
@@ -323,7 +314,7 @@ describe("array operand emission", () => {
       Occurrences(Compile((doc) => doc.key("tags").isempty()).sql, TAGS),
     ).to.equal(2);
     expect(
-      Occurrences(Compile((doc) => doc.key("tags").min()).sql, TAGS),
+      Occurrences(CompileLoose((doc: any) => doc.key("tags").min()).sql, TAGS),
     ).to.equal(2);
   });
 
@@ -355,7 +346,7 @@ describe("array operand emission", () => {
     const out = Compile((doc) =>
       doc
         .key("tags")
-        .filter((tag: any) => tag.eq("x"))
+        .filter((tag) => tag.eq("x"))
         .count(),
     );
     expect(Occurrences(out.sql, TAGS)).to.equal(4);

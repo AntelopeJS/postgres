@@ -1,3 +1,4 @@
+import assert from "node:assert";
 import { expect } from "chai";
 
 import { WhileConfigured } from "./spec-fixture";
@@ -125,7 +126,8 @@ describe("a change feed's refusals", () => {
     await Feed(async (reqId) => {
       await Step(reqId, read, "orderBy").then(
         () => expect.fail("a feed has no total order to sort by"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("'orderBy'");
           expect(err.message).to.contain("'changes'");
         },
@@ -138,7 +140,8 @@ describe("a change feed's refusals", () => {
     await Feed(async (reqId) => {
       await Step(reqId, read, "count").then(
         () => expect.fail("a feed is not finite"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("'count'");
           expect(err.message).to.contain("total order or a finite relation");
         },
@@ -151,7 +154,8 @@ describe("a change feed's refusals", () => {
     await Feed(async (reqId) => {
       await Step(reqId, read, "insert").then(
         () => expect.fail("a feed writes nothing"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("'insert'");
           expect(err.message).to.contain("'changes'");
         },
@@ -164,7 +168,8 @@ describe("a change feed's refusals", () => {
     await Feed(async (reqId) => {
       await Step(reqId, read, "filtr").then(
         () => expect.fail("no such stage"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("Unsupported query stage 'filtr'");
           expect(err.message).to.not.contain("'changes'");
         },
@@ -177,7 +182,8 @@ describe("a change feed's refusals", () => {
     await Feed(async (reqId) => {
       await Step(reqId, read, "orderBy", "slice").then(
         () => expect.fail("neither stage is supported"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("'orderBy'");
           expect(err.message).to.not.contain("'slice'");
         },
@@ -384,7 +390,8 @@ describe("the three ways a change feed ends", () => {
     await Feed(async (reqId) => {
       await Step(reqId, read).then(
         () => expect.fail("a lapsed feed must not continue"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("changeRetentionMs");
           expect(err.message).to.contain("events 6 through 9");
           expect(err.message).to.contain(`${SCHEMA_ID}.${TABLE_ID}`);
@@ -415,7 +422,8 @@ describe("the three ways a change feed ends", () => {
     await Feed(async (reqId) => {
       await Step(reqId, read).then(
         () => expect.fail("a restarted server must not be read through"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("restarted");
           expect(err.message).to.contain(`${SCHEMA_ID}.${TABLE_ID}`);
         },

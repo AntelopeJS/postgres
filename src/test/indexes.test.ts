@@ -230,7 +230,10 @@ async function Explain(
   instance: InstanceId,
 ): Promise<string> {
   const compiled = Compile(schema, instance);
-  const plan = await Query(`EXPLAIN ${compiled.sql}`, compiled.params);
+  const plan = await Query<{ "QUERY PLAN": string }>(
+    `EXPLAIN ${compiled.sql}`,
+    compiled.params,
+  );
   return plan.rows.map((row) => row["QUERY PLAN"]).join("\n");
 }
 

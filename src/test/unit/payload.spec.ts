@@ -1,7 +1,9 @@
+import assert from "node:assert";
 import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
 
 import type { TableModel } from "../../implementations/database/fields";
+import { IsDocument } from "../../implementations/database/guards";
 import { DecodingContext } from "../../implementations/database/context";
 import { CompileExpression } from "../../implementations/database/expression";
 import {
@@ -260,7 +262,9 @@ describe("SplitPayload over undeclared keys", () => {
   });
 
   it("keeps an own __proto__ key as a member rather than as a prototype", () => {
-    const applied = Split(JSON.parse('{"__proto__": 1}'));
+    const document: unknown = JSON.parse('{"__proto__": 1}');
+    assert(IsDocument(document), "the literal parses to a document");
+    const applied = Split(document);
     expect(applied.split.extra?.sql).to.equal(
       "jsonb_build_object('__proto__', to_jsonb(($1::double precision)))",
     );

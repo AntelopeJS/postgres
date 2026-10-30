@@ -19,6 +19,7 @@ import {
   type Builder,
   NewContext,
   Compile,
+  CompileLoose,
   TAGS,
   EXTRA,
   Guarded,
@@ -64,8 +65,8 @@ describe("array stage dispatch", () => {
       (doc) => doc.key("tags").index(0),
       (doc) => doc.key("tags").includes("x"),
       (doc) => doc.key("tags").slice(1),
-      (doc) => doc.key("tags").map((tag: any) => tag.upcase()),
-      (doc) => doc.key("tags").filter((tag: any) => tag.eq("x")),
+      (doc) => doc.key("tags").map((tag) => tag.upcase()),
+      (doc) => doc.key("tags").filter((tag) => tag.eq("x")),
       (doc) => doc.key("tags").isempty(),
       (doc) => doc.key("tags").count(),
       (doc) => doc.key("scores").sum(),
@@ -111,7 +112,7 @@ describe("arr_count and arr_empty", () => {
 
   it("reads a scalar operand as jsonb so the guard nulls it", () => {
     const age = `to_jsonb("t"."age")`;
-    expect(Compile((doc) => doc.key("age").count()).sql).to.equal(
+    expect(CompileLoose((doc: any) => doc.key("age").count()).sql).to.equal(
       Guarded(age, `((jsonb_array_length(${age}))::double precision)`),
     );
   });
@@ -168,16 +169,16 @@ describe("arr_includes", () => {
     expect(Compile((doc) => doc.key("tags").includes("x")).sql).to.not.contain(
       "CASE",
     );
-    expect(Compile((doc) => doc.key("nope").includes("x")).sql).to.not.contain(
-      "CASE",
-    );
+    expect(
+      CompileLoose((doc: any) => doc.key("nope").includes("x")).sql,
+    ).to.not.contain("CASE");
   });
 
   it("leaves a non-array operand to answer false, since @> cannot raise", () => {
     const age = `to_jsonb("t"."age")`;
-    expect(Compile((doc) => doc.key("age").includes("x")).sql).to.equal(
-      `(${age} @> jsonb_build_array(to_jsonb(($1::text))))`,
-    );
+    expect(
+      CompileLoose((doc: any) => doc.key("age").includes("x")).sql,
+    ).to.equal(`(${age} @> jsonb_build_array(to_jsonb(($1::text))))`);
   });
 
   it("names the stage when the value is absent", () => {

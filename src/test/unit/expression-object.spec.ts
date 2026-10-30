@@ -1,6 +1,9 @@
 import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
-import { QueryStage } from "@antelopejs/interface-database/common";
+import {
+  QueryStage,
+  type StagedObject,
+} from "@antelopejs/interface-database/common";
 
 import { Occurrences, RefusingCompilers } from "./spec-fixture";
 import type { Compiled } from "../../implementations/database/sql";
@@ -41,7 +44,7 @@ const users: TableModel = {
   },
 };
 
-type Builder = (doc: ValueProxy<any>) => any;
+type Builder = (doc: ValueProxy<any>) => StagedObject;
 
 function NewContext(): DecodingContext {
   const context = new DecodingContext({
