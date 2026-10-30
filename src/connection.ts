@@ -7,10 +7,19 @@ import {
 } from "pg";
 
 import { Logger } from "./logger";
-import { ClearOptions, GetOptions, type Options, SetOptions } from "./config";
+import {
+  ClearOptions,
+  GetOptions,
+  IsCatalogEnabled,
+  IsExternal,
+  type Options,
+  SetOptions,
+} from "./config";
+import { DescribeConnectFailure } from "./connect-failure";
 
-const NOT_CONNECTED =
-  "PostgreSQL adapter is not connected: construct() has not run yet";
+const NOT_CONNECTED = "PostgreSQL adapter is not connected";
+
+const NOT_CONSTRUCTED = "construct() has not run yet";
 
 const SESSION_SETTINGS = "SET TIME ZONE 'UTC'; SET DateStyle = 'ISO, MDY'";
 
@@ -26,6 +35,9 @@ const CONNECTED = "connected to PostgreSQL";
 
 const DISCONNECTED = "disconnected from PostgreSQL";
 
+const STARTED_UNCONNECTED =
+  "could not connect to PostgreSQL; the instance starts without a connection and refuses every call until the project reloads";
+
 const SLOW_ACQUIRE_MS = 10_000;
 
 /**
@@ -40,6 +52,7 @@ const SLOW_ACQUIRE_MS = 10_000;
 const SLOW_ACQUIRE = `no PostgreSQL client has become available in ${SLOW_ACQUIRE_MS} ms: either every pooled connection is checked out — a cursor holds one for as long as it is iterated — or a new connection is not being answered. Raise pool.max, or set pool.connectionTimeoutMillis to fail rather than wait`;
 
 let pool: Pool | undefined;
+let connectFailure: string | undefined;
 let isWaiting = false;
 
 export type BeforeDisconnect = () => void | PromiseLike<void>;
@@ -88,6 +101,14 @@ export function GuardPool(created: Pool): Pool {
 }
 
 /**
+ * Whether a failed first connection is kept as the instance's state rather than failing construct:
+ * an external instance whose catalog answers, which is development work on someone else's database.
+ */
+async function ToleratesConnectFailure(): Promise<boolean> {
+  return IsExternal() && (await IsCatalogEnabled());
+}
+
+/**
  * Opens the connection pool and verifies the server is reachable.
  *
  * Called before any interface is implemented so no query can observe a
@@ -108,6 +129,11 @@ export function GuardPool(created: Pool): Pool {
  *
  * The pool is guarded before it is verified — see {@link GuardPool} — because the verification
  * acquisition below can itself be the first thing that fails.
+ *
+ * A failed verification fails construct, except on an external instance whose catalog answers:
+ * there the pool is ended, the options are kept, and the failure, worded for a person, becomes the
+ * reason every later call is refused. A builder can then show why the connection failed instead of
+ * the whole project stopping. Nothing retries; the project's next reload constructs again.
  */
 export async function Connect(options?: Options) {
   await Disconnect();
@@ -125,6 +151,11 @@ export async function Connect(options?: Options) {
     client.release();
   } catch (err) {
     await created.end();
+    if (err instanceof Error && (await ToleratesConnectFailure())) {
+      connectFailure = DescribeConnectFailure(err, resolved.url);
+      Logger.Warn(STARTED_UNCONNECTED, connectFailure);
+      return;
+    }
     ClearOptions();
     throw err;
   }
@@ -173,6 +204,7 @@ export async function SettleBeforeDisconnect(endPool: PoolTeardown) {
 async function EndPool() {
   const current = pool;
   pool = undefined;
+  connectFailure = undefined;
   ClearOptions();
   if (current) {
     await current.end();
@@ -185,11 +217,17 @@ export async function Disconnect() {
   await SettleBeforeDisconnect(EndPool);
 }
 
+/** Answers the pool, or refuses with why there is none: the recorded failure, or no construct yet. */
 export function GetPool(): Pool {
   if (!pool) {
-    throw new Error(NOT_CONNECTED);
+    throw new Error(`${NOT_CONNECTED}: ${connectFailure ?? NOT_CONSTRUCTED}`);
   }
   return pool;
+}
+
+/** Refuses as {@link GetPool} does when the instance has no connection. */
+export function AssertConnected(): void {
+  GetPool();
 }
 
 export function Query<T extends QueryResultRow = QueryResultRow>(

@@ -155,6 +155,30 @@ It is a development tool. It answers under `ajs project dev` and `ajs project ru
 
 An owned instance refuses it.
 
+### A connection that fails at startup
+
+Wherever the catalog answers, which is in development unless `catalog.enabled` says otherwise, an
+external instance whose first connection fails still starts. It keeps the failure as the reason it
+has no connection, and every catalog and database call refuses with
+`PostgreSQL adapter is not connected: <reason>`. A builder can then show the reason and let the URL
+be fixed, instead of the whole project stopping on a typo.
+
+The common reasons read as a sentence, followed by the driver's code:
+
+| Code                                     | Reason                                     |
+| ---------------------------------------- | ------------------------------------------ |
+| `28P01`                                  | wrong user or password                     |
+| `3D000`                                  | the database does not exist                |
+| `ECONNREFUSED`, `ENOTFOUND`, `ETIMEDOUT` | the server is not answering at `host:port` |
+| `28000`, refused without encryption      | the server requires SSL                    |
+
+Any other failure keeps the driver's message. Nothing retries in place: the instance connects again
+when the project reloads and constructs it again, for instance after its URL changes in `.env`.
+
+Elsewhere nothing changes. Without `url` an external instance still refuses to construct, a failed
+connection fails construct where the catalog does not answer, as under `ajs project start`, and an
+owned instance always fails construct when it cannot connect.
+
 Each consumer reaches the catalog through a connection on its own module entry, and two consumers
 of the same database give theirs the same id:
 
