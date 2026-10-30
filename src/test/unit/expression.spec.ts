@@ -136,12 +136,18 @@ describe("arg", () => {
     }
   });
 
-  it("refuses an arg stage whose parameter id is not a number", () => {
+  it("reads a text parameter id as unbound rather than refusing it", () => {
     expect(() =>
       CompileExpression(
         [QueryStage("arg", undefined, "valueOf")],
         NewContext(),
       ),
+    ).to.throw("Unbound lambda parameter valueOf");
+  });
+
+  it("refuses an arg stage whose parameter id is neither a number nor a text", () => {
+    expect(() =>
+      CompileExpression([QueryStage("arg", undefined, true)], NewContext()),
     ).to.throw("Stage 'arg' requires the id of a lambda parameter");
   });
 

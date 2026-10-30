@@ -3,10 +3,10 @@ import assert from "node:assert";
 import type { QueryStage } from "@antelopejs/interface-database/common";
 
 import type { Compiled } from "./sql";
-import { DecodeValue } from "./value";
-import type { DecodingContext } from "./context";
+import { DecodeValue, IsParameterId } from "./value";
+import type { DecodingContext, ParameterId } from "./context";
 import { JsonRowSource, type RowSource } from "./row-source";
-import { IsNumber, IsString } from "./guards";
+import { IsString } from "./guards";
 
 /**
  * Accumulator threaded through the stages of one expression.
@@ -68,10 +68,10 @@ export function AsSource(state: ExpressionState): RowSource {
 }
 
 /** The id of the lambda parameter an `arg` stage reads. */
-export function ArgumentId(stage: QueryStage): number {
+export function ArgumentId(stage: QueryStage): ParameterId {
   const id: unknown = stage.args[FIRST_OPERAND];
   assert(
-    IsNumber(id),
+    IsParameterId(id),
     `Stage '${stage.stage}' requires the id of a lambda parameter`,
   );
   return id;

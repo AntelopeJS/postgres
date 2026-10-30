@@ -64,7 +64,7 @@ interface FeedTarget {
   readonly tableId: string;
   readonly schemaName: string;
   readonly tableName: string;
-  readonly instance: string | typeof CROSS_INSTANCE;
+  readonly instance: unknown;
 }
 
 /**
@@ -441,7 +441,7 @@ function TargetOf(stages: QueryStage[]): FeedTarget {
   const instance =
     supplied === CROSS_INSTANCE
       ? CROSS_INSTANCE
-      : ((supplied as string | undefined) ?? DEFAULT_INSTANCE_ID);
+      : (supplied ?? DEFAULT_INSTANCE_ID);
   return {
     schemaId,
     tableId,

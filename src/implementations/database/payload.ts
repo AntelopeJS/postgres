@@ -113,19 +113,6 @@ function Decoded(walk: PayloadWalk, value: unknown): Compiled {
 }
 
 /**
- * Records an undeclared key on the object the overflow document is built from.
- * Defined rather than assigned, so an own `__proto__` member is stored instead of being dropped.
- */
-function Collect(walk: PayloadWalk, name: string, value: unknown): void {
-  Object.defineProperty(walk.added, name, {
-    value,
-    enumerable: true,
-    writable: true,
-    configurable: true,
-  });
-}
-
-/**
  * Whether a payload supplied no `_id`, which `null` means exactly as `undefined` does.
  *
  * The rule has one owner because both stages have to read a key the same way: one
@@ -195,14 +182,6 @@ function TakeDeclared(
   });
 }
 
-function TakeUndeclared(walk: PayloadWalk, name: string, value: unknown): void {
-  if (value === undefined) {
-    walk.split.removed.push(name);
-    return;
-  }
-  Collect(walk, name, value);
-}
-
 function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
   if (RESERVED_COLUMNS.includes(name)) {
     TakeReserved(walk, name, value);
@@ -212,7 +191,16 @@ function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
     TakeDeclared(walk, name, walk.model.fields[name], value);
     return;
   }
-  TakeUndeclared(walk, name, value);
+  if (value === undefined) {
+    walk.split.removed.push(name);
+    return;
+  }
+  Object.defineProperty(walk.added, name, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
 }
 
 /**

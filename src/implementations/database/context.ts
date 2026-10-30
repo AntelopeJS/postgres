@@ -8,6 +8,9 @@ import { type Compiled, ParamCollector } from "./sql";
 
 export type SubqueryProvider = (stages: QueryStage[]) => Compiled;
 
+/** The id of a lambda parameter: the builder records numbers, a `func` rebuilt from JSON may carry texts. */
+export type ParameterId = number | string;
+
 export type ArgumentBinding = RowSource | SubqueryProvider | Compiled;
 
 /** Whether a binding is a subquery provider, the one binding that is called rather than read. */
@@ -62,7 +65,7 @@ const ALIAS_PREFIX = "t";
 export class DecodingContext {
   public readonly params = new ParamCollector();
 
-  private readonly bindings: Record<number, ArgumentBinding> = {};
+  private readonly bindings: Record<ParameterId, ArgumentBinding> = {};
   private aliasCounter = 0;
 
   /**
@@ -90,15 +93,15 @@ export class DecodingContext {
     return `${ALIAS_PREFIX}${this.aliasCounter++}`;
   }
 
-  public bind(id: number, binding: ArgumentBinding): void {
+  public bind(id: ParameterId, binding: ArgumentBinding): void {
     this.bindings[id] = binding;
   }
 
-  public unbind(id: number): void {
+  public unbind(id: ParameterId): void {
     delete this.bindings[id];
   }
 
-  public arg(id: number): ArgumentBinding {
+  public arg(id: ParameterId): ArgumentBinding {
     const binding = Object.hasOwn(this.bindings, id)
       ? this.bindings[id]
       : undefined;

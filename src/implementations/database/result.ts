@@ -1,5 +1,5 @@
 import type { TableModel } from "./fields";
-import type { KeyTypes, SqlType } from "./types";
+import type { SqlType } from "./types";
 import {
   DEFAULT_INSTANCE_ID,
   EXTRA_COLUMN,
@@ -27,24 +27,21 @@ export function ReviveValue(value: unknown, type: SqlType): unknown {
       return Array.isArray(value)
         ? value.map((item) => ReviveValue(item, type.elem))
         : value;
-    case "json":
-      return ReviveKeyTypes(value, type.keys);
+    case "json": {
+      if (!type.keys || !IsDocument(value)) {
+        return value;
+      }
+      const result = { ...value };
+      for (const [name, keyType] of Object.entries(type.keys)) {
+        if (Object.hasOwn(result, name)) {
+          result[name] = ReviveValue(result[name], keyType);
+        }
+      }
+      return result;
+    }
     default:
       return value;
   }
-}
-
-function ReviveKeyTypes(value: unknown, keyTypes?: KeyTypes): unknown {
-  if (!keyTypes || !IsDocument(value)) {
-    return value;
-  }
-  const result = { ...value };
-  for (const [name, type] of Object.entries(keyTypes)) {
-    if (Object.hasOwn(result, name)) {
-      result[name] = ReviveValue(result[name], type);
-    }
-  }
-  return result;
 }
 
 export function DecodeRow(

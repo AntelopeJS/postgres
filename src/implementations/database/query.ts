@@ -172,14 +172,6 @@ export function DecodeResult(relation: Relation, rows: ResultRow[]): unknown {
   return decoded.length > 0 ? decoded[0] : relation.absent;
 }
 
-async function RunRead(
-  relation: Relation,
-  context: DecodingContext,
-): Promise<unknown> {
-  const result = await Query<ResultRow>(Render(relation), context.params.all());
-  return DecodeResult(relation, result.rows);
-}
-
 /**
  * Executes a terminal write and answers what its stage promised.
  * `insert` answers its keys in input order; everything else answers the rows it matched.
@@ -301,7 +293,11 @@ export async function RunQuery(stages: QueryStage[]): Promise<any> {
   }
   const compiled = await ReadyQuery(stages, QueryContext());
   if (!compiled.split.write) {
-    return RunRead(compiled.relation, compiled.context);
+    const result = await Query<ResultRow>(
+      Render(compiled.relation),
+      compiled.context.params.all(),
+    );
+    return DecodeResult(compiled.relation, result.rows);
   }
   if (
     compiled.root.external &&
