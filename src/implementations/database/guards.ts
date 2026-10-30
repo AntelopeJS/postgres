@@ -17,3 +17,13 @@ export function IsObject(value: unknown): value is object {
 export function IsBoolean(value: unknown): value is boolean {
   return typeof value === "boolean";
 }
+
+/**
+ * Whether a caller value is a document: an object other than `null` that is not an array.
+ *
+ * An array is not a document: the payload splitter reads any object's own keys, so a list would be
+ * stored as an overflow document keyed by its indices rather than refused.
+ */
+export function IsDocument(value: unknown): value is Record<string, unknown> {
+  return IsObject(value) && !Array.isArray(value);
+}

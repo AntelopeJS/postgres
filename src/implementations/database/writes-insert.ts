@@ -2,7 +2,6 @@ import assert from "node:assert";
 import { randomUUID } from "node:crypto";
 
 import { TEXT } from "./types";
-import { FIRST_OPERAND } from "./stage";
 import { PRIMARY_KEY_LIST } from "./ddl";
 import type { TableOrigin } from "./relation";
 import type { DecodingContext } from "./context";
@@ -22,9 +21,8 @@ import {
   SplitPayload,
 } from "./payload";
 import {
-  AsDocument,
   Assignment,
-  DescribeKind,
+  InsertedDocuments,
   EMPTY_EXTRA,
   MergeExtra,
   NULL_VALUE,
@@ -75,23 +73,6 @@ function ConflictModeOf(stage: QueryStage): ConflictMode | undefined {
     `The '${stage.stage}' stage takes a conflict mode of ${Object.keys(CONFLICT_MODES).join(" or ")}, received ${JSON.stringify(conflict)}`,
   );
   return CONFLICT_MODES[conflict];
-}
-
-/**
- * The documents one `insert` stage writes, whether the caller passed one or a batch.
- * An array is the batch and never a document, which is the reading every other write shares.
- */
-function Documents(stage: QueryStage): Record<string, unknown>[] {
-  const argument = stage.args[FIRST_OPERAND];
-  const list = Array.isArray(argument) ? argument : [argument];
-  return list.map((entry, position) => {
-    const document = AsDocument(entry);
-    assert(
-      document,
-      `The '${stage.stage}' stage takes documents, and the one at position ${position} is ${DescribeKind(entry)}`,
-    );
-    return document;
-  });
 }
 
 interface InsertRow {
@@ -265,7 +246,7 @@ function OneStatement(statements: string[]): string {
  */
 export const InsertWrite: WriteCompiler = (target, stage, context) => {
   const instance = RequireInstance(target, stage);
-  const documents = Documents(stage);
+  const documents = InsertedDocuments(stage);
   if (documents.length === 0) {
     return { sql: "", ids: [] };
   }

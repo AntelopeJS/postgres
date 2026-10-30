@@ -132,7 +132,7 @@ function Collect(walk: PayloadWalk, name: string, value: unknown): void {
  * that generated a key on the way in but asserted a null on the way back would answer 0 for the
  * document it had just written.
  */
-export function NoIdSupplied(value: unknown): boolean {
+export function NoIdSupplied(value: unknown): value is null | undefined {
   return value === undefined || value === null;
 }
 
