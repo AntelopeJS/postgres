@@ -1,6 +1,9 @@
 import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
-import { QueryStage } from "@antelopejs/interface-database/common";
+import {
+  QueryStage,
+  type StagedObject,
+} from "@antelopejs/interface-database/common";
 
 import { Occurrences, RefusingCompilers } from "./spec-fixture";
 import { Moment } from "../../implementations/database/readings";
@@ -54,7 +57,7 @@ function CompileIn(context: DecodingContext, build: Builder): Compiled {
   return CompileExpression(build(ValueProxy.arg(ROW_ID)).build(), context);
 }
 
-type LooseBuilder = (doc: any) => any;
+type LooseBuilder = (doc: any) => StagedObject;
 
 function CompileInLoose(
   context: DecodingContext,

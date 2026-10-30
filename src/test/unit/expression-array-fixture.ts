@@ -52,7 +52,7 @@ export interface UserDoc {
 
 export type Builder = (doc: ValueProxy<UserDoc>) => StagedObject;
 
-export type LooseBuilder = (doc: any) => any;
+export type LooseBuilder = (doc: any) => StagedObject;
 
 export function NewContext(): DecodingContext {
   const context = new DecodingContext({
