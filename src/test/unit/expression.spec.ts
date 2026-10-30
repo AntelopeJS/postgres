@@ -239,7 +239,7 @@ describe("default", () => {
    * a string for a boolean. Unifying to the bottom type is what makes that work.
    */
   it("unifies a mismatched default with the value, rather than reading it as its type", () => {
-    const out = Compile((doc) => (doc.key("age") as any).default("30"));
+    const out = Compile((doc) => doc.key("age").default("30"));
     expect(out.sql).to.contain("to_jsonb");
     expect(out.type).to.equal(OPAQUE);
   });
@@ -251,7 +251,7 @@ describe("default", () => {
    * changing how every row was read.
    */
   it("reads a two-argument key's default as the column's type, leaving the column alone", () => {
-    const out = Compile((doc) => (doc as any).key("age", "30"));
+    const out = Compile((doc) => doc.key("age", "30"));
     expect(out.sql).to.contain(`COALESCE("t"."age",`);
     expect(out.sql).to.not.contain("to_jsonb");
     expect(out.type).to.equal(FLOAT);

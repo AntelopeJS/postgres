@@ -246,13 +246,19 @@ export function ReadingOf(
   return family ? READINGS[kind.kind][family] : undefined;
 }
 
+function IsDeclaredKind(name: string): name is SqlType["kind"] {
+  return Object.hasOwn(DECLARED_NAMES, name);
+}
+
 /** The declared kinds a family can be read as, for the message that refuses one it cannot. */
 function AcceptedNames(family: NativeFamily | undefined): string {
   const kinds = Object.entries(READINGS)
     .filter(
       ([, readings]) => family !== undefined && readings[family] !== undefined,
     )
-    .map(([kind]) => DECLARED_NAMES[kind as SqlType["kind"]]);
+    .map(([kind]) => kind)
+    .filter(IsDeclaredKind)
+    .map((kind) => DECLARED_NAMES[kind]);
   return kinds.length > 0
     ? `declare it as ${kinds.join(" or ")}`
     : "no field type reads it";
@@ -374,12 +380,12 @@ function Guarded(other: string, type: string): string {
  * The rounding that keeps an integer comparison against a fractional number exact: `n > 5.5` is
  * `n > 5`, `n >= 5.5` is `n >= 6`. Equality takes no rounding — it matches only a whole number.
  */
-const INTEGER_ROUNDING: Record<string, string> = {
-  ">": "floor",
-  "<=": "floor",
-  ">=": "ceil",
-  "<": "ceil",
-};
+const INTEGER_ROUNDING = new Map([
+  [">", "floor"],
+  ["<=", "floor"],
+  [">=", "ceil"],
+  ["<", "ceil"],
+]);
 
 /** Inside the bigint range with room to spare, since a `double precision` bound cannot name its edge. */
 const INTEGER_BOUND = "9.2e18";
@@ -394,7 +400,7 @@ function Clamped(sql: string): string {
  * equality keeps only a whole number in range; either way the cast cannot raise.
  */
 const IntegerConversion: Conversion = (other, operator) => {
-  const rounding = INTEGER_ROUNDING[operator];
+  const rounding = INTEGER_ROUNDING.get(operator);
   if (rounding) {
     return `(${Clamped(`${rounding}(${other})`)})`;
   }
@@ -567,12 +573,15 @@ export function ReadOnlyReason(descriptor: ColumnDescriptor): string {
   return `a ${descriptor.native} column, read-only in this version`;
 }
 
+/** The largest whole number a `bigint` holds, the bound for any integer type not listed below. */
+const BIGINT_LIMIT = "9223372036854775807";
+
 /** The largest whole number each integer type holds, which a written number is checked against. */
-const INTEGER_LIMITS: Record<string, string> = {
-  smallint: "32767",
-  integer: "2147483647",
-  bigint: "9223372036854775807",
-};
+const INTEGER_LIMITS = new Map([
+  ["smallint", "32767"],
+  ["integer", "2147483647"],
+  ["bigint", BIGINT_LIMIT],
+]);
 
 type Check = (
   value: string,
@@ -590,7 +599,7 @@ const LengthCheck: Check = (value, descriptor) =>
     : InputCheck(value, descriptor);
 
 const WholeNumberCheck: Check = (value, descriptor) => {
-  const limit = INTEGER_LIMITS[descriptor.castType] ?? INTEGER_LIMITS.bigint;
+  const limit = INTEGER_LIMITS.get(descriptor.castType) ?? BIGINT_LIMIT;
   return `(${value} = trunc(${value}) AND abs(${value}) <= ${limit})`;
 };
 

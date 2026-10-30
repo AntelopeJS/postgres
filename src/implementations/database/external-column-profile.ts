@@ -333,10 +333,14 @@ const TRAIT_RULES: Record<ColumnTrait, TraitRule> = {
     !facts.roles.references.has(facts.column.name),
 };
 
+function IsTrait(name: string): name is ColumnTrait {
+  return Object.hasOwn(TRAIT_RULES, name);
+}
+
 function TraitsOf(facts: TraitFacts): ColumnTrait[] {
-  return (Object.keys(TRAIT_RULES) as ColumnTrait[]).filter((trait) =>
-    TRAIT_RULES[trait](facts),
-  );
+  return Object.keys(TRAIT_RULES)
+    .filter(IsTrait)
+    .filter((trait) => TRAIT_RULES[trait](facts));
 }
 
 export async function ProfileColumn(

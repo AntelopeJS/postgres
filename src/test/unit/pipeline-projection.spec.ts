@@ -18,6 +18,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
+import { NotAString } from "./invalid-fixture";
 
 const AGE_FROM_JSON =
   `(CASE WHEN jsonb_typeof(to_jsonb("t1"."value")) = 'number'` +
@@ -225,7 +226,7 @@ describe("the pluck stage", () => {
   });
 
   it("rejects a field list that is not a list of names", () => {
-    expect(() => Apply(Root().pluck(1 as unknown as string))).to.throw(
+    expect(() => Apply(Root().pluck(NotAString(1)))).to.throw(
       "Stage 'pluck' requires a list of field names",
     );
   });
@@ -283,7 +284,7 @@ describe("the without stage", () => {
   });
 
   it("rejects a field list that is not a list of names", () => {
-    expect(() => Apply(Root().without(2 as unknown as string))).to.throw(
+    expect(() => Apply(Root().without(NotAString(2)))).to.throw(
       "Stage 'without' requires a list of field names",
     );
   });

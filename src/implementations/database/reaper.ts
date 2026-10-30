@@ -118,15 +118,16 @@ async function Borrowed(retentionMs: number): Promise<boolean> {
 }
 
 /**
- * Reports the *start* of a run of failures and nothing after it, since a reaper that cannot reap
- * fails every tick. A pass that cannot run leaves the log growing, so it is an error, not a warning.
+ * Whether a failure starts a run of failures, which is the only one reported, since a reaper that
+ * cannot reap fails every tick. A pass that cannot run leaves the log growing, so it is an error,
+ * not a warning.
  */
-function ReportFailure(err: unknown): void {
+function StartsFailureRun(): boolean {
   if (isFailing) {
-    return;
+    return false;
   }
   isFailing = true;
-  Logger.Error(REAP_FAILED, err);
+  return true;
 }
 
 /** Reports the end of such a run, and only a delete that actually ran ends one. */
@@ -152,7 +153,9 @@ async function Tick(): Promise<void> {
       ReportReaped();
     }
   } catch (err) {
-    ReportFailure(err);
+    if (StartsFailureRun()) {
+      Logger.Error(REAP_FAILED, err);
+    }
   } finally {
     isReaping = false;
   }

@@ -8,7 +8,8 @@ import type { InstanceScope, RootSelection } from "./selection";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import { type Relation, RequireOrigin, type TableOrigin } from "./relation";
 import { AliasedColumns, ColumnRowSource, type RowSource } from "./row-source";
-import { IsObject } from "./guards";
+import { FIRST_OPERAND } from "./stage";
+import { IsDocument } from "./guards";
 
 /**
  * The rows a write changes, and everything it may know about them.
@@ -159,21 +160,22 @@ export function DescribeKind(value: unknown): string {
 }
 
 /**
- * The document a caller passed, or nothing if what they passed is not one.
- *
- * An array is not a document: the payload splitter reads any object's own keys, so a list would be
- * stored as an overflow document keyed by its indices rather than refused. The refusal itself is
- * left to the caller, because each write names what it wanted differently — one document, or the
- * one at a position in a batch — while what counts as a document is the same question for all of
- * them.
+ * The documents one `insert` stage writes, whether the caller passed one or a batch.
+ * An array is the batch and never a document, which is the reading every other write shares. The
+ * refusal names the position, since a batch is where a caller would look for the entry.
  */
-export function AsDocument(
-  value: unknown,
-): Record<string, unknown> | undefined {
-  if (!IsObject(value) || Array.isArray(value)) {
-    return undefined;
-  }
-  return value as Record<string, unknown>;
+export function InsertedDocuments(
+  stage: QueryStage,
+): Record<string, unknown>[] {
+  const argument = stage.args[FIRST_OPERAND];
+  const list = Array.isArray(argument) ? argument : [argument];
+  return list.map((entry, position) => {
+    assert(
+      IsDocument(entry),
+      `The '${stage.stage}' stage takes documents, and the one at position ${position} is ${DescribeKind(entry)}`,
+    );
+    return entry;
+  });
 }
 
 /**

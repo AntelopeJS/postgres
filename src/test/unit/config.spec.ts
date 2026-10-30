@@ -50,7 +50,9 @@ const EXTERNAL_REFUSED: readonly Options[] = [
 ];
 
 function Setting(option: ValidatedOption, value: unknown): Options {
-  return { [option]: value } as unknown as Options;
+  const options: Options = {};
+  options[option] = value as number;
+  return options;
 }
 
 describe("SetOptions", () => {

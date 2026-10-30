@@ -75,10 +75,14 @@ function Reconnect() {
   retry.unref();
 }
 
-function Failed(err: unknown) {
-  Logger.Warn(LISTENER_FAILED, err);
+function Lost() {
   client = undefined;
   Reconnect();
+}
+
+function Failed(err: Error) {
+  Logger.Warn(LISTENER_FAILED, err);
+  Lost();
 }
 
 async function Establish(): Promise<void> {
@@ -111,7 +115,10 @@ async function Establish(): Promise<void> {
 export function EnsureListening(): Promise<void> {
   isStopped = false;
   if (!listening) {
-    listening = Establish().catch(Failed);
+    listening = Establish().catch((err: unknown) => {
+      Logger.Warn(LISTENER_FAILED, err);
+      Lost();
+    });
   }
   return listening;
 }

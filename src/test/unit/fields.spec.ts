@@ -16,6 +16,11 @@ import {
   TIMESTAMP,
 } from "../../implementations/database/types";
 
+/** A value that is not a field type, passed where a declaration takes one, to reach the refusal. */
+function NotAFieldType(value: unknown): FieldType {
+  return value as FieldType;
+}
+
 describe("ParseFieldType", () => {
   it("accepts the token set case-insensitively", () => {
     expect(ParseFieldType("string", "t.f").type).to.equal(TEXT);
@@ -78,15 +83,15 @@ describe("ParseFieldType", () => {
   });
 
   it("rejects a declaration that is neither a string, array nor object", () => {
-    expect(() => ParseFieldType(null as unknown as FieldType, "t.f")).to.throw(
+    expect(() => ParseFieldType(NotAFieldType(null), "t.f")).to.throw(
       /Unsupported field type/,
     );
-    expect(() => ParseFieldType(123 as unknown as FieldType, "t.f")).to.throw(
+    expect(() => ParseFieldType(NotAFieldType(123), "t.f")).to.throw(
       /Unsupported field type/,
     );
-    expect(() =>
-      ParseFieldType(undefined as unknown as FieldType, "t.f"),
-    ).to.throw(/Unsupported field type/);
+    expect(() => ParseFieldType(NotAFieldType(undefined), "t.f")).to.throw(
+      /Unsupported field type/,
+    );
   });
 });
 

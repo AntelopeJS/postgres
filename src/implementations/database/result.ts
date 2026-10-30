@@ -6,7 +6,7 @@ import {
   ID_COLUMN,
   INSTANCE_COLUMN,
 } from "./utils";
-import { IsNumber, IsObject } from "./guards";
+import { IsDocument, IsNumber } from "./guards";
 
 function ReviveTimestamp(value: unknown): unknown {
   if (value instanceof Date) {
@@ -35,12 +35,10 @@ export function ReviveValue(value: unknown, type: SqlType): unknown {
 }
 
 function ReviveKeyTypes(value: unknown, keyTypes?: KeyTypes): unknown {
-  if (!keyTypes || !IsObject(value) || Array.isArray(value)) {
+  if (!keyTypes || !IsDocument(value)) {
     return value;
   }
-  const result: Record<string, unknown> = {
-    ...(value as Record<string, unknown>),
-  };
+  const result = { ...value };
   for (const [name, type] of Object.entries(keyTypes)) {
     if (Object.hasOwn(result, name)) {
       result[name] = ReviveValue(result[name], type);

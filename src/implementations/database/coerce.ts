@@ -233,12 +233,12 @@ export function UnifyOperands(
 const EQUALITY = "=";
 
 /** The operator as seen from the other side, for a native column on the right. */
-const MIRRORED: Record<string, string> = {
-  ">": "<",
-  "<": ">",
-  ">=": "<=",
-  "<=": ">=",
-};
+const MIRRORED = new Map([
+  [">", "<"],
+  ["<", ">"],
+  [">=", "<="],
+  ["<=", ">="],
+]);
 
 function NativeSide(native: NativeOperand, type: SqlType): Compiled {
   return { sql: native.sql, type };
@@ -271,7 +271,7 @@ function NativePair(
     };
   }
   if (right.native && type.kind === right.type.kind) {
-    const mirrored = MIRRORED[operator] ?? operator;
+    const mirrored = MIRRORED.get(operator) ?? operator;
     const converted = right.native.bind(pair.left.sql, mirrored);
     return {
       left: { sql: converted, type },

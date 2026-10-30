@@ -165,23 +165,28 @@ function FilteredLookup() {
   return ScalarLookup().filter((doc) => doc.key("age").gt(MINIMUM_AGE));
 }
 
+/** A plucked read of the other table, passed where `lookup` types a table selection. */
+function AsOther(plucked: unknown): ReturnType<typeof Other> {
+  return plucked as ReturnType<typeof Other>;
+}
+
 /**
  * The shape a caller reaches for to carry fewer columns back, and the one `interface-data-api`
  * builds for every relation column that names the fields it wants.
  */
 function PluckedLookup() {
-  return Root().lookup(Other().pluck("name", "price") as any, "name", "name");
+  return Root().lookup(AsOther(Other().pluck("name", "price")), "name", "name");
 }
 
 /** The same, with the other key left out of the projection entirely. */
 function PluckedWithoutKeyLookup() {
-  return Root().lookup(Other().pluck("price") as any, "name", "name");
+  return Root().lookup(AsOther(Other().pluck("price")), "name", "name");
 }
 
 /** A plucked other query whose rows were already chosen, which the correlation may not pass. */
 function SlicedPluckedLookup() {
   return Root().lookup(
-    Other().slice(SLICE_OFFSET, SLICE_COUNT).pluck("name") as any,
+    AsOther(Other().slice(SLICE_OFFSET, SLICE_COUNT).pluck("name")),
     "name",
     "name",
   );

@@ -88,11 +88,11 @@ const triggersReady = new Map<string, Promise<void>>();
 const indexBuilds = new Set<IndexBuild>();
 const indexPhases = new Set<Promise<void>>();
 
-function IsDuplicateObject(err: unknown): boolean {
+function IsDuplicateObject(err: Error): boolean {
   if (err instanceof DatabaseError) {
     return err.code !== undefined && DUPLICATE_OBJECT_CODES.has(err.code);
   }
-  return err instanceof Error && IsDuplicateObject(err.cause);
+  return err.cause instanceof Error && IsDuplicateObject(err.cause);
 }
 
 /**
@@ -104,7 +104,7 @@ async function RetryOnDuplicateObject<T>(work: () => Promise<T>): Promise<T> {
     try {
       return await work();
     } catch (err) {
-      if (!IsDuplicateObject(err)) {
+      if (!(err instanceof Error && IsDuplicateObject(err))) {
         throw err;
       }
     }
@@ -448,13 +448,6 @@ async function RunIndexPhase(
   client.release();
 }
 
-function ReportIndexFailure(schemaName: string, err: unknown): void {
-  Logger.Error(
-    `Building the indexes of schema '${schemaName}' failed; the next registration retries it`,
-    err,
-  );
-}
-
 /**
  * Converges a schema's secondary indexes, once {@link ConvergeTables} has converged its tables.
  *
@@ -477,9 +470,12 @@ export function BuildIndexes(
   plans: readonly TablePlan[],
 ): Promise<void> {
   const schemaName = SchemaName(schemaId);
-  const phase = RunIndexPhase(schemaName, plans).catch((err: unknown) =>
-    ReportIndexFailure(schemaName, err),
-  );
+  const phase = RunIndexPhase(schemaName, plans).catch((err: unknown) => {
+    Logger.Error(
+      `Building the indexes of schema '${schemaName}' failed; the next registration retries it`,
+      err,
+    );
+  });
   indexPhases.add(phase);
   void phase.finally(() => indexPhases.delete(phase));
   return phase;
