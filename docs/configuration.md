@@ -2,7 +2,7 @@
 
 Every option `construct` accepts, and what each one does.
 
-```typescript
+```typescript fragment
 {
     mode: "owned",                      // "owned" (default) or "external"
     url: "postgres://postgres@localhost:5432/antelopejs",  // PostgreSQL connection string
