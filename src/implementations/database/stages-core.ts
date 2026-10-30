@@ -4,7 +4,6 @@ import { DecodeValue, NULL_JSON } from "./value";
 import { BOOL, IsJsonBacked, IsOpaque, OPAQUE } from "./types";
 import { type CompiledPair, UnifyOperands, WithDefault } from "./coerce";
 import {
-  ArgumentId,
   BuildStages,
   FIRST_OPERAND,
   Lift,
@@ -34,7 +33,7 @@ const ORDERING_OPERATORS = {
 };
 
 const ArgStage: StageHandler = (_state, stage, context) => {
-  const binding = context.arg(ArgumentId(stage));
+  const binding = context.arg(String(stage.args[FIRST_OPERAND]));
   if (IsSubqueryProvider(binding)) {
     return { current: binding([stage]) };
   }

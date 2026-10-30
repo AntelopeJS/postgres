@@ -6,10 +6,13 @@ import type { RowSource } from "./row-source";
 import type { OriginResolver } from "./selection";
 import { type Compiled, ParamCollector } from "./sql";
 
-export type SubqueryProvider = (stages: QueryStage[]) => Compiled;
-
-/** The id of a lambda parameter: the builder records numbers, a `func` rebuilt from JSON may carry texts. */
+/**
+ * The key a lambda parameter is bound under. A `func` rebuilt from JSON may carry an id of any
+ * shape, so callers pass `String(id)`, which is the key a plain object gave it.
+ */
 export type ParameterId = number | string;
+
+export type SubqueryProvider = (stages: QueryStage[]) => Compiled;
 
 export type ArgumentBinding = RowSource | SubqueryProvider | Compiled;
 

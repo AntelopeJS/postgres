@@ -4,7 +4,7 @@ import { Query, ValueProxy } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
 
 import { Cast, UnifyAll } from "./coerce";
-import type { ArgumentBinding, DecodingContext, ParameterId } from "./context";
+import type { ArgumentBinding, DecodingContext } from "./context";
 import {
   type Compiled,
   type ConstantJson,
@@ -198,7 +198,7 @@ const FUNCTION_BODY = 1;
 /** A lambda the query builder recorded: the ids of its parameters, then the body they are bound in. */
 export interface RecordedFunction extends QueryStage {
   stage: typeof FUNCTION_STAGE;
-  args: [ids: ParameterId[], body: unknown];
+  args: [ids: unknown[], body: unknown];
 }
 
 /**
@@ -219,15 +219,11 @@ export function IsRecordedFunction(value: unknown): value is RecordedFunction {
   return IsLambdaStage(value) && value.args[PARAMETER_IDS].every(IsNumber);
 }
 
-export function IsParameterId(value: unknown): value is ParameterId {
-  return IsNumber(value) || IsString(value);
-}
-
 /**
- * Whether a value is a `func` stage whose parameter ids are a list of numbers or texts. A stage that
- * takes only a callback accepts the text ids a `func` rebuilt from JSON may carry, which the
- * adapter has always bound; {@link IsRecordedFunction} stays strict because `update` has to tell a
- * lambda from a document.
+ * Whether a value is a `func` stage whose parameter ids are a list. A stage that takes only a
+ * callback accepts whatever ids a `func` rebuilt from JSON may carry, which the adapter has always
+ * bound by their property-key text; {@link IsRecordedFunction} stays strict because `update` has to
+ * tell a lambda from a document.
  */
 function IsLambdaStage(value: unknown): value is RecordedFunction {
   if (!IsPlainObject(value) || value.stage !== FUNCTION_STAGE) {
@@ -238,7 +234,7 @@ function IsLambdaStage(value: unknown): value is RecordedFunction {
     return false;
   }
   const ids: unknown = args[PARAMETER_IDS];
-  return Array.isArray(ids) && ids.every(IsParameterId);
+  return Array.isArray(ids);
 }
 
 /**
@@ -284,13 +280,13 @@ export function WithBoundArguments<T>(
     throw new Error(`Missing binding for lambda parameter ${missing}`);
   }
   ids.forEach((id, index) => {
-    context.bind(id, bindings[index]);
+    context.bind(String(id), bindings[index]);
   });
   try {
     return compile();
   } finally {
     ids.forEach((id) => {
-      context.unbind(id);
+      context.unbind(String(id));
     });
   }
 }

@@ -1,10 +1,8 @@
-import assert from "node:assert";
-
 import type { QueryStage } from "@antelopejs/interface-database/common";
 
 import type { Compiled } from "./sql";
-import { DecodeValue, IsParameterId } from "./value";
-import type { DecodingContext, ParameterId } from "./context";
+import { DecodeValue } from "./value";
+import type { DecodingContext } from "./context";
 import { JsonRowSource, type RowSource } from "./row-source";
 import { IsString } from "./guards";
 
@@ -65,16 +63,6 @@ export function AsValue(state: ExpressionState): Compiled {
 export function AsSource(state: ExpressionState): RowSource {
   const current = RequireCurrent(state);
   return IsCompiled(current) ? new JsonRowSource(current) : current;
-}
-
-/** The id of the lambda parameter an `arg` stage reads. */
-export function ArgumentId(stage: QueryStage): ParameterId {
-  const id: unknown = stage.args[FIRST_OPERAND];
-  assert(
-    IsParameterId(id),
-    `Stage '${stage.stage}' requires the id of a lambda parameter`,
-  );
-  return id;
 }
 
 export function RequireOperand(

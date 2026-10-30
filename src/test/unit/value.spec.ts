@@ -4,7 +4,6 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 import { Datum, Query, ValueProxy } from "@antelopejs/interface-database";
 
 import { RefusingCompilers } from "./spec-fixture";
-import { IsNumber } from "../../implementations/database/guards";
 
 /** PostgreSQL's own limit on arguments to one function call, which is what the fold exists for. */
 const ARGUMENT_CAP = 100;
@@ -53,9 +52,7 @@ function NewContext(recorded: Recorded): DecodingContext {
     expression: (stages, context) => {
       recorded.expressions.push(stages);
       if (stages[0]?.stage === "arg") {
-        const id: unknown = stages[0].args[0];
-        assert(IsNumber(id), "an arg stage records its lambda id");
-        recorded.bindings.push(context.arg(id));
+        recorded.bindings.push(context.arg(String(stages[0].args[0])));
       }
       return STUB_EXPRESSION;
     },
