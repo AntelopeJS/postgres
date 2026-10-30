@@ -1,5 +1,47 @@
 # Changelog
 
+## v0.2.3
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.2...v0.2.3)
+
+### 🚀 Enhancements
+
+- **external:** Start without a connection in development when it fails ([#36](https://github.com/AntelopeJS/postgres/pull/36))
+
+### 🩹 Fixes
+
+- **package:** Cap the implemented interface-database-catalog range ([#28](https://github.com/AntelopeJS/postgres/pull/28))
+
+### 💅 Refactors
+
+- **test:** Upgrade the guardrail pack and bring the test rules to zero ([#30](https://github.com/AntelopeJS/postgres/pull/30))
+- Drop the redundant formatter ignore and the knip config comments ([#31](https://github.com/AntelopeJS/postgres/pull/31))
+- **types:** Remove type assertions and widened types, rename the shape vocabulary ([#33](https://github.com/AntelopeJS/postgres/pull/33))
+- Split the oversize modules and specs, bring function size to zero ([#34](https://github.com/AntelopeJS/postgres/pull/34))
+- Clear the residual ratchet findings ([#37](https://github.com/AntelopeJS/postgres/pull/37))
+
+### 📖 Documentation
+
+- **changelog:** Upgrade notes of postgres 0.2.2 ([#25](https://github.com/AntelopeJS/postgres/pull/25))
+
+### 📦 Build
+
+- **deps:** Adopt @antelopejs/interface-database 0.2.0 ([#35](https://github.com/AntelopeJS/postgres/pull/35))
+
+### 🏡 Chore
+
+- Adopt the guardrail pack from tooling-configs 0.2.0 ([#26](https://github.com/AntelopeJS/postgres/pull/26))
+- Configure Renovate with the shared preset ([#27](https://github.com/AntelopeJS/postgres/pull/27))
+
+### 🤖 CI
+
+- Test on every Node major the engines range allows ([#29](https://github.com/AntelopeJS/postgres/pull/29))
+
+### ❤️ Contributors
+
+- Thomas ([@Thomasims](http://github.com/Thomasims))
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.2.2
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.1...v0.2.2)
