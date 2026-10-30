@@ -193,8 +193,7 @@ describe("DecodeValue", () => {
   });
 });
 
-function Lambda(ids: number[], body: unknown): RecordedFunction {
-  const func = QueryStage("func", undefined, ids, body);
+function LambdaStage(func: QueryStage): RecordedFunction {
   assert(IsRecordedFunction(func), "the builder records a lambda this way");
   return func;
 }
@@ -206,7 +205,9 @@ describe("DecodeFunction", () => {
     const recorded = NewRecorded();
     const context = NewContext(recorded);
     const source = new ColumnRowSource(AliasedColumns("t"), emptyTable);
-    const func = Lambda([7], ValueProxy.arg(7));
+    const func = LambdaStage(
+      QueryStage("func", undefined, [7], ValueProxy.arg(7)),
+    );
 
     const out = DecodeFunction(func, context, [source]);
 
@@ -221,7 +222,14 @@ describe("DecodeFunction", () => {
     const context = NewContext(recorded);
     const left = new ColumnRowSource(AliasedColumns("l"), emptyTable);
     const right = new ColumnRowSource(AliasedColumns("r"), emptyTable);
-    const func = Lambda([3, 4], [ValueProxy.arg(3), ValueProxy.arg(4)]);
+    const func = LambdaStage(
+      QueryStage(
+        "func",
+        undefined,
+        [3, 4],
+        [ValueProxy.arg(3), ValueProxy.arg(4)],
+      ),
+    );
 
     DecodeFunction(func, context, [left, right]);
 
@@ -232,14 +240,23 @@ describe("DecodeFunction", () => {
 
   it("rejects a lambda parameter with no binding", () => {
     const context = NewContext(NewRecorded());
-    const func = Lambda([7], ValueProxy.arg(7));
+    const func = LambdaStage(
+      QueryStage("func", undefined, [7], ValueProxy.arg(7)),
+    );
     expect(() => DecodeFunction(func, context, [])).to.throw(/Missing binding/);
   });
 
   it("binds nothing when a later parameter has no binding", () => {
     const context = NewContext(NewRecorded());
     const left = new ColumnRowSource(AliasedColumns("l"), emptyTable);
-    const func = Lambda([3, 4], [ValueProxy.arg(3), ValueProxy.arg(4)]);
+    const func = LambdaStage(
+      QueryStage(
+        "func",
+        undefined,
+        [3, 4],
+        [ValueProxy.arg(3), ValueProxy.arg(4)],
+      ),
+    );
 
     expect(() => DecodeFunction(func, context, [left])).to.throw(
       /Missing binding/,
@@ -251,7 +268,7 @@ describe("DecodeFunction", () => {
   it("unbinds even when the body fails to decode", () => {
     const context = NewContext(NewRecorded());
     const source = new ColumnRowSource(AliasedColumns("t"), emptyTable);
-    const func = Lambda([7], () => 1);
+    const func = LambdaStage(QueryStage("func", undefined, [7], () => 1));
 
     expect(() => DecodeFunction(func, context, [source])).to.throw(/function/);
     expect(() => context.arg(7)).to.throw(/7/);
@@ -265,7 +282,9 @@ describe("WithBoundArguments", () => {
   it("unbinds even when a compilation that is not a decode throws", () => {
     const context = NewContext(NewRecorded());
     const source = new ColumnRowSource(AliasedColumns("t"), emptyTable);
-    const func = Lambda([7], ValueProxy.arg(7));
+    const func = LambdaStage(
+      QueryStage("func", undefined, [7], ValueProxy.arg(7)),
+    );
 
     expect(() =>
       WithBoundArguments(func, context, [source], () => {

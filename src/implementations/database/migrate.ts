@@ -192,7 +192,7 @@ function EnsureRegistry(): Promise<void> {
   triggersReady.clear();
   const pending: Promise<void> = RetryOnDuplicateObject(() =>
     Apply(REGISTRY_SCHEMA, BOOTSTRAP_STATEMENTS),
-  ).catch((err) => {
+  ).catch((err: unknown) => {
     if (registryReady === pending) {
       registryReady = undefined;
       registryFor = undefined;
