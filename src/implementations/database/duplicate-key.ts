@@ -56,10 +56,10 @@ async function IsPrimaryKey(schemaName: string, constraint: string) {
  * else — an index the adapter did not create — is answered unchanged.
  */
 export async function DuplicateKeyFailure(
-  err: unknown,
+  err: DatabaseError,
   origin: TableOrigin,
-): Promise<unknown> {
-  if (!(err instanceof DatabaseError) || err.code !== UNIQUE_VIOLATION) {
+): Promise<DatabaseError | DuplicateKeyError> {
+  if (err.code !== UNIQUE_VIOLATION) {
     return err;
   }
   const constraint = err.constraint ?? "";

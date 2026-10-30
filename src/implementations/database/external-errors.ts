@@ -1,3 +1,4 @@
+import { IsDocument, IsString } from "./guards";
 import { QualifiedName } from "./identifier";
 import type { ExternalRelation } from "./fields";
 
@@ -52,6 +53,30 @@ interface DatabaseError {
   table?: string;
   detail?: string;
   message: string;
+}
+
+function IsOptionalText(value: unknown): value is string | undefined {
+  return value === undefined || IsString(value);
+}
+
+/**
+ * Whether a thrown value carries the members a database error is read for.
+ *
+ * Structural rather than an `instanceof`, so an error from another copy of `pg-protocol` is read
+ * the same; every member the mappings read is checked here.
+ */
+export function IsDatabaseError(value: unknown): value is DatabaseError {
+  return (
+    IsDocument(value) &&
+    IsString(value.message) &&
+    [
+      value.code,
+      value.column,
+      value.constraint,
+      value.table,
+      value.detail,
+    ].every(IsOptionalText)
+  );
 }
 
 type Mapping = (error: DatabaseError, relation: string) => ExternalWriteError;
@@ -123,13 +148,12 @@ const MAPPINGS = new Map<string, Mapping>([
 
 /** A database error from writing an external relation, as a readable {@link ExternalWriteError}. */
 export function ExternalWriteFailure(
-  err: unknown,
+  error: DatabaseError,
   external: ExternalRelation,
-): unknown {
-  const error = err as DatabaseError;
-  const mapping = error && error.code ? MAPPINGS.get(error.code) : undefined;
+): DatabaseError | ExternalWriteError {
+  const mapping = error.code ? MAPPINGS.get(error.code) : undefined;
   if (!mapping) {
-    return err;
+    return error;
   }
   return mapping(error, QualifiedName(external.schema, external.table));
 }

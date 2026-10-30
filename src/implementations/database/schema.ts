@@ -151,7 +151,7 @@ export const Schemas = {
     definitions[schemaId] = schema;
     const pending: Promise<void> = initialize(schemaId, schema).catch(
       (err: unknown) => {
-        if (ready[schemaId] === pending) {
+        if (Object.hasOwn(ready, schemaId) && ready[schemaId] === pending) {
           delete definitions[schemaId];
           delete schemaModels[schemaId];
           delete scanNotices[schemaId];

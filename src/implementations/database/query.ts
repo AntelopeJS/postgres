@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { DatabaseError } from "pg";
 import { ValidateAtomicMutationTable } from "@antelopejs/interface-database/atomic";
 
 import { Query } from "../../connection";
@@ -9,7 +10,11 @@ import {
 } from "./external-refusals";
 import { CHANGES_STAGE } from "./changes";
 import type { ExternalRelation } from "./fields";
-import { ExternalWriteFailure, InvalidValues } from "./external-errors";
+import {
+  ExternalWriteFailure,
+  InvalidValues,
+  IsDatabaseError,
+} from "./external-errors";
 import { DecodingContext } from "./context";
 import { CompileSubquery } from "./subquery";
 import { CompileExpression } from "./expression";
@@ -197,7 +202,9 @@ async function RunWrite(
   try {
     return await RunManagedWrite(statement, stage, context);
   } catch (err) {
-    throw await DuplicateKeyFailure(err, target.origin);
+    throw await (err instanceof DatabaseError
+      ? DuplicateKeyFailure(err, target.origin)
+      : err);
   }
 }
 
@@ -251,7 +258,7 @@ async function RunExternalWrite(
     }
     return result.rowCount ?? NO_ROWS;
   } catch (err) {
-    throw ExternalWriteFailure(err, external);
+    throw IsDatabaseError(err) ? ExternalWriteFailure(err, external) : err;
   }
 }
 
