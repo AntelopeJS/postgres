@@ -11,7 +11,7 @@ import { SetProjection } from "./relation";
 import { Render } from "./render";
 import type { QueryStage } from "./utils";
 import { ID_COLUMN } from "./utils";
-import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
+import { QualifiedColumn, QuoteIdentifier } from "./sql";
 import {
   type ColumnDescriptor,
   CheckFor,
@@ -194,8 +194,10 @@ function Validation(
   const conditions: string[] = [];
   const failures: string[] = [];
   for (const check of checks.filter((each) => CheckFor("", each.descriptor))) {
+    const decoded = DecodeValue(check.raw, sibling);
+    assert(decoded, "A checked value is never undefined, so it always decodes");
     const value = WrittenAs(
-      DecodeValue(check.raw, sibling) as Compiled,
+      decoded,
       check.descriptor.kind,
       `Field '${check.path}'`,
     );

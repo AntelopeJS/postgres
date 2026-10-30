@@ -67,7 +67,8 @@ export function KeyFieldValue(
   claim: KeyFieldClaim,
   context: DecodingContext,
 ): Compiled {
-  const decoded = DecodeValue(claim.raw, context) as Compiled;
+  const decoded = DecodeValue(claim.raw, context);
+  assert(decoded, "A key field claim is never undefined, so it always decodes");
   return WrittenAs(decoded, claim.type, `Field '${claim.field}'`);
 }
 
@@ -86,7 +87,8 @@ export function KeyValue(
   asserted: AssertedKey,
   context: DecodingContext,
 ): Compiled {
-  const decoded = DecodeValue(asserted.raw, context) as Compiled;
+  const decoded = DecodeValue(asserted.raw, context);
+  assert(decoded, "A claimed key is a string, so it always decodes");
   return WrittenAs(decoded, TEXT, `Key column "${asserted.descriptor.column}"`);
 }
 
@@ -169,8 +171,7 @@ function IdParts(walk: ExternalWalk, value: unknown): string[] {
   if (width === 1) {
     return [KeyText(value)];
   }
-  const parsed: unknown = IsString(value) ? SafeParse(value) : undefined;
-  const parts = Array.isArray(parsed) ? parsed : [];
+  const parts = IsString(value) ? JsonList(value) : [];
   if (
     parts.length !== width ||
     !parts.every((part): part is string => typeof part === "string")
@@ -185,11 +186,13 @@ function KeyText(value: unknown): string {
   return IsString(value) ? value : JSON.stringify(value);
 }
 
-function SafeParse(text: string): unknown {
+/** The items of a JSON array spelled by `text`, or none when it spells anything else. */
+function JsonList(text: string): unknown[] {
   try {
-    return JSON.parse(text);
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return undefined;
+    return [];
   }
 }
 
