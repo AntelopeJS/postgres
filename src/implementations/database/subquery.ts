@@ -2,7 +2,7 @@ import { ArrayOf } from "./types";
 import { Collected } from "./jsonb";
 import { AsJson } from "./readings";
 import type { Compiled } from "./sql";
-import { FIRST_OPERAND } from "./stage";
+import { ArgumentId } from "./stage";
 import type { QueryStage } from "./utils";
 import { type DecodingContext, IsSubqueryProvider } from "./context";
 import { CurrentValue, type Relation, SetProjection } from "./relation";
@@ -45,7 +45,7 @@ function ProvidedSubquery(
   if (head?.stage !== ARG_STAGE) {
     return undefined;
   }
-  const binding = context.arg(head.args[FIRST_OPERAND]);
+  const binding = context.arg(ArgumentId(head));
   return IsSubqueryProvider(binding) ? binding(rest) : undefined;
 }
 
