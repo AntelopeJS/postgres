@@ -18,6 +18,7 @@ import {
   type WriteDocument,
   type Written,
 } from "./pipeline-fixture";
+import { NotADocument } from "./invalid-fixture";
 
 const INTO = `INSERT INTO ${TABLE} AS "w0"`;
 const CONFLICT = 'ON CONFLICT ("_instance", "_id") DO UPDATE SET';
@@ -322,13 +323,13 @@ describe("the ids an insert answers", () => {
   });
 
   it("refuses an argument that is not a document", () => {
-    expect(() => Insert("a" as unknown as WriteDocument)).to.throw(
+    expect(() => Insert(NotADocument("a"))).to.throw(
       "The 'insert' stage takes documents, and the one at position 0 is a string",
     );
   });
 
   it("refuses a nested array rather than storing its indices as keys", () => {
-    expect(() => Insert([[] as unknown as WriteDocument])).to.throw(
+    expect(() => Insert([NotADocument([])])).to.throw(
       "The 'insert' stage takes documents, and the one at position 0 is an array",
     );
   });

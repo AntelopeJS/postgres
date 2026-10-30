@@ -12,3 +12,8 @@ export function IsNumber(value: unknown): value is number {
 export function IsObject(value: unknown): value is object {
   return typeof value === "object" && value !== null;
 }
+
+/** Whether a stage argument or caller value is a boolean. */
+export function IsBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}

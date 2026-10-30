@@ -16,7 +16,7 @@ import {
   DecodeValue,
   FunctionBody,
   IsPlainObject,
-  RecordedFunction,
+  IsRecordedFunction,
   WithBoundArguments,
 } from "./value";
 import {
@@ -349,9 +349,8 @@ function MappedColumns(
  */
 export const UpdateWrite: WriteCompiler = (target, stage, context) => {
   const argument = stage.args[FIRST_OPERAND];
-  const mapper = RecordedFunction(argument);
-  const changed = mapper
-    ? MappedColumns(target, stage, mapper, context)
+  const changed = IsRecordedFunction(argument)
+    ? MappedColumns(target, stage, argument, context)
     : ChangedColumnsOf(
         ChangedPayload(ChangedDocument(stage, argument), target, context),
         stage,

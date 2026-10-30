@@ -17,6 +17,7 @@ import {
   RegisteredOrigin,
   type RootSelection,
 } from "../../implementations/database/selection";
+import { NotAString } from "./invalid-fixture";
 
 interface Vehicle {
   car: string;
@@ -135,7 +136,7 @@ describe("BuildRoot", () => {
   });
 
   it("rejects an instance id that is neither a string nor the sentinel", () => {
-    const query = Root(SCHEMA_ID, 7 as unknown as string);
+    const query = Root(SCHEMA_ID, NotAString(7));
     expect(() => Build(query, NewContext())).to.throw(
       "An instance id must be a string or CROSS_INSTANCE, received number",
     );
