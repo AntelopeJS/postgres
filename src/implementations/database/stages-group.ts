@@ -4,7 +4,7 @@ import { ArrayOf } from "./types";
 import { Collected } from "./jsonb";
 import { AsJson } from "./readings";
 import type { Compiled } from "./sql";
-import { DecodeFunction } from "./value";
+import { DecodeFunction, RecordedLambda } from "./value";
 import type { QueryStage } from "./utils";
 import { FIRST_OPERAND, RequireOperand } from "./stage";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
@@ -88,7 +88,7 @@ function Revalued(state: SubStream, value: Compiled): SubStream {
 }
 
 const MapSubStream: SubStreamStage = (state, stage, context) => {
-  const body = DecodeFunction(stage.args[FIRST_OPERAND], context, [
+  const body = DecodeFunction(RecordedLambda(stage, FIRST_OPERAND), context, [
     state.source,
   ]);
   return Revalued(state, RequireOperand(body, stage, FIRST_OPERAND));
@@ -280,7 +280,7 @@ const SINGLE_COLUMN = 1;
 const ONLY_COLUMN = 0;
 
 function GroupName(stage: QueryStage): string {
-  const name = stage.options?.index;
+  const name: unknown = stage.options?.index;
   assert(
     IsString(name),
     "The 'group' stage is missing the index or field to group on",
@@ -300,7 +300,7 @@ const GroupStage: PipelineStage = (relation, stage, context) => {
   const columns = IndexColumns(prepared, GroupName(stage));
   const value = GroupValue(columns);
   prepared.groupBy.push(...columns);
-  const mapped = DecodeFunction(stage.args[FIRST_OPERAND], context, [
+  const mapped = DecodeFunction(RecordedLambda(stage, FIRST_OPERAND), context, [
     SubStreamProvider(prepared, context),
     value,
   ]);

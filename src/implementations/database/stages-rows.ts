@@ -6,7 +6,7 @@ import type { Compiled } from "./sql";
 import { Cast, Widen } from "./coerce";
 import type { SqlType } from "./types";
 import type { DecodingContext } from "./context";
-import { DecodeFunction, DecodeValue } from "./value";
+import { DecodeFunction, DecodeValue, RecordedLambda } from "./value";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { ClampToRange, INT4_MAX, Numeric, Predicate } from "./readings";
 import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
@@ -83,7 +83,7 @@ function Bound(
  */
 const FilterStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, WHERE_BLOCKERS, context);
-  const body = DecodeFunction(stage.args[FIRST_OPERAND], context, [
+  const body = DecodeFunction(RecordedLambda(stage, FIRST_OPERAND), context, [
     prepared.source,
   ]);
   const predicate = RequireOperand(body, stage, FIRST_OPERAND);
@@ -92,7 +92,7 @@ const FilterStage: PipelineStage = (relation, stage, context) => {
 };
 
 function SortName(stage: QueryStage): string {
-  const name = stage.options?.index;
+  const name: unknown = stage.options?.index;
   assert(
     IsString(name),
     "The 'orderBy' stage is missing the index or field to sort on",
@@ -159,7 +159,7 @@ function Materialize(side: UnionSide, type: SqlType): string {
  * Read off the stage and compiled through the same context, whose fold it asks for rather imports.
  */
 function Concatenated(stage: QueryStage, context: DecodingContext): Relation {
-  const other = stage.args[FIRST_OPERAND];
+  const other: unknown = stage.args[FIRST_OPERAND];
   assert(
     other instanceof Query,
     "The 'union' stage takes another query to concatenate",

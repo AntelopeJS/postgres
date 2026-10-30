@@ -80,7 +80,7 @@ function Addressed(column: Compiled): Compiled {
 }
 
 function IndexOption(stage: QueryStage): string | undefined {
-  const name = stage.options?.index;
+  const name: unknown = stage.options?.index;
   if (name === undefined || name === null) {
     return undefined;
   }

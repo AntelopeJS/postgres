@@ -95,7 +95,7 @@ function Translated(pattern: string): string {
 }
 
 const MatchStage = LiftRaw((value, stage, context) => {
-  const raw = stage.args[FIRST_OPERAND];
+  const raw: unknown = stage.args[FIRST_OPERAND];
   const pattern = IsString(raw)
     ? Param(context.params, Translated(raw), TEXT)
     : RequireOperand(DecodeValue(raw, context), stage, FIRST_OPERAND);

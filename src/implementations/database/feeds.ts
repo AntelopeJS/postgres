@@ -424,7 +424,7 @@ async function Poll(
 const ROOT_LENGTH = 3;
 
 function RootId(stages: QueryStage[], index: number): string {
-  const id = stages[index]?.options?.id;
+  const id: unknown = stages[index]?.options?.id;
   return IsString(id) ? id : "";
 }
 
@@ -437,7 +437,7 @@ function Between(stages: QueryStage[]): QueryStage[] {
 function TargetOf(stages: QueryStage[]): FeedTarget {
   const schemaId = RootId(stages, 0);
   const tableId = RootId(stages, 2);
-  const supplied = stages[1]?.options?.id;
+  const supplied: unknown = stages[1]?.options?.id;
   const instance =
     supplied === CROSS_INSTANCE
       ? CROSS_INSTANCE

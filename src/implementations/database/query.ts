@@ -122,7 +122,7 @@ function Lifecycle(stages: QueryStage[]): Promise<LifecycleAnswer> | undefined {
   const handler = (IsExternal() ? EXTERNAL_LIFECYCLE : LIFECYCLE_HANDLERS)[
     stage.stage
   ];
-  const schemaId = stages[0].options?.id;
+  const schemaId: unknown = stages[0].options?.id;
   assert(IsString(schemaId), MISSING_SCHEMA_ID);
   return WaitForSchemaReady(schemaId).then(() => handler(schemaId, stage));
 }

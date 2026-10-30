@@ -89,7 +89,7 @@ function RootStage(
 }
 
 function RootId(stage: QueryStage): string {
-  const id = stage.options?.id;
+  const id: unknown = stage.options?.id;
   assert(
     IsString(id),
     `The '${stage.stage}' stage of a table query is missing its id`,
@@ -229,8 +229,9 @@ function CollectValue(value: unknown, walk: SchemaWalk): void {
 
 function CollectInto(stages: QueryStage[], walk: SchemaWalk): void {
   for (const stage of stages) {
-    if (stage.stage === SCHEMA_STAGE && IsString(stage.options?.id)) {
-      walk.ids.add(stage.options.id);
+    const id: unknown = stage.options?.id;
+    if (stage.stage === SCHEMA_STAGE && IsString(id)) {
+      walk.ids.add(id);
     }
     for (const arg of stage.args ?? []) {
       CollectValue(arg, walk);

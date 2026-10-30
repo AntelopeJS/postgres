@@ -28,10 +28,6 @@ interface OperandKinds {
   key: string;
 }
 
-interface ShiftOptions {
-  preserveSign?: boolean;
-}
-
 const PLUS = "+";
 const MINUS = "-";
 const TIMES = "*";
@@ -203,8 +199,8 @@ const BitLshiftStage = BinaryStage((left, right) =>
 );
 
 const BitRshiftStage = BinaryStage((left, right, stage) => {
-  const options: ShiftOptions = stage.options ?? {};
-  const shifted = options.preserveSign ? Int32(left) : Uint32(left);
+  const preserveSign: unknown = stage.options?.preserveSign;
+  const shifted = preserveSign ? Int32(left) : Uint32(left);
   return AsFloat(`${shifted} ${SHIFT_RIGHT} ${ShiftCount(right)}`);
 });
 

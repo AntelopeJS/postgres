@@ -55,7 +55,7 @@ function PartStage(field: string): StageHandler {
 }
 
 function ZoneLiteral(stage: QueryStage): string {
-  const zone = stage.args[FIRST_OPERAND];
+  const zone: unknown = stage.args[FIRST_OPERAND];
   if (!IsString(zone) || zone.length === 0) {
     throw new Error(
       `Stage '${stage.stage}' requires a time zone name at position ${FIRST_OPERAND}`,

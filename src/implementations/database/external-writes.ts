@@ -170,7 +170,7 @@ function TargetedRows(target: WriteTarget, key: ColumnDescriptor[]): string {
 }
 
 function DocumentOf(stage: QueryStage): Record<string, unknown> {
-  const argument = stage.args[FIRST_OPERAND];
+  const argument: unknown = stage.args[FIRST_OPERAND];
   assert(
     IsDocument(argument),
     `The '${stage.stage}' stage on an external relation takes a document, received ${DescribeKind(argument)}; an expression mapper is not supported on external relations in this version`,
@@ -306,7 +306,7 @@ const ExternalDelete: WriteCompiler = (target) => {
 };
 
 function ConflictOf(stage: QueryStage): string | undefined {
-  const conflict = stage.options?.conflict;
+  const conflict: unknown = stage.options?.conflict;
   if (conflict === undefined || conflict === null) {
     return undefined;
   }

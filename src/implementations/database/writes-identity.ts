@@ -18,6 +18,7 @@ import {
   FunctionBody,
   IsPlainObject,
   IsRecordedFunction,
+  type RecordedFunction,
   WithBoundArguments,
 } from "./value";
 import {
@@ -164,10 +165,8 @@ function UpdateStatement(
   };
 }
 
-function ChangedDocument(
-  stage: QueryStage,
-  argument: unknown,
-): Record<string, unknown> {
+function ChangedDocument(stage: QueryStage): Record<string, unknown> {
+  const argument: unknown = stage.args[FIRST_OPERAND];
   assert(
     IsDocument(argument),
     `The '${stage.stage}' stage takes a document, received ${DescribeKind(argument)}`,
@@ -312,7 +311,7 @@ function MultiAssignment(
 function MappedColumns(
   target: WriteTarget,
   stage: QueryStage,
-  mapper: QueryStage,
+  mapper: RecordedFunction,
   context: DecodingContext,
 ): ChangedColumns {
   const body = FunctionBody(mapper);
@@ -347,11 +346,11 @@ function MappedColumns(
  * states what it costs.
  */
 export const UpdateWrite: WriteCompiler = (target, stage, context) => {
-  const argument = stage.args[FIRST_OPERAND];
+  const argument: unknown = stage.args[FIRST_OPERAND];
   const changed = IsRecordedFunction(argument)
     ? MappedColumns(target, stage, argument, context)
     : ChangedColumnsOf(
-        ChangedPayload(ChangedDocument(stage, argument), target, context),
+        ChangedPayload(ChangedDocument(stage), target, context),
         stage,
       );
   return UpdateStatement(target, stage, changed, context);
@@ -366,7 +365,7 @@ export const UpdateWrite: WriteCompiler = (target, stage, context) => {
  */
 export const ReplaceWrite: WriteCompiler = (target, stage, context) => {
   RefuseCrossInstance(target, stage);
-  const document = ChangedDocument(stage, stage.args[FIRST_OPERAND]);
+  const document = ChangedDocument(stage);
   const split = ChangedPayload(document, target, context);
   const changed = ChangedFrom(
     ReplacedColumns(split, target.origin.model),

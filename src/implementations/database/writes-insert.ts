@@ -64,7 +64,7 @@ function IsConflictMode(name: string): name is keyof typeof CONFLICT_MODES {
 }
 
 function ConflictModeOf(stage: QueryStage): ConflictMode | undefined {
-  const conflict = stage.options?.conflict;
+  const conflict: unknown = stage.options?.conflict;
   if (conflict === undefined || conflict === null) {
     return undefined;
   }
