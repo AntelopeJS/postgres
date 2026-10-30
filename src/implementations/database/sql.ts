@@ -1,5 +1,17 @@
 import { IsJsonBacked, PhysicalType, type SqlType } from "./types";
 
+/** Json the driver can send whole: what a jsonb parameter is serialised from. */
+export type ConstantJson =
+  | null
+  | string
+  | number
+  | boolean
+  | ConstantJson[]
+  | { [key: string]: ConstantJson | undefined };
+
+/** A value bound as a statement parameter: a scalar, a date, or json sent whole. */
+export type ParamValue = ConstantJson | Date;
+
 export interface Compiled {
   sql: string;
   type: SqlType;
@@ -36,14 +48,14 @@ export interface NativeOperand {
 export const JSON_NULL = "'null'::jsonb";
 
 export class ParamCollector {
-  private readonly values: unknown[] = [];
+  private readonly values: ParamValue[] = [];
 
-  public add(value: unknown): string {
+  public add(value: ParamValue): string {
     this.values.push(value);
     return `$${this.values.length}`;
   }
 
-  public all(): unknown[] {
+  public all(): ParamValue[] {
     return [...this.values];
   }
 }
@@ -78,7 +90,7 @@ export function JsonKey(source: string, key: string): string {
 
 export function Param(
   params: ParamCollector,
-  value: unknown,
+  value: ParamValue,
   type: SqlType,
 ): Compiled {
   const encoded = IsJsonBacked(type) ? JSON.stringify(value) : value;

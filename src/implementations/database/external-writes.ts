@@ -11,7 +11,7 @@ import { SetProjection } from "./relation";
 import { Render } from "./render";
 import type { QueryStage } from "./utils";
 import { ID_COLUMN } from "./utils";
-import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
+import { QualifiedColumn, QuoteIdentifier } from "./sql";
 import {
   type ColumnDescriptor,
   CheckFor,
@@ -31,14 +31,14 @@ import {
   SplitExternalPayload,
 } from "./external-payload";
 import {
-  AsDocument,
+  InsertedDocuments,
   DescribeKind,
   WRITE_ALIAS,
   type WriteCompiler,
   type WriteStatement,
   type WriteTarget,
 } from "./writes-shared";
-import { IsString } from "./guards";
+import { IsDocument, IsString } from "./guards";
 
 const ALIAS = QuoteIdentifier(WRITE_ALIAS);
 const SOURCE_ALIAS = QuoteIdentifier("src");
@@ -171,12 +171,11 @@ function TargetedRows(target: WriteTarget, key: ColumnDescriptor[]): string {
 
 function DocumentOf(stage: QueryStage): Record<string, unknown> {
   const argument = stage.args[FIRST_OPERAND];
-  const document = AsDocument(argument);
   assert(
-    document,
+    IsDocument(argument),
     `The '${stage.stage}' stage on an external relation takes a document, received ${DescribeKind(argument)}; an expression mapper is not supported on external relations in this version`,
   );
-  return document;
+  return argument;
 }
 
 /**
@@ -195,8 +194,10 @@ function Validation(
   const conditions: string[] = [];
   const failures: string[] = [];
   for (const check of checks.filter((each) => CheckFor("", each.descriptor))) {
+    const decoded = DecodeValue(check.raw, sibling);
+    assert(decoded, "A checked value is never undefined, so it always decodes");
     const value = WrittenAs(
-      DecodeValue(check.raw, sibling) as Compiled,
+      decoded,
       check.descriptor.kind,
       `Field '${check.path}'`,
     );
@@ -303,19 +304,6 @@ const ExternalDelete: WriteCompiler = (target) => {
     sql: `DELETE FROM ${TableOf(ExternalOf(target))} WHERE ${TargetedRows(target, key)}`,
   };
 };
-
-function InsertDocuments(stage: QueryStage): Record<string, unknown>[] {
-  const argument = stage.args[FIRST_OPERAND];
-  const list = Array.isArray(argument) ? argument : [argument];
-  return list.map((entry, position) => {
-    const document = AsDocument(entry);
-    assert(
-      document,
-      `The '${stage.stage}' stage takes documents, and the one at position ${position} is ${DescribeKind(entry)}`,
-    );
-    return document;
-  });
-}
 
 function ConflictOf(stage: QueryStage): string | undefined {
   const conflict = stage.options?.conflict;
@@ -451,7 +439,7 @@ const ExternalInsert: WriteCompiler = (target, stage, context) => {
   const key = RequireKey(target);
   const external = ExternalOf(target);
   const conflict = ConflictOf(stage);
-  const documents = InsertDocuments(stage);
+  const documents = InsertedDocuments(stage);
   if (documents.length === 0) {
     return { sql: "", ids: [] };
   }

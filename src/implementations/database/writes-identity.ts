@@ -9,6 +9,7 @@ import type { DecodingContext } from "./context";
 import { type TableOrigin } from "./relation";
 import { Render } from "./render";
 import { GuardJson, OBJECT_TYPEOF, TextArray } from "./jsonb";
+import { IsDocument } from "./guards";
 import { EXTRA_COLUMN, ID_COLUMN, type QueryStage } from "./utils";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import { DeclaredColumns, DocumentKeys, type TableModel } from "./fields";
@@ -16,7 +17,7 @@ import {
   DecodeValue,
   FunctionBody,
   IsPlainObject,
-  RecordedFunction,
+  IsRecordedFunction,
   WithBoundArguments,
 } from "./value";
 import {
@@ -27,7 +28,6 @@ import {
   SplitPayload,
 } from "./payload";
 import {
-  AsDocument,
   Assignment,
   DescribeKind,
   EMPTY_EXTRA,
@@ -168,12 +168,11 @@ function ChangedDocument(
   stage: QueryStage,
   argument: unknown,
 ): Record<string, unknown> {
-  const document = AsDocument(argument);
   assert(
-    document,
+    IsDocument(argument),
     `The '${stage.stage}' stage takes a document, received ${DescribeKind(argument)}`,
   );
-  return document;
+  return argument;
 }
 
 function ChangedPayload(
@@ -349,9 +348,8 @@ function MappedColumns(
  */
 export const UpdateWrite: WriteCompiler = (target, stage, context) => {
   const argument = stage.args[FIRST_OPERAND];
-  const mapper = RecordedFunction(argument);
-  const changed = mapper
-    ? MappedColumns(target, stage, mapper, context)
+  const changed = IsRecordedFunction(argument)
+    ? MappedColumns(target, stage, argument, context)
     : ChangedColumnsOf(
         ChangedPayload(ChangedDocument(stage, argument), target, context),
         stage,

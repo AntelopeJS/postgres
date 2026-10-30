@@ -18,6 +18,7 @@ import {
   type WriteDocument,
   type Written,
 } from "./pipeline-fixture";
+import { NotADocument } from "./invalid-fixture";
 
 const UPDATE = `UPDATE ${TABLE} AS "w0" SET`;
 const EXISTING_EXTRA = `COALESCE("w0"."_extra", '{}'::jsonb)`;
@@ -177,7 +178,7 @@ describe("the replace statement's refusals", () => {
   });
 
   it("refuses a payload that is not a document, naming the stage", () => {
-    expect(() => Replace(NAME as unknown as WriteDocument)).to.throw(
+    expect(() => Replace(NotADocument(NAME))).to.throw(
       "The 'replace' stage takes a document, received a string",
     );
   });

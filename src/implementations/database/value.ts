@@ -3,7 +3,13 @@ import type { QueryStage } from "@antelopejs/interface-database/common";
 
 import { Cast, UnifyAll } from "./coerce";
 import type { ArgumentBinding, DecodingContext } from "./context";
-import { type Compiled, JSON_NULL, Param, QuoteLiteral } from "./sql";
+import {
+  type Compiled,
+  type ConstantJson,
+  JSON_NULL,
+  Param,
+  QuoteLiteral,
+} from "./sql";
 import {
   ArrayOf,
   BOOL,
@@ -14,13 +20,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "./types";
-import { IsNumber } from "./guards";
-
-const PRIMITIVE_TYPES: Record<string, SqlType> = {
-  string: TEXT,
-  number: FLOAT,
-  boolean: BOOL,
-};
+import { IsBoolean, IsNumber, IsString } from "./guards";
 
 /**
  * The single json null every `null` in a query decodes to.
@@ -41,8 +41,8 @@ export const NULL_JSON: Compiled = { sql: JSON_NULL, type: OPAQUE };
  * compiler — must stay covered by `selection.ts`'s `CollectValue`, the pre-pass that gates schema
  * readiness by walking the same shapes before any of this runs. A recursive case
  * added here and missed there compiles against a shape that has not converged, and the failure
- * surfaces nowhere near this file. {@link DecodePrimitive} refusing every other object is what
- * keeps that obligation checkable rather than a matter of trust.
+ * surfaces nowhere near this file. The final refusal of every other value, objects included, is
+ * what keeps that obligation checkable rather than a matter of trust.
  */
 export function DecodeValue(
   value: unknown,
@@ -69,7 +69,16 @@ export function DecodeValue(
   if (IsPlainObject(value)) {
     return DecodeObject(value, context);
   }
-  return DecodePrimitive(value, context);
+  if (IsString(value)) {
+    return Param(context.params, value, TEXT);
+  }
+  if (IsNumber(value)) {
+    return Param(context.params, value, FLOAT);
+  }
+  if (IsBoolean(value)) {
+    return Param(context.params, value, BOOL);
+  }
+  throw new Error(`Unsupported value of type '${typeof value}' in query`);
 }
 
 /**
@@ -89,21 +98,13 @@ export function IsPlainObject(
   );
 }
 
-function DecodePrimitive(value: unknown, context: DecodingContext): Compiled {
-  const type = PRIMITIVE_TYPES[typeof value];
-  if (!type) {
-    throw new Error(`Unsupported value of type '${typeof value}' in query`);
-  }
-  return Param(context.params, value, type);
-}
-
 /**
  * Whether a value is json the driver can send whole, rather than an expression to compile.
  *
  * A `ValueProxy` or a `Query` reads the row and has to be emitted as SQL; a `Date` is deliberately
  * excluded because `to_jsonb(timestamptz)` and `JSON.stringify` do not spell the same instant.
  */
-function IsConstantJson(value: unknown): boolean {
+function IsConstantJson(value: unknown): value is ConstantJson {
   if (value === null) {
     return true;
   }
@@ -115,7 +116,7 @@ function IsConstantJson(value: unknown): boolean {
       (item) => item === undefined || IsConstantJson(item),
     );
   }
-  return Object.hasOwn(PRIMITIVE_TYPES, typeof value);
+  return IsString(value) || IsNumber(value) || IsBoolean(value);
 }
 
 /**
@@ -124,23 +125,29 @@ function IsConstantJson(value: unknown): boolean {
  * Mirrors the three decoders below it, so that binding a constant whole does not change the type
  * the caller sees — only the number of parameters it takes.
  */
-function ConstantType(value: unknown): SqlType {
+function ConstantType(value: ConstantJson): SqlType {
   if (value === null) {
     return NULL_JSON.type;
   }
   if (Array.isArray(value)) {
     return ArrayOf(UnifyAll(value.map(ConstantType)));
   }
-  if (IsPlainObject(value)) {
-    const keyTypes: Record<string, SqlType> = {};
-    for (const [name, item] of Object.entries(value)) {
-      if (item !== undefined) {
-        keyTypes[name] = ConstantType(item);
-      }
-    }
-    return JsonOf(keyTypes);
+  if (IsString(value)) {
+    return TEXT;
   }
-  return PRIMITIVE_TYPES[typeof value];
+  if (IsNumber(value)) {
+    return FLOAT;
+  }
+  if (IsBoolean(value)) {
+    return BOOL;
+  }
+  const keyTypes: Record<string, SqlType> = {};
+  for (const [name, item] of Object.entries(value)) {
+    if (item !== undefined) {
+      keyTypes[name] = ConstantType(item);
+    }
+  }
+  return JsonOf(keyTypes);
 }
 
 /**
@@ -187,7 +194,8 @@ const PARAMETER_IDS = 0;
 const FUNCTION_BODY = 1;
 
 /**
- * The lambda a caller recorded, for a stage that accepts either a lambda or a plain document.
+ * Whether a value is a lambda a caller recorded, for a stage that accepts either a lambda or a plain
+ * document.
  *
  * The query builder records one as `{ stage: "func", args: [[argId], body] }` — a plain object
  * carrying no marker class — so `update`, the one stage taking either, can only tell them apart by
@@ -195,23 +203,20 @@ const FUNCTION_BODY = 1;
  * caller's own document plausibly carries: testing the stage name alone refuses
  * `{ stage: "func", args: [1] }`, which is a legitimate document of two undeclared keys, while a
  * test that missed a lambda would store `stage` and `args` in the row as ordinary keys. Every read
- * goes through {@link IsPlainObject} first, so the shape is tested rather than asserted. The stage
- * itself is returned rather than a boolean, so a caller that goes on to compile the body reaches
+ * goes through {@link IsPlainObject} first, so the shape is tested rather than asserted. It narrows
+ * the value to the stage it tested, so a caller that goes on to compile the body reaches
  * {@link DecodeFunction} without asserting the same shape a second time.
  */
-export function RecordedFunction(value: unknown): QueryStage | undefined {
+export function IsRecordedFunction(value: unknown): value is QueryStage {
   if (!IsPlainObject(value) || value.stage !== FUNCTION_STAGE) {
-    return undefined;
+    return false;
   }
   const args: unknown = value.args;
   if (!Array.isArray(args)) {
-    return undefined;
+    return false;
   }
   const ids: unknown = args[PARAMETER_IDS];
-  if (!Array.isArray(ids) || !ids.every(IsNumber)) {
-    return undefined;
-  }
-  return value as unknown as QueryStage;
+  return Array.isArray(ids) && ids.every(IsNumber);
 }
 
 /** Whatever a recorded lambda returned, which is a value for most callers and a document for one. */

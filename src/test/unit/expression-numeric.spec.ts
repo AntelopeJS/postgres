@@ -101,6 +101,11 @@ function AsFloat(sql: string): string {
   return `((${sql})::double precision)`;
 }
 
+/** An operand the contract types as a number, which `add` also reads as a string, list or date. */
+function Addend(value: unknown): number {
+  return value as number;
+}
+
 describe("numeric stage dispatch", () => {
   it("exposes every numeric stage it can dispatch", () => {
     expect(Object.keys(STAGES)).to.include.members([
@@ -184,27 +189,27 @@ describe("add", () => {
   });
 
   it("concatenates two strings", () => {
-    const out = Compile((doc) => doc.key("name").add("!" as never));
+    const out = Compile((doc) => doc.key("name").add(Addend("!")));
     expect(out.sql).to.equal(`("t"."name" || ($1::text))`);
     expect(out.type).to.equal(TEXT);
   });
 
   it("concatenates two arrays and keeps the element type", () => {
-    const out = Compile((doc) => doc.key("tags").add(["x"] as never));
+    const out = Compile((doc) => doc.key("tags").add(Addend(["x"])));
     expect(out.sql).to.equal(`("t"."tags" || ($1::jsonb))`);
     expect(out.type).to.deep.equal(ArrayOf(TEXT));
   });
 
   it("rejects two dates, naming the stage", () => {
     expect(() =>
-      Compile((doc) => doc.key("createdAt").add(new Date() as never)),
+      Compile((doc) => doc.key("createdAt").add(Addend(new Date()))),
     ).to.throw(
       /Stage 'add' has no reading for a 'timestamp' and a 'timestamp'/,
     );
   });
 
   it("pulls an undeclared key toward the kind of the other operand", () => {
-    expect(Compile((doc) => doc.key("nope").add("x" as never)).sql).to.equal(
+    expect(Compile((doc) => doc.key("nope").add(Addend("x"))).sql).to.equal(
       `(${AsText(Extra("nope"))} || ${TEXT_PARAM})`,
     );
     expect(Compile((doc) => doc.key("nope").add(5)).sql).to.equal(
@@ -223,7 +228,7 @@ describe("add", () => {
   });
 
   it("reads a null added to a date as seconds rather than rejecting the pair", () => {
-    const out = Compile((doc) => doc.key("createdAt").add(null as never));
+    const out = Compile((doc) => doc.key("createdAt").add(Addend(null)));
     expect(out.sql).to.equal(
       `(${CREATED} + (${AsNumber("'null'::jsonb")}) * ${SECONDS})`,
     );
@@ -231,9 +236,9 @@ describe("add", () => {
   });
 
   it("pulls a shaped json operand toward the other kind, as it does an opaque one", () => {
-    expect(
-      Compile((doc) => doc.key("metadata").add("x" as never)).sql,
-    ).to.equal(`(${AsText(METADATA)} || ${TEXT_PARAM})`);
+    expect(Compile((doc) => doc.key("metadata").add(Addend("x"))).sql).to.equal(
+      `(${AsText(METADATA)} || ${TEXT_PARAM})`,
+    );
     expect(
       Compile((doc) => doc.key("metadata").add(doc.key("createdAt"))).sql,
     ).to.equal(`(${CREATED} + (${AsNumber(METADATA)}) * ${SECONDS})`);

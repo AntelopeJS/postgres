@@ -9,7 +9,7 @@ function Accounts() {
   return sales.instance().table("accounts");
 }
 
-async function Refusal(work: () => PromiseLike<unknown>): Promise<string> {
+async function Refusal(work: () => Promise<void>): Promise<string> {
   try {
     await work();
   } catch (err) {
@@ -72,25 +72,33 @@ describe("what an external relation refuses", () => {
   for (const { stage, write } of WRITES) {
     const expected = stage === "atomicMutation" ? stage : "may not write to";
     it(`refuses ${stage} on a relation the connected role may not write, naming it, and writes nothing`, async () => {
-      const message = await Refusal(() => write());
+      const message = await Refusal(async () => {
+        await write();
+      });
       expect(message).to.contain(expected).and.to.contain('"sales"."accounts"');
     });
   }
 
   it("refuses changes(), since the adapter keeps no change log on the client's database", async () => {
-    const message = await Refusal(() => FirstEvent(Accounts().changes()));
+    const message = await Refusal(async () => {
+      await FirstEvent(Accounts().changes());
+    });
     expect(message)
       .to.contain("changes()")
       .and.to.contain('"sales"."accounts"');
   });
 
   it("refuses creating and destroying an instance", async () => {
-    expect(await Refusal(() => sales.createInstance("t1"))).to.contain(
-      "createInstance",
-    );
-    expect(await Refusal(() => sales.destroyInstance("t1"))).to.contain(
-      "destroyInstance",
-    );
+    expect(
+      await Refusal(async () => {
+        await sales.createInstance("t1");
+      }),
+    ).to.contain("createInstance");
+    expect(
+      await Refusal(async () => {
+        await sales.destroyInstance("t1");
+      }),
+    ).to.contain("destroyInstance");
   });
 
   it("lists no instances", async () => {
@@ -112,7 +120,9 @@ describe("what an external relation refuses", () => {
     },
   ]) {
     it(`refuses ${description} on a relation with no key, naming it`, async () => {
-      const message = await Refusal(() => read());
+      const message = await Refusal(async () => {
+        await read();
+      });
       expect(message).to.contain('"sales"."raw_log"').and.to.contain("no _id");
     });
   }

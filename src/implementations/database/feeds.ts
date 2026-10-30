@@ -69,13 +69,15 @@ interface FeedTarget {
 
 /**
  * Why a feed stopped, and therefore what a read arriving after it is told.
- * `lapsed` and `restarted` are losses and raise; `closed` is an ending and resolves `done`.
+ * `lapsed` and `restarted` are losses and raise, naming the feed and the range that went;
+ * `closed` is an ending and resolves `done`.
  */
-type EndReason = "closed" | "lapsed" | "restarted";
+type FeedEnd =
+  | { reason: "closed" }
+  | { reason: "restarted"; target: FeedTarget }
+  | { reason: "lapsed"; target: FeedTarget; gap: FeedGap };
 
-const CLOSED: EndReason = "closed";
-const LAPSED: EndReason = "lapsed";
-const RESTARTED: EndReason = "restarted";
+const CLOSED: FeedEnd = { reason: "closed" };
 
 const ADDED: ChangeOperation = "added";
 const REMOVED: ChangeOperation = "removed";
@@ -145,8 +147,7 @@ interface FeedState {
   watermark: bigint;
   epoch?: number;
   buffer: Changes<unknown>[];
-  reason?: EndReason;
-  gap?: FeedGap;
+  end?: FeedEnd;
   wake?: () => void;
   woken: boolean;
   full: boolean;
@@ -259,26 +260,18 @@ const OPEN_SQL = `SELECT
       WHERE ${EPOCH_COLUMN} = pg_postmaster_start_time())
   )::text AS "scanned_to"`;
 
-function Named(state: FeedState): string {
-  const target = state.target as FeedTarget;
+function Named(target: FeedTarget): string {
   return `${target.schemaId}.${target.tableId}`;
 }
 
 /** Names the range that went, which is the whole reason the reaper records a high-water at all. */
-function LapsedMessage(state: FeedState): string {
-  const gap = state.gap as FeedGap;
-  return `change feed on '${Named(state)}' fell behind the retention window (changeRetentionMs): events ${gap.from} through ${gap.to} were reaped before it read them, so it cannot continue; re-open the feed`;
+function LapsedMessage(target: FeedTarget, gap: FeedGap): string {
+  return `change feed on '${Named(target)}' fell behind the retention window (changeRetentionMs): events ${gap.from} through ${gap.to} were reaped before it read them, so it cannot continue; re-open the feed`;
 }
 
-function RestartedMessage(state: FeedState): string {
-  return `change feed on '${Named(state)}' cannot continue: the PostgreSQL server restarted, and the change log does not survive a restart, so every event it had not read is lost; re-open the feed`;
+function RestartedMessage(target: FeedTarget): string {
+  return `change feed on '${Named(target)}' cannot continue: the PostgreSQL server restarted, and the change log does not survive a restart, so every event it had not read is lost; re-open the feed`;
 }
-
-const ENDED_MESSAGES: Record<EndReason, (state: FeedState) => string> = {
-  [CLOSED]: () => "",
-  [LAPSED]: LapsedMessage,
-  [RESTARTED]: RestartedMessage,
-};
 
 function Registered(reqId: number, env?: FeedEnvironment): FeedState {
   const known = feeds.get(reqId);
@@ -320,9 +313,9 @@ function Forget(reqId: number) {
 }
 
 /** Ends the feed once, and releases whatever read is waiting on it. */
-function Retire(reqId: number, state: FeedState, reason: EndReason) {
-  if (!state.reason) {
-    state.reason = reason;
+function Retire(reqId: number, state: FeedState, end: FeedEnd) {
+  if (!state.end) {
+    state.end = end;
     Forget(reqId);
   }
   state.endNow();
@@ -410,16 +403,13 @@ async function Poll(
   );
   const row = result.rows[0];
   if (row.epoch.getTime() !== state.epoch) {
-    Retire(reqId, state, RESTARTED);
+    Retire(reqId, state, { reason: "restarted", target });
     return;
   }
   const reaped = row.high_water === null ? undefined : BigInt(row.high_water);
   if (reaped !== undefined && state.watermark < reaped) {
-    state.gap = {
-      from: state.watermark + 1n,
-      to: reaped,
-    };
-    Retire(reqId, state, LAPSED);
+    const gap = { from: state.watermark + 1n, to: reaped };
+    Retire(reqId, state, { reason: "lapsed", target, gap });
     return;
   }
   state.full = row.scanned_count >= options.changeBatchSize;
@@ -487,14 +477,15 @@ async function Open(state: FeedState, stages: QueryStage[]): Promise<void> {
   await state.env.listen();
 }
 
-function Ended(
-  state: FeedState,
-  reason: EndReason,
-): IteratorResult<unknown, void> {
-  if (reason === CLOSED) {
+function Ended(end: FeedEnd): IteratorResult<unknown, void> {
+  if (end.reason === "closed") {
     return { done: true, value: undefined };
   }
-  throw new Error(ENDED_MESSAGES[reason](state));
+  throw new Error(
+    end.reason === "lapsed"
+      ? LapsedMessage(end.target, end.gap)
+      : RestartedMessage(end.target),
+  );
 }
 
 /**
@@ -511,8 +502,8 @@ async function Advance(
     Retire(reqId, state, CLOSED);
   }
   for (;;) {
-    if (state.reason) {
-      return Ended(state, state.reason);
+    if (state.end) {
+      return Ended(state.end);
     }
     if (state.buffer.length > EMPTY) {
       return { done: false, value: state.buffer.shift() };
@@ -528,7 +519,7 @@ async function Advance(
       }),
       state.ending,
     ]);
-    if (state.buffer.length === EMPTY && !state.reason && !state.full) {
+    if (state.buffer.length === EMPTY && !state.end && !state.full) {
       await Waited(state, options);
     }
   }
