@@ -79,14 +79,11 @@ const LIFECYCLE_STAGE_COUNT = 2;
 const NO_ROWS = 0;
 
 const LIFECYCLE_HANDLERS = new Map<string, LifecycleHandler>([
-  [
-    CREATE_INSTANCE,
-    (schemaId, stage) => CreateInstance(schemaId, stage.options?.id),
-  ],
+  [CREATE_INSTANCE, CreateInstance],
   [
     DESTROY_INSTANCE,
     (schemaId, stage) =>
-      DestroyInstance(schemaId, GetTableNames(schemaId), stage.options?.id),
+      DestroyInstance(schemaId, GetTableNames(schemaId), stage),
   ],
   ["listInstances", ListInstances],
 ]);

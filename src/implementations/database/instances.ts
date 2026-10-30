@@ -8,6 +8,7 @@ import {
   DESTROY_INSTANCE,
   INSTANCE_COLUMN,
   NormalizeInstanceId,
+  type QueryStage,
   REGISTRY_INSTANCES_TABLE,
   REGISTRY_SCHEMA,
 } from "./utils";
@@ -56,9 +57,9 @@ export const REGISTRY_STATEMENTS: readonly string[] = [
  */
 export async function CreateInstance(
   schemaId: string,
-  id: unknown,
+  stage: QueryStage,
 ): Promise<string> {
-  const instanceId = NormalizeInstanceId(CREATE_INSTANCE, id);
+  const instanceId = NormalizeInstanceId(CREATE_INSTANCE, stage);
   await Query(
     `INSERT INTO ${REGISTRY} (${SCHEMA_KEY}, ${INSTANCE_KEY}) VALUES (${SCHEMA_PARAM}, ${INSTANCE_PARAM}) ON CONFLICT ${REGISTRY_KEY} DO NOTHING`,
     [instanceId, SchemaName(schemaId)],
@@ -109,9 +110,9 @@ function DestroyInstanceSql(
 export async function DestroyInstance(
   schemaId: string,
   tableIds: readonly string[],
-  id: unknown,
+  stage: QueryStage,
 ): Promise<void> {
-  const instanceId = NormalizeInstanceId(DESTROY_INSTANCE, id);
+  const instanceId = NormalizeInstanceId(DESTROY_INSTANCE, stage);
   await Query(DestroyInstanceSql(schemaId, tableIds), [
     instanceId,
     SchemaName(schemaId),

@@ -1,7 +1,9 @@
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 import { IsString } from "./guards";
 
-export type { QueryStage } from "@antelopejs/interface-database/common";
+import type { QueryStage } from "@antelopejs/interface-database/common";
+
+export type { QueryStage };
 
 export const ID_COLUMN = "_id";
 export const INSTANCE_COLUMN = "_instance";
@@ -61,8 +63,9 @@ export type InstanceOperation =
  */
 export function NormalizeInstanceId(
   operation: InstanceOperation,
-  id: unknown,
+  stage: QueryStage,
 ): string {
+  const id: unknown = stage.options?.id;
   if (id === CROSS_INSTANCE) {
     throw new Error(
       `${operation} does not accept CROSS_INSTANCE: pass a string id or omit it for the default instance`,
