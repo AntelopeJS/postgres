@@ -9,7 +9,6 @@
     "anti-slop/no-unknown-returns": 6,
     "anti-slop/no-unsafe-dictionary-type": 19,
     "anti-slop/require-safety-comment-for-type-assertion": 16,
-    "typescript/no-unsafe-argument": 2,
     "typescript/no-unsafe-assignment": 1,
     "typescript/no-unsafe-return": 22,
     "typescript/unbound-method": 1
