@@ -263,10 +263,10 @@ function ReadOnlyOf(column: CatalogColumn, path: string): string | undefined {
   return IsReadOnly(descriptor) ? ReadOnlyReason(descriptor) : undefined;
 }
 
-const IDENTITIES: Record<string, ColumnDescription["identity"]> = {
-  a: "always",
-  d: "by default",
-};
+const IDENTITIES = new Map<string, ColumnDescription["identity"]>([
+  ["a", "always"],
+  ["d", "by default"],
+]);
 
 function DescribeColumn(
   column: CatalogColumn,
@@ -281,7 +281,7 @@ function DescribeColumn(
     nullable: !column.notNull,
     hasDefault: column.hasDefault,
     generated: column.generated,
-    identity: IDENTITIES[column.identity] ?? null,
+    identity: IDENTITIES.get(column.identity) ?? null,
     accepts,
     comment: column.comment,
   };
