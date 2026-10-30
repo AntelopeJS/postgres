@@ -75,7 +75,7 @@ function Reconnect() {
   retry.unref();
 }
 
-function Failed(err: unknown) {
+function Failed(err: Error) {
   Logger.Warn(LISTENER_FAILED, err);
   client = undefined;
   Reconnect();

@@ -58,7 +58,7 @@ async function Invoke(callback: BeforeDisconnect) {
 }
 
 /** Swallows an idle client's failure — see {@link GuardPool}, which owns why the pool needs one. */
-function ReportIdleClientError(err: unknown) {
+function ReportIdleClientError(err: Error) {
   Logger.Warn(IDLE_CLIENT_FAILED, err);
 }
 
@@ -199,7 +199,7 @@ export function Query<T extends QueryResultRow = QueryResultRow>(
   return GetPool().query<T>(sql, params);
 }
 
-function ReportHeldClientError(err: unknown) {
+function ReportHeldClientError(err: Error) {
   Logger.Warn(HELD_CLIENT_FAILED, err);
 }
 
