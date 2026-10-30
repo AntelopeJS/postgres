@@ -78,31 +78,34 @@ const LIFECYCLE_STAGE_COUNT = 2;
 /** What the driver's nullable `rowCount` means when it declines to count. */
 const NO_ROWS = 0;
 
-const LIFECYCLE_HANDLERS = {
-  [CREATE_INSTANCE]: (schemaId, stage) =>
-    CreateInstance(schemaId, stage.options?.id),
-  [DESTROY_INSTANCE]: (schemaId, stage) =>
-    DestroyInstance(schemaId, GetTableNames(schemaId), stage.options?.id),
-  listInstances: ListInstances,
-} satisfies Record<string, LifecycleHandler>;
-
-function IsLifecycleStage(
-  name: string,
-): name is keyof typeof LIFECYCLE_HANDLERS {
-  return Object.hasOwn(LIFECYCLE_HANDLERS, name);
-}
+const LIFECYCLE_HANDLERS = new Map<string, LifecycleHandler>([
+  [
+    CREATE_INSTANCE,
+    (schemaId, stage) => CreateInstance(schemaId, stage.options?.id),
+  ],
+  [
+    DESTROY_INSTANCE,
+    (schemaId, stage) =>
+      DestroyInstance(schemaId, GetTableNames(schemaId), stage.options?.id),
+  ],
+  ["listInstances", ListInstances],
+]);
 
 /**
  * The lifecycle stages on an external instance, whose relations have no instances: creating or
  * destroying one is refused rather than recorded nowhere, and the list of them is empty.
  */
-const EXTERNAL_LIFECYCLE = {
-  [CREATE_INSTANCE]: (_schemaId, stage) =>
-    Promise.reject(ExternalInstanceRefusal(stage.stage)),
-  [DESTROY_INSTANCE]: (_schemaId, stage) =>
-    Promise.reject(ExternalInstanceRefusal(stage.stage)),
-  listInstances: () => Promise.resolve([]),
-} satisfies Record<keyof typeof LIFECYCLE_HANDLERS, LifecycleHandler>;
+const EXTERNAL_LIFECYCLE = new Map<string, LifecycleHandler>([
+  [
+    CREATE_INSTANCE,
+    (_schemaId, stage) => Promise.reject(ExternalInstanceRefusal(stage.stage)),
+  ],
+  [
+    DESTROY_INSTANCE,
+    (_schemaId, stage) => Promise.reject(ExternalInstanceRefusal(stage.stage)),
+  ],
+  ["listInstances", () => Promise.resolve([])],
+]);
 
 /**
  * Dispatches a schema-rooted instance lifecycle query, or declines it synchronously.
@@ -116,12 +119,12 @@ function Lifecycle(stages: QueryStage[]): Promise<LifecycleAnswer> | undefined {
     return undefined;
   }
   const stage = stages[1];
-  if (!IsLifecycleStage(stage.stage)) {
+  const handler = (IsExternal() ? EXTERNAL_LIFECYCLE : LIFECYCLE_HANDLERS).get(
+    stage.stage,
+  );
+  if (!handler) {
     return undefined;
   }
-  const handler = (IsExternal() ? EXTERNAL_LIFECYCLE : LIFECYCLE_HANDLERS)[
-    stage.stage
-  ];
   const schemaId: unknown = stages[0].options?.id;
   assert(IsString(schemaId), MISSING_SCHEMA_ID);
   return WaitForSchemaReady(schemaId).then(() => handler(schemaId, stage));

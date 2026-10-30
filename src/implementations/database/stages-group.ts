@@ -62,8 +62,6 @@ type SubStreamStage = (
   context: DecodingContext,
 ) => SubStream | Compiled;
 
-type SubStreamStageMap = Record<string, SubStreamStage>;
-
 const MAP = "map";
 const DISTINCT = "distinct";
 const COUNT = "count";
@@ -147,21 +145,15 @@ function AggregateSubStream(aggregate: Aggregation): SubStreamStage {
  * says it is the sub-stream position that cannot take it, because the same stage is perfectly
  * legal on the query one level out.
  */
-const SUB_STREAM_STAGES = {
-  [MAP]: MapSubStream,
-  [DISTINCT]: DistinctSubStream,
-  [COUNT]: CountSubStream,
-  [SUM]: AggregateSubStream(Total),
-  [AVERAGE]: AggregateSubStream(Mean),
-  [MINIMUM]: AggregateSubStream(Minimum),
-  [MAXIMUM]: AggregateSubStream(Maximum),
-} satisfies SubStreamStageMap;
-
-function IsSubStreamStage(
-  name: string,
-): name is keyof typeof SUB_STREAM_STAGES {
-  return Object.hasOwn(SUB_STREAM_STAGES, name);
-}
+const SUB_STREAM_STAGES = new Map<string, SubStreamStage>([
+  [MAP, MapSubStream],
+  [DISTINCT, DistinctSubStream],
+  [COUNT, CountSubStream],
+  [SUM, AggregateSubStream(Total)],
+  [AVERAGE, AggregateSubStream(Mean)],
+  [MINIMUM, AggregateSubStream(Minimum)],
+  [MAXIMUM, AggregateSubStream(Maximum)],
+]);
 
 function IsTerminal(step: SubStream | Compiled): step is Compiled {
   return "sql" in step;
@@ -197,10 +189,11 @@ function StepSubStream(
   if (IsTerminal(state)) {
     RefuseSecondTerminal(stage);
   }
-  if (!IsSubStreamStage(stage.stage)) {
+  const handler = SUB_STREAM_STAGES.get(stage.stage);
+  if (!handler) {
     RefuseSubStreamStage(stage);
   }
-  return SUB_STREAM_STAGES[stage.stage](state, stage, context);
+  return handler(state, stage, context);
 }
 
 /** A run of `map`s ending in a field-less `count`, whose answer is `count(*)` whatever they did. */
