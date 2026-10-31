@@ -1,6 +1,6 @@
 {
   "rules": {},
-  "tsExpectError": 56,
+  "tsExpectError": 54,
   "tsIgnore": 0,
   "safety": 0,
   "config": {}
