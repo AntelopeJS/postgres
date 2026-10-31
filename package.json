@@ -5,11 +5,11 @@
   "keywords": [
     "antelopejs",
     "database",
+    "existing-database",
+    "pg",
     "postgres",
     "postgresql",
-    "sql",
-    "pg",
-    "existing-database"
+    "sql"
   ],
   "homepage": "https://interfaces.antelopejs.com/docs/database",
   "bugs": {
