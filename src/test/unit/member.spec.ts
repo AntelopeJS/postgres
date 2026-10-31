@@ -206,6 +206,45 @@ describe("a key field read as a number, beside _id's text", () => {
   });
 });
 
+describe("what a write keeps to validate before it runs", () => {
+  const PLAIN: ColumnDescriptor = { ...STAMP, generated: false };
+  const WRITABLE: TableModel = {
+    fields: { stamp: { column: "stamp", type: TEXT, native: PLAIN } },
+    external: { schema: "public", table: "t", key: [] },
+  };
+  const COMPILED = { sql: "(1)", type: TEXT };
+
+  function RawOf(document: {
+    stamp: string | ValueProxy<string> | Query<string>;
+  }) {
+    const view = ClassifyMember(document).document;
+    expect(view).to.not.equal(undefined);
+    const context = new DecodingContext({
+      ...RefusingCompilers(),
+      expression: () => COMPILED,
+      subquery: () => COMPILED,
+    });
+    return view
+      ? SplitExternalPayload(view, WRITABLE, context, "update").assignments[0]
+          .raw
+      : undefined;
+  }
+
+  it("keeps a constant", () => {
+    expect(RawOf({ stamp: "x" })?.kind).to.equal("text");
+  });
+
+  it("keeps nothing for a value computed from the row", () => {
+    expect(RawOf({ stamp: ValueProxy.constant("x") })).to.equal(undefined);
+  });
+
+  it("keeps nothing for a subquery", () => {
+    expect(
+      RawOf({ stamp: new Query(QueryStage("table", { id: "t" })) }),
+    ).to.equal(undefined);
+  });
+});
+
 describe("a value no walk can decode", () => {
   const UNDECODABLE: [string, bigint | Buffer, RegExp][] = [
     ["Buffer", Buffer.from("a"), /'object'/],
