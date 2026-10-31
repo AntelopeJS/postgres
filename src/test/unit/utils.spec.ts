@@ -12,6 +12,13 @@ describe("NormalizeInstanceId", () => {
         QueryStage("createInstance", { id: undefined }),
       ),
     ).to.equal("");
+    expect(
+      NormalizeInstanceId(
+        "createInstance",
+        // @ts-expect-error a null id, which NormalizeInstanceId maps to the default instance
+        QueryStage("createInstance", { id: null }),
+      ),
+    ).to.equal("");
   });
 
   it("passes a named id through", () => {

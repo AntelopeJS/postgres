@@ -121,6 +121,26 @@ describe("the getAll stage", () => {
     ).to.deep.equal([ACTIVE_KEY]);
   });
 
+  it("reads a null key against a boolean column as no answer, not as false", () => {
+    const { relation, context } = ApplyRaw([
+      // @ts-expect-error a null key, which getAll reads against a boolean column as no answer
+      QueryStage("getAll", { index: "isActive" }, null),
+    ]);
+    expect(relation.where).to.deep.equal([
+      `("t0"."isActive" IN ((CASE WHEN jsonb_typeof('null'::jsonb) = 'boolean' THEN (('null'::jsonb #>> '{}')::boolean) END)))`,
+    ]);
+    expect(context.params.all()).to.deep.equal([]);
+  });
+
+  it("reads a document key against a boolean column as no answer, not as true", () => {
+    const { relation } = ApplyRaw([
+      // @ts-expect-error a document key, which getAll reads against a boolean column as no answer
+      QueryStage("getAll", { index: "isActive" }, { a: 1 }),
+    ]);
+    expect(relation.where[0]).to.contain("jsonb_typeof");
+    expect(relation.where[0]).to.not.contain("<> ALL");
+  });
+
   it("reads a key as the column's type rather than casting it", () => {
     expect(Apply(Root().getAll("3000", "age")).relation.where).to.deep.equal([
       NUMERIC_TEXT_KEY,
