@@ -1,6 +1,9 @@
 import { expect } from "chai";
 import { Query, ValueProxy } from "@antelopejs/interface-database";
-import { QueryStage } from "@antelopejs/interface-database/common";
+import {
+  QueryStage,
+  StagedObject,
+} from "@antelopejs/interface-database/common";
 
 import { DecodingContext } from "../../implementations/database/context";
 import type { ColumnDescriptor } from "../../implementations/database/external-types";
@@ -10,7 +13,7 @@ import {
 } from "../../implementations/database/external-payload";
 import type { TableModel } from "../../implementations/database/fields";
 import { ClassifyMember } from "../../implementations/database/member";
-import { TEXT } from "../../implementations/database/types";
+import { FLOAT, TEXT } from "../../implementations/database/types";
 import { DecodeValue } from "../../implementations/database/value";
 import { RefusingCompilers } from "./spec-fixture";
 
@@ -133,6 +136,16 @@ describe("ClassifyMember", () => {
     expect(ClassifyMember(() => 1).document).to.equal(undefined);
   });
 
+  it("names a non-enumerable own key, as replace's silent fields read it", () => {
+    const document = Object.defineProperty({}, "hidden", {
+      value: 1,
+      enumerable: false,
+    });
+    expect(ClassifyMember(document).document?.ownNames()).to.deep.equal([
+      "hidden",
+    ]);
+  });
+
   it("answers an own key and no inherited one", () => {
     const view = ClassifyMember({ own: 1 }).document;
     expect(view?.own("own")?.kind).to.equal("number");
@@ -152,11 +165,61 @@ describe("ClassifyMember", () => {
   });
 });
 
+describe("a key field read as a number, beside _id's text", () => {
+  const COUNT: ColumnDescriptor = {
+    ...STAMP,
+    field: "count",
+    column: "count",
+    kind: FLOAT,
+    family: "float8",
+    generated: false,
+  };
+  const KEYED: TableModel = {
+    fields: { count: { column: "count", type: FLOAT, native: COUNT } },
+    external: { schema: "public", table: "t", key: [COUNT] },
+  };
+
+  function Insert(document: { _id: string; count: number | string }) {
+    const view = ClassifyMember(document).document;
+    expect(view).to.not.equal(undefined);
+    return view
+      ? SplitExternalPayload(
+          view,
+          KEYED,
+          new DecodingContext(RefusingCompilers()),
+          "insert",
+        )
+      : undefined;
+  }
+
+  it("settles to _id's claim when the number is the one _id spells", () => {
+    const split = Insert({ _id: "7", count: 7 });
+    expect(split?.keyFields).to.deep.equal([]);
+  });
+
+  it("refuses a number that names another key", () => {
+    expect(() => Insert({ _id: "7", count: 8 })).to.throw(/two values/);
+  });
+
+  it("refuses text where the column's reading is a number", () => {
+    expect(() => Insert({ _id: "7", count: "7" })).to.throw(/two values/);
+  });
+});
+
 describe("a value no walk can decode", () => {
   const UNDECODABLE: [string, bigint | Buffer, RegExp][] = [
     ["Buffer", Buffer.from("a"), /'object'/],
     ["bigint", 1n, /'bigint'/],
   ];
+
+  it("refuses a staged object that is neither a proxy nor a query", () => {
+    expect(() =>
+      DecodeValue(
+        ClassifyMember(new StagedObject(QueryStage("table", { id: "t" }))),
+        new DecodingContext(RefusingCompilers()),
+      ),
+    ).to.throw(/'object'/);
+  });
 
   for (const [label, value, refusal] of UNDECODABLE) {
     const document = new Map([["stamp", value]]);
