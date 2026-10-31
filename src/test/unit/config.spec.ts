@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
 import { WithOptions } from "./spec-fixture";
-import { GetOptions, type Mode, type Options, SetOptions } from "../../config";
+import { GetOptions, type Options, SetOptions } from "../../config";
 
 const DEFAULT_CURSOR_BATCH_SIZE = 100;
 const DEFAULT_CURSOR_IDLE_TIMEOUT_MS = 60_000;
@@ -49,9 +49,9 @@ const EXTERNAL_REFUSED: readonly Options[] = [
   { changePollIntervalMs: 1000 },
 ];
 
-function Setting(option: ValidatedOption, value: unknown): Options {
+function Setting(option: ValidatedOption, value: number): Options {
   const options: Options = {};
-  options[option] = value as number;
+  options[option] = value;
   return options;
 }
 
@@ -71,10 +71,11 @@ describe("SetOptions", () => {
 
     it(`refuses a ${option} that is not a positive safe integer`, () => {
       for (const value of REFUSED) {
-        expect(() => SetOptions(Setting(option, value))).to.throw(option);
-        expect(() => SetOptions(Setting(option, value))).to.throw(
-          String(value),
-        );
+        const options: Options = {};
+        // @ts-expect-error REFUSED holds values that are not positive safe integers; SetOptions throws, naming the option and the value
+        options[option] = value;
+        expect(() => SetOptions(options)).to.throw(option);
+        expect(() => SetOptions(options)).to.throw(String(value));
       }
     });
   }
@@ -111,7 +112,10 @@ describe("SetOptions", () => {
   });
 
   it("refuses a mode it does not know", () => {
-    expect(() => SetOptions({ mode: "readonly" as Mode })).to.throw("readonly");
+    expect(() =>
+      // @ts-expect-error the unknown mode "readonly"; SetOptions throws, naming it
+      SetOptions({ mode: "readonly" }),
+    ).to.throw("readonly");
   });
 
   for (const refused of EXTERNAL_REFUSED) {
