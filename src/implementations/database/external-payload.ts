@@ -154,24 +154,6 @@ function Claim(walk: ExternalWalk, claimed: AssertedKey): void {
   }
 }
 
-/** The texts of `_id`'s parts: the value itself for a one-column key, a JSON array for a wider one. */
-function IdParts(walk: ExternalWalk, value: unknown): string[] {
-  const width = walk.external.key?.length ?? 0;
-  if (width === 1) {
-    return [KeyText(value)];
-  }
-  const parts = IsString(value) ? JsonList(value) : [];
-  if (
-    parts.length !== width ||
-    !parts.every((part): part is string => typeof part === "string")
-  ) {
-    throw new Error(
-      `Payload key '_id' of '${walk.path}' is ${JSON.stringify(value)}, which is not a key of this relation: a key of ${walk.external.key?.length ?? 0} columns is spelled as a JSON array of their texts`,
-    );
-  }
-  return parts;
-}
-
 /** A key value as the text a key column is matched by: a number or a string as it is spelled. */
 function KeyText(value: unknown): string {
   return IsString(value) ? value : JSON.stringify(value);
@@ -187,31 +169,32 @@ function JsonList(text: string): unknown[] {
   }
 }
 
+/** Claims `_id`'s parts: the value itself for a one-column key, a JSON array of their texts for a wider one. */
 function TakeId(walk: ExternalWalk, value: unknown): void {
   if (value === undefined || value === null) {
     return;
   }
   const key = walk.external.key ?? [];
-  IdParts(walk, value).forEach((part, position) =>
-    Claim(walk, { descriptor: key[position], raw: part, claimedBy: ID_COLUMN }),
-  );
-}
-
-function TakeKeyField(
-  walk: ExternalWalk,
-  name: string,
-  descriptor: ColumnDescriptor,
-  value: unknown,
-): void {
-  if (value === undefined || value === null) {
+  if (key.length === 1) {
+    Claim(walk, {
+      descriptor: key[0],
+      raw: KeyText(value),
+      claimedBy: ID_COLUMN,
+    });
     return;
   }
-  walk.payload.keyFields.push({
-    field: name,
-    descriptor,
-    type: walk.model.fields[name].type,
-    raw: value,
-  });
+  const parts = IsString(value) ? JsonList(value) : [];
+  if (
+    parts.length !== key.length ||
+    !parts.every((part): part is string => typeof part === "string")
+  ) {
+    throw new Error(
+      `Payload key '_id' of '${walk.path}' is ${JSON.stringify(value)}, which is not a key of this relation: a key of ${key.length} columns is spelled as a JSON array of their texts`,
+    );
+  }
+  parts.forEach((part, position) =>
+    Claim(walk, { descriptor: key[position], raw: part, claimedBy: ID_COLUMN }),
+  );
 }
 
 /**
@@ -275,7 +258,14 @@ function TakeField(walk: ExternalWalk, name: string, value: unknown): void {
     if (IsReadOnly(descriptor)) {
       TakeReadOnly(walk, name, descriptor, supplied);
     }
-    TakeKeyField(walk, name, descriptor, value);
+    if (supplied) {
+      walk.payload.keyFields.push({
+        field: name,
+        descriptor,
+        type: spec.type,
+        raw: value,
+      });
+    }
     return;
   }
   if (IsReadOnly(descriptor)) {
