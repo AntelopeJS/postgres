@@ -1,9 +1,6 @@
 import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
-import {
-  QueryStage,
-  type StagedObject,
-} from "@antelopejs/interface-database/common";
+import { QueryStage } from "@antelopejs/interface-database/common";
 
 import { Occurrences, RefusingCompilers } from "./spec-fixture";
 import { Moment } from "../../implementations/database/readings";
@@ -57,18 +54,12 @@ function CompileIn(context: DecodingContext, build: Builder): Compiled {
   return CompileExpression(build(ValueProxy.arg(ROW_ID)).build(), context);
 }
 
-type LooseBuilder = (doc: any) => StagedObject;
-
-function CompileInLoose(
-  context: DecodingContext,
-  build: LooseBuilder,
-): Compiled {
-  return CompileExpression(build(ValueProxy.arg(ROW_ID)).build(), context);
-}
-
-function LastStageLoose(build: LooseBuilder): QueryStage {
-  const stages = build(ValueProxy.arg(ROW_ID)).build();
-  return stages[stages.length - 1];
+/** A value with a zone recorded on it, the stage `year(zone)` and its siblings record before the part. */
+function Zoned<T>(value: ValueProxy<T>): ValueProxy<T> {
+  return new ValueProxy<T>(
+    QueryStage("date_with_timezone", undefined, NEW_YORK_NAME),
+    value,
+  );
 }
 
 function Compile(build: Builder): Compiled {
@@ -227,9 +218,7 @@ describe("date parts", () => {
 
 describe("date_with_timezone", () => {
   it("records the zone without transforming the value", () => {
-    const stage = LastStageLoose((doc) =>
-      doc.key("createdAt").withTimezone(NEW_YORK_NAME),
-    );
+    const stage = QueryStage("date_with_timezone", undefined, NEW_YORK_NAME);
     const out = STAGES[stage.stage](
       { current: { sql: CREATED, type: TIMESTAMP } },
       stage,
@@ -240,16 +229,14 @@ describe("date_with_timezone", () => {
   });
 
   it("leaves a row accumulator addressable, so a column keeps its index", () => {
-    const stage = LastStageLoose((doc) => doc.withTimezone(NEW_YORK_NAME));
+    const stage = QueryStage("date_with_timezone", undefined, NEW_YORK_NAME);
     const source = new ColumnRowSource(AliasedColumns("t"), users);
     const out = STAGES[stage.stage]({ current: source }, stage, NewContext());
     expect(out.current).to.equal(source);
   });
 
   it("reaches a native column through a zone, not a materialized document", () => {
-    const out = CompileInLoose(NewContext(), (doc) =>
-      doc.withTimezone(NEW_YORK_NAME).key("createdAt").day(),
-    );
+    const out = Compile((doc) => Zoned(doc).key("createdAt").day());
     expect(out.sql).to.equal(Part("DAY", CREATED));
     expect(out.sql).to.not.contain("jsonb_build_object");
   });
@@ -260,9 +247,7 @@ describe("date_with_timezone", () => {
   });
 
   it("lets a second zone override the first", () => {
-    const out = CompileInLoose(NewContext(), (doc) =>
-      doc.key("createdAt").withTimezone(NEW_YORK_NAME).year(PARIS_NAME),
-    );
+    const out = Compile((doc) => Zoned(doc.key("createdAt")).year(PARIS_NAME));
     expect(out.sql).to.equal(Part("YEAR", CREATED, PARIS));
     expect(out.sql).to.not.contain(NEW_YORK);
   });
@@ -279,8 +264,8 @@ describe("date_with_timezone", () => {
 
   it("binds nothing when the zone is dropped unread", () => {
     const context = NewContext();
-    const out = CompileInLoose(context, (doc) =>
-      doc.key("createdAt").withTimezone(NEW_YORK_NAME).epoch(),
+    const out = CompileIn(context, (doc) =>
+      Zoned(doc.key("createdAt")).epoch(),
     );
     expect(context.params.all()).to.deep.equal([]);
     expect(out.sql).to.not.contain("$");
@@ -326,12 +311,8 @@ describe("date_with_timezone", () => {
 
   it("is cleared by an unrelated stage between the zone and the part", () => {
     const context = NewContext();
-    const out = CompileInLoose(context, (doc) =>
-      doc
-        .key("createdAt")
-        .withTimezone(NEW_YORK_NAME)
-        .default(new Date(0))
-        .year(),
+    const out = CompileIn(context, (doc) =>
+      Zoned(doc.key("createdAt")).default(new Date(0)).year(),
     );
     expect(out.sql).to.contain(`AT TIME ZONE ${UTC}`);
     expect(out.sql).to.not.contain(`AT TIME ZONE ${NEW_YORK}`);
