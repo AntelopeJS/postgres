@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { Query } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
+import { OptionsOf } from "./utils";
 
 import type { Compiled } from "./sql";
 import { Cast, Widen } from "./coerce";
@@ -92,7 +93,7 @@ const FilterStage: PipelineStage = (relation, stage, context) => {
 };
 
 function SortName(stage: QueryStage): string {
-  const name: unknown = stage.options?.index;
+  const name: unknown = OptionsOf(stage)?.index;
   assert(
     IsString(name),
     "The 'orderBy' stage is missing the index or field to sort on",
@@ -106,7 +107,7 @@ function SortName(stage: QueryStage): string {
  */
 const OrderByStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, ORDER_BLOCKERS, context);
-  const descending = stage.options?.direction === DESCENDING;
+  const descending = OptionsOf(stage)?.direction === DESCENDING;
   const terms = ScanColumns(prepared, SortName(stage)).flatMap(
     (column): OrderTerm[] =>
       (column.native?.order ?? [column.sql]).map((sql) => ({

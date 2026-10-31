@@ -9,8 +9,7 @@ import { FIRST_OPERAND } from "./stage";
 import { KeylessRefusal } from "./external-refusals";
 import { SetProjection } from "./relation";
 import { Render } from "./render";
-import type { QueryStage } from "./utils";
-import { ID_COLUMN } from "./utils";
+import { ID_COLUMN, OptionsOf, type QueryStage } from "./utils";
 import { QualifiedColumn, QuoteIdentifier } from "./sql";
 import {
   type ColumnDescriptor,
@@ -306,7 +305,7 @@ const ExternalDelete: WriteCompiler = (target) => {
 };
 
 function ConflictOf(stage: QueryStage): string | undefined {
-  const conflict: unknown = stage.options?.conflict;
+  const conflict: unknown = OptionsOf(stage)?.conflict;
   if (conflict === undefined || conflict === null) {
     return undefined;
   }

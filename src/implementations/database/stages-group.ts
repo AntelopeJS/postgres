@@ -5,7 +5,7 @@ import { Collected } from "./jsonb";
 import { AsJson } from "./readings";
 import type { Compiled } from "./sql";
 import { DecodeFunction, RecordedLambda } from "./value";
-import type { QueryStage } from "./utils";
+import { OptionsOf, type QueryStage } from "./utils";
 import { FIRST_OPERAND, RequireOperand } from "./stage";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import type { DecodingContext, SubqueryProvider } from "./context";
@@ -273,7 +273,7 @@ const SINGLE_COLUMN = 1;
 const ONLY_COLUMN = 0;
 
 function GroupName(stage: QueryStage): string {
-  const name: unknown = stage.options?.index;
+  const name: unknown = OptionsOf(stage)?.index;
   assert(
     IsString(name),
     "The 'group' stage is missing the index or field to group on",

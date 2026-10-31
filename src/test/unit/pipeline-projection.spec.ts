@@ -4,6 +4,7 @@ import { ValueProxy } from "@antelopejs/interface-database";
 import { Render } from "../../implementations/database/render";
 import {
   Apply,
+  ApplyRaw,
   CallerRoot,
   DOCUMENT,
   FROM_TABLE,
@@ -18,7 +19,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
-import { NotAString } from "./invalid-fixture";
+import { UntypedStage } from "./invalid-fixture";
 
 const AGE_FROM_JSON =
   `(CASE WHEN jsonb_typeof(to_jsonb("t1"."value")) = 'number'` +
@@ -58,7 +59,7 @@ describe("the key stage", () => {
   });
 
   it("falls to a dynamic lookup only for a key that is an expression", () => {
-    const key = ValueProxy.constant("name") as unknown as "name";
+    const key = ValueProxy.constant<"name">("name");
     const { relation, context } = Apply(Root().key(key));
     expect(Render(relation)).to.equal(
       `SELECT (${DOCUMENT} -> ($1::text)) AS "value" ${FROM_TABLE}`,
@@ -207,7 +208,7 @@ describe("the pluck stage", () => {
   });
 
   it("includes _id only when it was asked for", () => {
-    expect(Sql(Root().pluck("_id", "name"))).to.equal(
+    expect(Sql(CallerRoot().pluck("_id", "name"))).to.equal(
       `SELECT (jsonb_strip_nulls(jsonb_build_object('_id', "t0"."_id",` +
         ` 'name', "t0"."name"))) AS "value" ${FROM_TABLE}`,
     );
@@ -226,7 +227,7 @@ describe("the pluck stage", () => {
   });
 
   it("rejects a field list that is not a list of names", () => {
-    expect(() => Apply(Root().pluck(NotAString(1)))).to.throw(
+    expect(() => ApplyRaw([UntypedStage("pluck", undefined, [1])])).to.throw(
       "Stage 'pluck' requires a list of field names",
     );
   });
@@ -247,7 +248,9 @@ describe("the without stage", () => {
   });
 
   it("guards the subtraction, since deleting from a jsonb scalar raises 22023", () => {
-    expect(Sql(Root().key("name").without("age"))).to.equal(
+    expect(
+      Sql(Root().key("name").cast<{ age: number }>().without("age")),
+    ).to.equal(
       `SELECT (SELECT "t2"."kept" - array['age']::text[]` +
         ` FROM (SELECT to_jsonb("t1"."value") AS "kept") AS "t2"` +
         ` WHERE jsonb_typeof("t2"."kept") IN ('object', 'array'))` +
@@ -284,7 +287,7 @@ describe("the without stage", () => {
   });
 
   it("rejects a field list that is not a list of names", () => {
-    expect(() => Apply(Root().without(NotAString(2)))).to.throw(
+    expect(() => ApplyRaw([UntypedStage("without", undefined, [2])])).to.throw(
       "Stage 'without' requires a list of field names",
     );
   });

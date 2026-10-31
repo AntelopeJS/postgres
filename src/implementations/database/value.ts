@@ -196,7 +196,7 @@ const PARAMETER_IDS = 0;
 const FUNCTION_BODY = 1;
 
 /** A lambda the query builder recorded: the ids of its parameters, then the body they are bound in. */
-export interface RecordedFunction extends QueryStage {
+export interface RecordedFunction {
   stage: typeof FUNCTION_STAGE;
   args: [ids: unknown[], body: unknown];
 }

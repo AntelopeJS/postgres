@@ -11,6 +11,7 @@ import {
   EXTRA_COLUMN,
   ID_COLUMN,
   INSTANCE_COLUMN,
+  OptionsOf,
   type QueryStage,
 } from "./utils";
 import {
@@ -60,7 +61,7 @@ const CONFLICT_MODES = new Map<string, ConflictMode>([
 ]);
 
 function ConflictModeOf(stage: QueryStage): ConflictMode | undefined {
-  const conflict: unknown = stage.options?.conflict;
+  const conflict: unknown = OptionsOf(stage)?.conflict;
   if (conflict === undefined || conflict === null) {
     return undefined;
   }

@@ -13,6 +13,7 @@ import {
   Stages,
   TABLE_ID,
 } from "./pipeline-fixture";
+import { UntypedStage } from "./invalid-fixture";
 
 const ID_KEY = '("t0"."_id" = ($1::text))';
 const AGE_KEYS =
@@ -65,7 +66,7 @@ function Recorded(
   index: string | undefined,
   ...args: unknown[]
 ): QueryStage[] {
-  return [QueryStage(stage, { index }, ...args)];
+  return [UntypedStage(stage, { index }, ...args)];
 }
 
 describe("the get stage", () => {

@@ -27,6 +27,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
+import { UntypedStage } from "./invalid-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
@@ -300,7 +301,7 @@ describe("date_with_timezone", () => {
       CompileExpression(
         [
           QueryStage("arg", undefined, ROW_ID),
-          QueryStage("date_with_timezone"),
+          UntypedStage("date_with_timezone"),
         ],
         NewContext(),
       ),
@@ -314,7 +315,7 @@ describe("date_with_timezone", () => {
         CompileExpression(
           [
             QueryStage("arg", undefined, ROW_ID),
-            QueryStage("date_with_timezone", undefined, zone),
+            UntypedStage("date_with_timezone", undefined, zone),
           ],
           NewContext(),
         ),
@@ -406,7 +407,7 @@ describe("date_during", () => {
   });
 
   it("reads both bounds as moments", () => {
-    const out = CompileInLoose(NewContext(), (doc) =>
+    const out = CompileIn(NewContext(), (doc) =>
       doc.key("createdAt").during(0, 1),
     );
     expect(out.sql).to.equal(
@@ -419,7 +420,7 @@ describe("date_during", () => {
       CompileExpression(
         [
           QueryStage("arg", undefined, ROW_ID),
-          QueryStage("date_during", undefined, new Date(0)),
+          UntypedStage("date_during", undefined, new Date(0)),
         ],
         NewContext(),
       ),

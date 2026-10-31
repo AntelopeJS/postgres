@@ -17,7 +17,7 @@ import {
   RegisteredOrigin,
   type RootSelection,
 } from "../../implementations/database/selection";
-import { NotAString } from "./invalid-fixture";
+import { NotAString, UntypedStage } from "./invalid-fixture";
 
 interface Vehicle {
   car: string;
@@ -166,7 +166,7 @@ describe("BuildRoot", () => {
 
   it("rejects a prefix stage carrying no id", () => {
     const stages = Root().build();
-    stages[0] = QueryStage("schema");
+    stages[0] = UntypedStage("schema");
     expect(() =>
       WithOptions({}, () => BuildRoot(stages, NewContext())),
     ).to.throw("The 'schema' stage of a table query is missing its id");

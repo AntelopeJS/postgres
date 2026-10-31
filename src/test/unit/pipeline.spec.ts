@@ -1,5 +1,4 @@
 import { expect } from "chai";
-import { QueryStage } from "@antelopejs/interface-database/common";
 
 import { RefusingCompilers } from "./spec-fixture";
 import { TEXT } from "../../implementations/database/types";
@@ -14,6 +13,7 @@ import {
   DEFERRED_STAGES,
   REJECTED_STAGES,
 } from "../../implementations/database/pipeline";
+import { UntypedStage } from "./invalid-fixture";
 
 const VEHICLES: TableModel = {
   fields: {
@@ -61,7 +61,7 @@ function NewTable(): Relation {
 function Apply(...names: string[]): Relation {
   return ApplyStages(
     NewTable(),
-    names.map((name) => QueryStage(name)),
+    names.map((name) => UntypedStage(name)),
     NewContext(),
   );
 }

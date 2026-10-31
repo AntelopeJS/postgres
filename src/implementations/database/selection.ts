@@ -11,7 +11,12 @@ import type { DecodingContext } from "./context";
 import { type Compiled, Param, QualifiedColumn } from "./sql";
 import { type Relation, type TableOrigin, TableRelation } from "./relation";
 import { GetCrossInstanceScanNotice, GetIndex, GetTableModel } from "./schema";
-import { DEFAULT_INSTANCE_ID, INSTANCE_COLUMN, type QueryStage } from "./utils";
+import {
+  DEFAULT_INSTANCE_ID,
+  INSTANCE_COLUMN,
+  OptionsOf,
+  type QueryStage,
+} from "./utils";
 import { IsObject, IsString } from "./guards";
 
 export const SCHEMA_STAGE = "schema";
@@ -89,7 +94,7 @@ function RootStage(
 }
 
 function RootId(stage: QueryStage): string {
-  const id: unknown = stage.options?.id;
+  const id: unknown = OptionsOf(stage)?.id;
   assert(
     IsString(id),
     `The '${stage.stage}' stage of a table query is missing its id`,
@@ -105,7 +110,7 @@ function RootInstanceScope(
   instance: QueryStage,
   context: DecodingContext,
 ): InstanceScope {
-  const id: unknown = instance.options?.id;
+  const id: unknown = OptionsOf(instance)?.id;
   if (id === CROSS_INSTANCE) {
     return CROSS_INSTANCE;
   }
@@ -130,7 +135,7 @@ function RefuseNamedInstance(
   external: ExternalRelation,
   instance: QueryStage,
 ): void {
-  const id: unknown = instance.options?.id;
+  const id: unknown = OptionsOf(instance)?.id;
   const unscoped: readonly unknown[] = [
     undefined,
     null,
@@ -225,7 +230,7 @@ function CollectValue(value: unknown, walk: SchemaWalk): void {
 
 function CollectInto(stages: QueryStage[], walk: SchemaWalk): void {
   for (const stage of stages) {
-    const id: unknown = stage.options?.id;
+    const id: unknown = OptionsOf(stage)?.id;
     if (stage.stage === SCHEMA_STAGE && IsString(id)) {
       walk.ids.add(id);
     }
