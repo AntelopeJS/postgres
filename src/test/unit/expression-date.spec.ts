@@ -27,7 +27,6 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
-import { UntypedStage } from "./invalid-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
@@ -301,7 +300,8 @@ describe("date_with_timezone", () => {
       CompileExpression(
         [
           QueryStage("arg", undefined, ROW_ID),
-          UntypedStage("date_with_timezone"),
+          // @ts-expect-error no zone, which the date_with_timezone stage refuses by naming itself
+          QueryStage("date_with_timezone"),
         ],
         NewContext(),
       ),
@@ -315,7 +315,8 @@ describe("date_with_timezone", () => {
         CompileExpression(
           [
             QueryStage("arg", undefined, ROW_ID),
-            UntypedStage("date_with_timezone", undefined, zone),
+            // @ts-expect-error a number among the zones, which the date_with_timezone stage refuses by naming itself
+            QueryStage("date_with_timezone", undefined, zone),
           ],
           NewContext(),
         ),
@@ -420,7 +421,8 @@ describe("date_during", () => {
       CompileExpression(
         [
           QueryStage("arg", undefined, ROW_ID),
-          UntypedStage("date_during", undefined, new Date(0)),
+          // @ts-expect-error one bound, which the date_during stage refuses by naming itself
+          QueryStage("date_during", undefined, new Date(0)),
         ],
         NewContext(),
       ),

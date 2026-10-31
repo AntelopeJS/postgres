@@ -23,7 +23,6 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
-import { UntypedStage } from "./invalid-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
@@ -96,13 +95,24 @@ describe("string stage dispatch", () => {
 
   it("clears a pending timezone on every stage the family declares", () => {
     const current = { sql: NAME, type: TEXT };
-    for (const name of Object.keys(STRING_STAGES)) {
-      const out = STAGES[name](
+    const calls = [
+      QueryStage("str_upcase"),
+      QueryStage("str_downcase"),
+      QueryStage("str_len"),
+      QueryStage("str_concat", undefined, "x"),
+      QueryStage("str_match", undefined, "x"),
+      QueryStage("str_split", {}),
+    ];
+    expect(calls.map(({ stage }) => stage)).to.have.members(
+      Object.keys(STRING_STAGES),
+    );
+    for (const call of calls) {
+      const out = STAGES[call.stage](
         { current, timezone: "'UTC'" },
-        UntypedStage(name, undefined, "x"),
+        call,
         NewContext(),
       );
-      expect(out.timezone, name).to.equal(undefined);
+      expect(out.timezone, call.stage).to.equal(undefined);
     }
   });
 
@@ -110,7 +120,8 @@ describe("string stage dispatch", () => {
     for (const name of ["str_concat", "str_match"]) {
       expect(() =>
         CompileExpression(
-          [QueryStage("arg", undefined, ROW_ID), UntypedStage(name)],
+          // @ts-expect-error a string stage with no operand, which each stage refuses by naming itself
+          [QueryStage("arg", undefined, ROW_ID), QueryStage(name)],
           NewContext(),
         ),
       ).to.throw(`'${name}'`);

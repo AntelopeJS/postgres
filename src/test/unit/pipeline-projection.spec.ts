@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
+import { QueryStage } from "@antelopejs/interface-database/common";
 
 import { Render } from "../../implementations/database/render";
 import {
@@ -19,7 +20,6 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
-import { UntypedStage } from "./invalid-fixture";
 
 const AGE_FROM_JSON =
   `(CASE WHEN jsonb_typeof(to_jsonb("t1"."value")) = 'number'` +
@@ -227,7 +227,8 @@ describe("the pluck stage", () => {
   });
 
   it("rejects a field list that is not a list of names", () => {
-    expect(() => ApplyRaw([UntypedStage("pluck", undefined, [1])])).to.throw(
+    // @ts-expect-error a field list of numbers, which the pluck stage refuses by naming itself
+    expect(() => ApplyRaw([QueryStage("pluck", undefined, [1])])).to.throw(
       "Stage 'pluck' requires a list of field names",
     );
   });
@@ -287,7 +288,8 @@ describe("the without stage", () => {
   });
 
   it("rejects a field list that is not a list of names", () => {
-    expect(() => ApplyRaw([UntypedStage("without", undefined, [2])])).to.throw(
+    // @ts-expect-error a field list of numbers, which the without stage refuses by naming itself
+    expect(() => ApplyRaw([QueryStage("without", undefined, [2])])).to.throw(
       "Stage 'without' requires a list of field names",
     );
   });

@@ -26,7 +26,6 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
-import { UntypedStage } from "./invalid-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
@@ -210,7 +209,8 @@ describe("obj_merge", () => {
   it("names the stage when the other object is absent", () => {
     expect(() =>
       CompileExpression(
-        [QueryStage("arg", undefined, ROW_ID), UntypedStage("obj_merge")],
+        // @ts-expect-error no other object, which the obj_merge stage refuses by naming itself
+        [QueryStage("arg", undefined, ROW_ID), QueryStage("obj_merge")],
         NewContext(),
       ),
     ).to.throw(/'obj_merge'/);
@@ -328,7 +328,8 @@ describe("obj_has", () => {
   it("names the stage when the field list is not a list", () => {
     expect(() =>
       CompileExpression(
-        [QueryStage("arg", undefined, ROW_ID), UntypedStage("obj_has")],
+        // @ts-expect-error no field list, which the obj_has stage refuses by naming itself
+        [QueryStage("arg", undefined, ROW_ID), QueryStage("obj_has")],
         NewContext(),
       ),
     ).to.throw(/'obj_has'/);
@@ -339,7 +340,8 @@ describe("obj_has", () => {
       CompileExpression(
         [
           QueryStage("arg", undefined, ROW_ID),
-          UntypedStage("obj_has", undefined, [5]),
+          // @ts-expect-error a field name that is not a string, which the obj_has stage refuses by naming itself
+          QueryStage("obj_has", undefined, [5]),
         ],
         NewContext(),
       ),

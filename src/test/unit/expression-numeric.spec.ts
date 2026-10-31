@@ -23,7 +23,6 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
-import { UntypedStage } from "./invalid-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
@@ -147,7 +146,8 @@ describe("numeric stage dispatch", () => {
     for (const name of binary) {
       expect(() =>
         CompileExpression(
-          [QueryStage("arg", undefined, ROW_ID), UntypedStage(name)],
+          // @ts-expect-error a binary stage with no operand, which each stage refuses by naming itself
+          [QueryStage("arg", undefined, ROW_ID), QueryStage(name)],
           NewContext(),
         ),
       ).to.throw(`'${name}'`);

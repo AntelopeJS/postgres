@@ -1,5 +1,8 @@
 import type { WriteDocument } from "./pipeline-fixture";
-import type { QueryStage } from "@antelopejs/interface-database/common";
+import {
+  QueryStage,
+  StagedObject,
+} from "@antelopejs/interface-database/common";
 
 /** A value that is not a document, passed where a write takes one, to reach the runtime refusal. */
 export function NotADocument(value: unknown): WriteDocument {
@@ -12,14 +15,13 @@ export function NotAString(value: unknown): string {
 }
 
 /**
- * A stage the typed builder cannot record, as an untyped caller rebuilding stages from JSON sends
- * it: any name, options and arguments, to reach the runtime refusal.
+ * Stages as dms-database's query route rebuilds them from a request's JSON, the way its
+ * `decodeStaged` does: whatever the request holds, which the typed builder cannot record and the
+ * compiler still answers.
  */
-export function UntypedStage(
-  stage: string,
-  options?: unknown,
-  ...args: unknown[]
-): QueryStage {
-  // @ts-expect-error a stage outside the union, as an untyped caller sends it, which each calling test asserts the compiler's answer to
-  return { stage, options, args };
+export function RebuiltFromJson(...stages: object[]): QueryStage[] {
+  const rebuilt: unknown = JSON.parse(JSON.stringify(stages));
+  return Object.assign(new StagedObject(QueryStage("changes")), {
+    stages: rebuilt,
+  }).build();
 }

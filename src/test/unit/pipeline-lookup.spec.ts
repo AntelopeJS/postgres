@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { QueryStage } from "@antelopejs/interface-database/common";
 
 import {
   Apply,
@@ -19,7 +20,6 @@ import {
   Sql,
   TABLE,
 } from "./pipeline-fixture";
-import { UntypedStage } from "./invalid-fixture";
 
 /** The alias the looked-up query's own root claims, the left having already spent the root one. */
 const RIGHT_ALIAS = "t1";
@@ -181,7 +181,7 @@ function PluckedLookup() {
  */
 function PluckedWithoutKeyLookup() {
   return [
-    UntypedStage(
+    QueryStage(
       "lookup",
       { localKey: "name", otherKey: "name" },
       Other().pluck("price"),

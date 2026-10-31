@@ -32,7 +32,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
-import { UntypedStage } from "./invalid-fixture";
+import { RebuiltFromJson } from "./invalid-fixture";
 
 const STUB_EXPRESSION: Compiled = { sql: "EXPR", type: OPAQUE };
 const STUB_SUBQUERY: Compiled = { sql: "SUB", type: OPAQUE };
@@ -276,18 +276,17 @@ describe("DecodeFunction", () => {
 
 describe("RecordedLambda", () => {
   it("accepts the text parameter ids of a func rebuilt from JSON", () => {
-    const stage = UntypedStage(
-      "filter",
-      undefined,
-      UntypedStage("func", undefined, ["a"], true),
-    );
+    const [stage] = RebuiltFromJson({
+      stage: "filter",
+      args: [{ stage: "func", args: [["a"], true] }],
+    });
     expect(RecordedLambda(stage, 0).args[0]).to.deep.equal(["a"]);
   });
 
   it("does not take text parameter ids for a lambda where a document is allowed", () => {
-    expect(
-      IsRecordedFunction(UntypedStage("func", undefined, ["a"], true)),
-    ).to.equal(false);
+    expect(IsRecordedFunction({ stage: "func", args: [["a"], true] })).to.equal(
+      false,
+    );
   });
 });
 

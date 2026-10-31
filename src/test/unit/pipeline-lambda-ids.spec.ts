@@ -1,9 +1,9 @@
 import { expect } from "chai";
-import { QueryStage } from "@antelopejs/interface-database/common";
+import type { QueryStage } from "@antelopejs/interface-database/common";
 
 import { ApplyRaw } from "./pipeline-fixture";
 import { Render } from "../../implementations/database/render";
-import { UntypedStage } from "./invalid-fixture";
+import { RebuiltFromJson } from "./invalid-fixture";
 
 const ODD_IDS = [
   { label: "boolean", id: true },
@@ -28,11 +28,10 @@ describe("lambda parameter ids that are neither numbers nor texts", () => {
   for (const { label, id } of ODD_IDS) {
     it(`compiles a filter whose only id is ${label} and whose body is a constant`, () => {
       const sql = Compile(
-        UntypedStage(
-          "filter",
-          undefined,
-          UntypedStage("func", undefined, [id], true),
-        ),
+        ...RebuiltFromJson({
+          stage: "filter",
+          args: [{ stage: "func", args: [[id], true] }],
+        }),
       );
 
       expect(sql.endsWith(FILTER_CONSTANT_TAIL)).to.equal(true);
@@ -40,16 +39,15 @@ describe("lambda parameter ids that are neither numbers nor texts", () => {
 
     it(`compiles a filter whose body reads the ${label} id back`, () => {
       const sql = Compile(
-        UntypedStage(
-          "filter",
-          undefined,
-          UntypedStage(
-            "func",
-            undefined,
-            [id],
-            UntypedStage("arg", undefined, id),
-          ),
-        ),
+        ...RebuiltFromJson({
+          stage: "filter",
+          args: [
+            {
+              stage: "func",
+              args: [[id], { stage: "arg", args: [id] }],
+            },
+          ],
+        }),
       );
 
       expect(sql.endsWith(FILTER_ARGUMENT_TAIL)).to.equal(true);
@@ -58,7 +56,10 @@ describe("lambda parameter ids that are neither numbers nor texts", () => {
 
   it("compiles a map whose id is an empty object", () => {
     const sql = Compile(
-      UntypedStage("map", undefined, UntypedStage("func", undefined, [{}], 5)),
+      ...RebuiltFromJson({
+        stage: "map",
+        args: [{ stage: "func", args: [[{}], 5] }],
+      }),
     );
 
     expect(sql).to.equal(MAP_CONSTANT);

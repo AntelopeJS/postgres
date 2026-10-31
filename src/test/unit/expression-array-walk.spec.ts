@@ -26,7 +26,6 @@ import {
   Collected,
   FLOAT_PARAM,
 } from "./expression-array-fixture";
-import { UntypedStage } from "./invalid-fixture";
 
 const SCORES = `"t"."scores"`;
 
@@ -118,7 +117,8 @@ describe("arr_map", () => {
   it("names the stage when the callback is absent", () => {
     expect(() =>
       CompileExpression(
-        [QueryStage("arg", undefined, ROW_ID), UntypedStage("arr_map")],
+        // @ts-expect-error no callback, which the arr_map stage refuses by naming itself
+        [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_map")],
         NewContext(),
       ),
     ).to.throw(/'arr_map'/);
@@ -151,7 +151,8 @@ describe("arr_filter", () => {
   it("names the stage when the callback is absent", () => {
     expect(() =>
       CompileExpression(
-        [QueryStage("arg", undefined, ROW_ID), UntypedStage("arr_filter")],
+        // @ts-expect-error no callback, which the arr_filter stage refuses by naming itself
+        [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_filter")],
         NewContext(),
       ),
     ).to.throw(/'arr_filter'/);

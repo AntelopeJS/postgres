@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { QueryStage } from "@antelopejs/interface-database/common";
 
 import { RefusingCompilers } from "./spec-fixture";
 import { TEXT } from "../../implementations/database/types";
@@ -13,7 +14,6 @@ import {
   DEFERRED_STAGES,
   REJECTED_STAGES,
 } from "../../implementations/database/pipeline";
-import { UntypedStage } from "./invalid-fixture";
 
 const VEHICLES: TableModel = {
   fields: {
@@ -58,12 +58,8 @@ function NewTable(): Relation {
   });
 }
 
-function Apply(...names: string[]): Relation {
-  return ApplyStages(
-    NewTable(),
-    names.map((name) => UntypedStage(name)),
-    NewContext(),
-  );
+function Apply(...stages: QueryStage[]): Relation {
+  return ApplyStages(NewTable(), stages, NewContext());
 }
 
 describe("ApplyStages", () => {
@@ -73,14 +69,16 @@ describe("ApplyStages", () => {
   });
 
   it("declines a stage named after an inherited member", () => {
-    expect(() => Apply(INHERITED_STAGE)).to.throw(
+    // @ts-expect-error a stage named after an inherited member, which the fold declines as unsupported
+    expect(() => Apply(QueryStage(INHERITED_STAGE))).to.throw(
       `Unsupported query stage '${INHERITED_STAGE}'`,
     );
   });
 
   it("names the stage a deferred message belongs to", () => {
     WithDeferral(DEFERRED_STAGE, () => {
-      expect(() => Apply(DEFERRED_STAGE)).to.throw(
+      // @ts-expect-error a stage outside the union, which the fold refuses with its deferral
+      expect(() => Apply(QueryStage(DEFERRED_STAGE))).to.throw(
         `${DEFERRAL} (stage '${DEFERRED_STAGE}')`,
       );
     });
@@ -91,22 +89,23 @@ describe("ApplyStages", () => {
   });
 
   it("declines a change feed that reached the fold, which is one not last or one awaited", () => {
-    expect(() => Apply(REJECTED_STAGE)).to.throw(
+    expect(() => Apply(QueryStage(REJECTED_STAGE))).to.throw(
       "must be the last stage of a query and must be iterated rather than awaited",
     );
   });
 
   it("prefers the permanent rejection to a deferral of the same name", () => {
     WithDeferral(REJECTED_STAGE, () => {
-      expect(() => Apply(REJECTED_STAGE)).to.throw(
+      expect(() => Apply(QueryStage(REJECTED_STAGE))).to.throw(
         REJECTED_STAGES[REJECTED_STAGE],
       );
     });
   });
 
   it("fails on the first stage it cannot apply", () => {
-    expect(() => Apply(REJECTED_STAGE, DEFERRED_STAGE)).to.throw(
-      REJECTED_STAGES[REJECTED_STAGE],
-    );
+    expect(() =>
+      // @ts-expect-error a stage outside the union after a change feed, which the fold never reaches because it refuses the feed first
+      Apply(QueryStage(REJECTED_STAGE), QueryStage(DEFERRED_STAGE)),
+    ).to.throw(REJECTED_STAGES[REJECTED_STAGE]);
   });
 });

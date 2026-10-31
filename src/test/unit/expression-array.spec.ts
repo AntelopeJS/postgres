@@ -29,7 +29,6 @@ import {
   Collected,
   FLOAT_PARAM,
 } from "./expression-array-fixture";
-import { UntypedStage } from "./invalid-fixture";
 
 function LastStage(build: Builder): QueryStage {
   const stages = build(ValueProxy.arg(ROW_ID)).build();
@@ -150,7 +149,8 @@ describe("arr_index", () => {
   it("names the stage when the position is absent", () => {
     expect(() =>
       CompileExpression(
-        [QueryStage("arg", undefined, ROW_ID), UntypedStage("arr_index")],
+        // @ts-expect-error no position, which the arr_index stage refuses by naming itself
+        [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_index")],
         NewContext(),
       ),
     ).to.throw(/'arr_index'/);
@@ -185,7 +185,8 @@ describe("arr_includes", () => {
   it("names the stage when the value is absent", () => {
     expect(() =>
       CompileExpression(
-        [QueryStage("arg", undefined, ROW_ID), UntypedStage("arr_includes")],
+        // @ts-expect-error no value, which the arr_includes stage refuses by naming itself
+        [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_includes")],
         NewContext(),
       ),
     ).to.throw(/'arr_includes'/);
@@ -249,7 +250,8 @@ describe("arr_slice", () => {
   it("names the stage when the start is absent", () => {
     expect(() =>
       CompileExpression(
-        [QueryStage("arg", undefined, ROW_ID), UntypedStage("arr_slice")],
+        // @ts-expect-error no start, which the arr_slice stage refuses by naming itself
+        [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_slice")],
         NewContext(),
       ),
     ).to.throw(/'arr_slice'/);
