@@ -30,6 +30,7 @@ describe("lambda parameter ids that are neither numbers nor texts", () => {
         QueryStage(
           "filter",
           undefined,
+          // @ts-expect-error a parameter id that is not a number, which the filter compiles with its constant body
           QueryStage("func", undefined, [id], true),
         ),
       );
@@ -42,6 +43,7 @@ describe("lambda parameter ids that are neither numbers nor texts", () => {
         QueryStage(
           "filter",
           undefined,
+          // @ts-expect-error a parameter id that is not a number, on the func and its arg, which the filter compiles by reading the id back
           QueryStage("func", undefined, [id], QueryStage("arg", undefined, id)),
         ),
       );
@@ -52,6 +54,7 @@ describe("lambda parameter ids that are neither numbers nor texts", () => {
 
   it("compiles a map whose id is an empty object", () => {
     const sql = Compile(
+      // @ts-expect-error an empty object as the parameter id, which the map compiles with its constant body
       QueryStage("map", undefined, QueryStage("func", undefined, [{}], 5)),
     );
 

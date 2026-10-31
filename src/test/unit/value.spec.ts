@@ -278,15 +278,16 @@ describe("RecordedLambda", () => {
     const stage = QueryStage(
       "filter",
       undefined,
+      // @ts-expect-error a text parameter id, which RecordedLambda accepts and hands back unchanged
       QueryStage("func", undefined, ["a"], true),
     );
     expect(RecordedLambda(stage, 0).args[0]).to.deep.equal(["a"]);
   });
 
   it("does not take text parameter ids for a lambda where a document is allowed", () => {
-    expect(
-      IsRecordedFunction(QueryStage("func", undefined, ["a"], true)),
-    ).to.equal(false);
+    expect(IsRecordedFunction({ stage: "func", args: [["a"], true] })).to.equal(
+      false,
+    );
   });
 });
 

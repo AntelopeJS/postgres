@@ -17,7 +17,6 @@ import {
   ROW_ID,
   NewContext,
   Compile,
-  CompileLoose,
   TAGS,
   EXTRA,
   Guarded,
@@ -118,6 +117,7 @@ describe("arr_map", () => {
   it("names the stage when the callback is absent", () => {
     expect(() =>
       CompileExpression(
+        // @ts-expect-error no callback, which the arr_map stage refuses by naming itself
         [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_map")],
         NewContext(),
       ),
@@ -144,15 +144,14 @@ describe("arr_filter", () => {
   });
 
   it("reads a non-boolean body as javascript truthiness", () => {
-    const out = CompileLoose((doc: any) =>
-      doc.key("scores").filter((score: any) => score),
-    );
+    const out = Compile((doc) => doc.key("scores").filter((score) => score));
     expect(out.sql).to.contain(`WHERE (${AsNumber(Element("t0"))} <> 0)`);
   });
 
   it("names the stage when the callback is absent", () => {
     expect(() =>
       CompileExpression(
+        // @ts-expect-error no callback, which the arr_filter stage refuses by naming itself
         [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_filter")],
         NewContext(),
       ),
@@ -162,8 +161,8 @@ describe("arr_filter", () => {
 
 describe("a lambda body closing over the outer row", () => {
   it("reaches the row's own column from inside a map body", () => {
-    const out = CompileLoose((doc: any) =>
-      doc.key("tags").map((tag: any) => tag.add(doc.key("name"))),
+    const out = Compile((doc) =>
+      doc.key("tags").map((tag) => tag.add(doc.key("name"))),
     );
     const body = `(${AsText(Element("t0"))} || ${NAME})`;
     const walk = Walk(TAGS, "t0", Collected("t0", `to_jsonb(${body})`));
@@ -251,48 +250,48 @@ describe("array reducers", () => {
   });
 
   it("compares a declared text array as text, since there is no min(jsonb)", () => {
-    const out = CompileLoose((doc: any) => doc.key("tags").min());
+    const out = Compile((doc) => doc.key("tags").min());
     const aggregate = `min(${AsText(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(TAGS, Walk(TAGS, "t0", aggregate)));
     expect(out.type).to.equal(TEXT);
   });
 
   it("compares a declared timestamp array as an instant", () => {
-    const out = CompileLoose((doc: any) => doc.key("visits").max());
+    const out = Compile((doc) => doc.key("visits").max());
     const aggregate = `max(${AsMoment(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(VISITS, Walk(VISITS, "t0", aggregate)));
     expect(out.type).to.equal(TIMESTAMP);
   });
 
   it("defaults an unknown element type to a number comparison", () => {
-    const out = CompileLoose((doc: any) => doc.key("nope").min());
+    const out = Compile((doc) => doc.key("nope").cast<number[]>().min());
     const aggregate = `min(${AsNumber(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(EXTRA, Walk(EXTRA, "t0", aggregate)));
     expect(out.type).to.equal(FLOAT);
   });
 
   it("skips an element the guard nulls, so min of ['x', 1, null, 'y'] is 'x'", () => {
-    const out = CompileLoose((doc: any) => doc.key("tags").min());
+    const out = Compile((doc) => doc.key("tags").min());
     expect(out.sql).to.contain(`min(${AsText(Element("t0"))})`);
     expect(out.sql).to.not.contain("COALESCE");
   });
 
   it("reads a declared bool array as a number, so min of it is null", () => {
-    const out = CompileLoose((doc: any) => doc.key("flags").min());
+    const out = Compile((doc) => doc.key("flags").cast<number[]>().min());
     const aggregate = `min(${AsNumber(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(FLAGS, Walk(FLAGS, "t0", aggregate)));
     expect(out.type).to.equal(FLOAT);
   });
 
   it("reads a declared array of arrays as a number, so max of it is null", () => {
-    const out = CompileLoose((doc: any) => doc.key("nested").max());
+    const out = Compile((doc) => doc.key("nested").cast<number[]>().max());
     const aggregate = `max(${AsNumber(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(NESTED, Walk(NESTED, "t0", aggregate)));
     expect(out.type).to.equal(FLOAT);
   });
 
   it("reads shaped object elements as a number, so min of them is null", () => {
-    const out = CompileLoose((doc: any) => doc.key("entries").min());
+    const out = Compile((doc) => doc.key("entries").cast<number[]>().min());
     const aggregate = `min(${AsNumber(Element("t0"))})`;
     expect(out.sql).to.equal(Guarded(ENTRIES, Walk(ENTRIES, "t0", aggregate)));
     expect(out.type).to.equal(FLOAT);
@@ -314,7 +313,7 @@ describe("array operand emission", () => {
       Occurrences(Compile((doc) => doc.key("tags").isempty()).sql, TAGS),
     ).to.equal(2);
     expect(
-      Occurrences(CompileLoose((doc: any) => doc.key("tags").min()).sql, TAGS),
+      Occurrences(Compile((doc) => doc.key("tags").min()).sql, TAGS),
     ).to.equal(2);
   });
 

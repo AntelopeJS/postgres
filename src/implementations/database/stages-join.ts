@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { Query } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
+import { OptionsOf } from "./utils";
 
 import { EMPTY_ARRAY } from "./jsonb";
 import { UnifyOperands } from "./coerce";
@@ -69,7 +70,7 @@ const INNER_FLAVOUR: JoinFlavour = { kind: "JOIN", nullable: false };
 const OUTER_FLAVOUR: JoinFlavour = { kind: "LEFT JOIN", nullable: true };
 
 function FlavourOf(stage: QueryStage): JoinFlavour {
-  return stage.options?.innerOnly === true ? INNER_FLAVOUR : OUTER_FLAVOUR;
+  return OptionsOf(stage)?.innerOnly === true ? INNER_FLAVOUR : OUTER_FLAVOUR;
 }
 
 /**
@@ -163,8 +164,8 @@ interface LookupKeys {
 }
 
 function KeysOf(stage: QueryStage): LookupKeys {
-  const localKey: unknown = stage.options?.localKey;
-  const otherKey: unknown = stage.options?.otherKey;
+  const localKey: unknown = OptionsOf(stage)?.localKey;
+  const otherKey: unknown = OptionsOf(stage)?.otherKey;
   assert(
     IsString(localKey) && IsString(otherKey),
     "The 'lookup' stage names the local key and the other key with strings",

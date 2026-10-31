@@ -38,6 +38,7 @@ import {
   NewContext,
   Compile,
 } from "./expression-fixture";
+import { IsString } from "../../implementations/database/guards";
 
 describe("Predicate", () => {
   it("reads a boolean unchanged", () => {
@@ -327,7 +328,7 @@ describe("stage helpers", () => {
     const handler = Lift((value) => value);
     const out = handler(
       { current: { sql: "v", type: TEXT }, timezone: "'UTC'" },
-      QueryStage("noop"),
+      QueryStage("str_upcase"),
       NewContext(),
     );
     expect(out.timezone).to.equal(undefined);
@@ -341,7 +342,7 @@ describe("stage helpers", () => {
     }));
     const out = handler(
       { current: { sql: "v", type: TEXT } },
-      QueryStage("noop"),
+      QueryStage("str_upcase"),
       NewContext(),
     );
     expect(out.current).to.deep.equal({ sql: "t0", type: TEXT });
@@ -351,7 +352,7 @@ describe("stage helpers", () => {
     const context = NewContext();
     Lift((value) => value)(
       { current: { sql: "v", type: TEXT } },
-      QueryStage("noop", undefined, "a", "b"),
+      QueryStage("between", { index: "name" }, "a", "b"),
       context,
     );
     expect(context.params.all()).to.deep.equal(["a", "b"]);
@@ -360,12 +361,12 @@ describe("stage helpers", () => {
   it("leaves the arguments of a raw stage undecoded", () => {
     const context = NewContext();
     const handler = LiftRaw((value, stage, inner) => ({
-      sql: `${value.sql}:${stage.args.join(",")}:${inner.nextAlias()}`,
+      sql: `${value.sql}:${stage.args.filter(IsString).join(",")}:${inner.nextAlias()}`,
       type: TEXT,
     }));
     const out = handler(
       { current: { sql: "v", type: TEXT }, timezone: "'UTC'" },
-      QueryStage("noop", undefined, "a", "b"),
+      QueryStage("between", { index: "name" }, "a", "b"),
       context,
     );
     expect(out.current).to.deep.equal({ sql: "v:a,b:t0", type: TEXT });

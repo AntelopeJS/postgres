@@ -5,6 +5,35 @@ import type { QueryStage } from "@antelopejs/interface-database/common";
 
 export type { QueryStage };
 
+type RecordedOptions = Exclude<QueryStage["options"], undefined>;
+
+type OptionName = RecordedOptions extends infer Options
+  ? Options extends unknown
+    ? keyof Options
+    : never
+  : never;
+
+type OptionType<Name extends OptionName> = RecordedOptions extends infer Options
+  ? Options extends unknown
+    ? Name extends keyof Options
+      ? Options[Name]
+      : never
+    : never
+  : never;
+
+/** Every option a stage records, each typed as the stages that record it declare it. */
+export type StageOptions = { readonly [Name in OptionName]?: OptionType<Name> };
+
+/**
+ * The options a stage records, read whatever its name, for readers that check each option they
+ * read: `OptionsOf(stage)?.id` reads what `stage.options?.id` reads.
+ */
+export function OptionsOf(
+  stage: QueryStage | undefined,
+): StageOptions | undefined {
+  return stage?.options;
+}
+
 export const ID_COLUMN = "_id";
 export const INSTANCE_COLUMN = "_instance";
 export const EXTRA_COLUMN = "_extra";
@@ -65,7 +94,7 @@ export function NormalizeInstanceId(
   operation: InstanceOperation,
   stage: QueryStage,
 ): string {
-  const id: unknown = stage.options?.id;
+  const id: unknown = OptionsOf(stage)?.id;
   if (id === CROSS_INSTANCE) {
     throw new Error(
       `${operation} does not accept CROSS_INSTANCE: pass a string id or omit it for the default instance`,

@@ -300,6 +300,7 @@ describe("date_with_timezone", () => {
       CompileExpression(
         [
           QueryStage("arg", undefined, ROW_ID),
+          // @ts-expect-error no zone, which the date_with_timezone stage refuses by naming itself
           QueryStage("date_with_timezone"),
         ],
         NewContext(),
@@ -314,6 +315,7 @@ describe("date_with_timezone", () => {
         CompileExpression(
           [
             QueryStage("arg", undefined, ROW_ID),
+            // @ts-expect-error a number among the zones, which the date_with_timezone stage refuses by naming itself
             QueryStage("date_with_timezone", undefined, zone),
           ],
           NewContext(),
@@ -406,7 +408,7 @@ describe("date_during", () => {
   });
 
   it("reads both bounds as moments", () => {
-    const out = CompileInLoose(NewContext(), (doc) =>
+    const out = CompileIn(NewContext(), (doc) =>
       doc.key("createdAt").during(0, 1),
     );
     expect(out.sql).to.equal(
@@ -419,6 +421,7 @@ describe("date_during", () => {
       CompileExpression(
         [
           QueryStage("arg", undefined, ROW_ID),
+          // @ts-expect-error one bound, which the date_during stage refuses by naming itself
           QueryStage("date_during", undefined, new Date(0)),
         ],
         NewContext(),

@@ -166,6 +166,7 @@ describe("BuildRoot", () => {
 
   it("rejects a prefix stage carrying no id", () => {
     const stages = Root().build();
+    // @ts-expect-error no id, which BuildRoot refuses on the schema stage
     stages[0] = QueryStage("schema");
     expect(() =>
       WithOptions({}, () => BuildRoot(stages, NewContext())),

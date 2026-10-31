@@ -13,6 +13,7 @@ import {
   type StageMap,
 } from "./stage";
 import { IsString } from "./guards";
+import { OptionsOf } from "./utils";
 
 interface SplitOptions {
   separator?: string;
@@ -121,7 +122,7 @@ function Truncated(array: string, maxSplits?: number): string {
 }
 
 const SplitStage = LiftRaw((value, stage, context) => {
-  const options: SplitOptions = stage.options ?? {};
+  const options: SplitOptions = OptionsOf(stage) ?? {};
   const separator = Separator(options, context).sql;
   const array = `string_to_array(${Text(value).sql}, ${separator})`;
   return {

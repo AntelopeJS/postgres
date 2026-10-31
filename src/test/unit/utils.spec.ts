@@ -15,6 +15,7 @@ describe("NormalizeInstanceId", () => {
     expect(
       NormalizeInstanceId(
         "createInstance",
+        // @ts-expect-error a null id, which NormalizeInstanceId maps to the default instance
         QueryStage("createInstance", { id: null }),
       ),
     ).to.equal("");
@@ -30,24 +31,21 @@ describe("NormalizeInstanceId", () => {
   });
 
   it("rejects CROSS_INSTANCE, naming the operation", () => {
-    expect(() =>
-      NormalizeInstanceId(
-        "destroyInstance",
-        QueryStage("destroyInstance", { id: CROSS_INSTANCE }),
-      ),
-    ).to.throw(/destroyInstance/);
-    expect(() =>
-      NormalizeInstanceId(
-        "destroyInstance",
-        QueryStage("destroyInstance", { id: CROSS_INSTANCE }),
-      ),
-    ).to.throw(/CROSS_INSTANCE/);
+    // @ts-expect-error CROSS_INSTANCE as the id, which NormalizeInstanceId refuses by naming the operation
+    const stage = QueryStage("destroyInstance", { id: CROSS_INSTANCE });
+    expect(() => NormalizeInstanceId("destroyInstance", stage)).to.throw(
+      /destroyInstance/,
+    );
+    expect(() => NormalizeInstanceId("destroyInstance", stage)).to.throw(
+      /CROSS_INSTANCE/,
+    );
   });
 
   it("rejects a non-string id", () => {
     expect(() =>
       NormalizeInstanceId(
         "createInstance",
+        // @ts-expect-error a number id, which NormalizeInstanceId refuses by naming its type
         QueryStage("createInstance", { id: 7 }),
       ),
     ).to.throw(/number/);

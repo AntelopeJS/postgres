@@ -113,6 +113,7 @@ describe("the group stage", () => {
   });
 
   it("names itself when the stage carries no index to group on", () => {
+    // @ts-expect-error no index or field, which the group stage refuses by naming itself
     expect(() => ApplyRaw([QueryStage("group", {})])).to.throw(
       "The 'group' stage is missing the index or field to group on",
     );
