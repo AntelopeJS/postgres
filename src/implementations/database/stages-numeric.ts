@@ -70,8 +70,9 @@ const ConcatText: Arithmetic = (left, right) => ({
   type: TEXT,
 });
 
+/** A json `null` operand answers NULL, as every other `add` does, instead of becoming an element. */
 const ConcatArray: Arithmetic = (left, right) => ({
-  sql: `(${left.sql} || ${right.sql})`,
+  sql: `(${left.sql} || NULLIF(${right.sql}, 'null'::jsonb))`,
   type: Unify(left.type, right.type),
 });
 
