@@ -117,7 +117,7 @@ This repository documents what is specific to the PostgreSQL backend:
 | Package                                  | Supported                                                      | Tested with                                                    |
 | ---------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
 | `@antelopejs/interface-core`             | `>=0.1.1 <1.0.0`                                               | `0.2.0`                                                        |
-| `@antelopejs/interface-database`         | `file:.campaign/tgz/antelopejs-interface-database-beb5f5b.tgz` | `file:.campaign/tgz/antelopejs-interface-database-beb5f5b.tgz` |
+| `@antelopejs/interface-database`         | `file:.campaign/tgz/antelopejs-interface-database-4939b45.tgz` | `file:.campaign/tgz/antelopejs-interface-database-4939b45.tgz` |
 | `@antelopejs/interface-database-catalog` | `>=0.0.3 <0.1.0`                                               | `0.0.3`                                                        |
 
 <!-- antelopejs-docs-compat:end -->
