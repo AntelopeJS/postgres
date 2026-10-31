@@ -20,5 +20,6 @@ export function UntypedStage(
   options?: unknown,
   ...args: unknown[]
 ): QueryStage {
-  return { stage, options, args } as QueryStage;
+  // @ts-expect-error a stage outside the union, as an untyped caller sends it, which each calling test asserts the compiler's answer to
+  return { stage, options, args };
 }

@@ -407,7 +407,7 @@ describe("date_during", () => {
   });
 
   it("reads both bounds as moments", () => {
-    const out = CompileInLoose(NewContext(), (doc) =>
+    const out = CompileIn(NewContext(), (doc) =>
       doc.key("createdAt").during(0, 1),
     );
     expect(out.sql).to.equal(

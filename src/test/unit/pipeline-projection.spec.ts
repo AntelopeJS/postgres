@@ -59,7 +59,7 @@ describe("the key stage", () => {
   });
 
   it("falls to a dynamic lookup only for a key that is an expression", () => {
-    const key = ValueProxy.constant("name") as unknown as "name";
+    const key = ValueProxy.constant<"name">("name");
     const { relation, context } = Apply(Root().key(key));
     expect(Render(relation)).to.equal(
       `SELECT (${DOCUMENT} -> ($1::text)) AS "value" ${FROM_TABLE}`,
