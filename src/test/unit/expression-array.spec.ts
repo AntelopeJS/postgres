@@ -29,6 +29,7 @@ import {
   Collected,
   FLOAT_PARAM,
 } from "./expression-array-fixture";
+import { UntypedStage } from "./invalid-fixture";
 
 function LastStage(build: Builder): QueryStage {
   const stages = build(ValueProxy.arg(ROW_ID)).build();
@@ -149,7 +150,7 @@ describe("arr_index", () => {
   it("names the stage when the position is absent", () => {
     expect(() =>
       CompileExpression(
-        [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_index")],
+        [QueryStage("arg", undefined, ROW_ID), UntypedStage("arr_index")],
         NewContext(),
       ),
     ).to.throw(/'arr_index'/);
@@ -184,7 +185,7 @@ describe("arr_includes", () => {
   it("names the stage when the value is absent", () => {
     expect(() =>
       CompileExpression(
-        [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_includes")],
+        [QueryStage("arg", undefined, ROW_ID), UntypedStage("arr_includes")],
         NewContext(),
       ),
     ).to.throw(/'arr_includes'/);
@@ -248,7 +249,7 @@ describe("arr_slice", () => {
   it("names the stage when the start is absent", () => {
     expect(() =>
       CompileExpression(
-        [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_slice")],
+        [QueryStage("arg", undefined, ROW_ID), UntypedStage("arr_slice")],
         NewContext(),
       ),
     ).to.throw(/'arr_slice'/);

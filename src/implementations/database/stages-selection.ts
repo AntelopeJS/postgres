@@ -6,7 +6,12 @@ import { DecodeValue } from "./value";
 import type { DecodingContext } from "./context";
 import { type Compiled, QualifiedColumn } from "./sql";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
-import { ID_COLUMN, INSTANCE_COLUMN, type QueryStage } from "./utils";
+import {
+  ID_COLUMN,
+  INSTANCE_COLUMN,
+  OptionsOf,
+  type QueryStage,
+} from "./utils";
 import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import { KeylessRefusal } from "./external-refusals";
 import {
@@ -80,7 +85,7 @@ function Addressed(column: Compiled): Compiled {
 }
 
 function IndexOption(stage: QueryStage): string | undefined {
-  const name: unknown = stage.options?.index;
+  const name: unknown = OptionsOf(stage)?.index;
   if (name === undefined || name === null) {
     return undefined;
   }

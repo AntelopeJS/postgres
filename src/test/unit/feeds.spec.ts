@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { expect } from "chai";
 
 import { WhileConfigured } from "./spec-fixture";
+import { UntypedStage } from "./invalid-fixture";
 import type { QueryStage } from "../../implementations/database/utils";
 import type { TableOrigin } from "../../implementations/database/relation";
 import { CloseCursor, ReadCursor } from "../../implementations/database/query";
@@ -38,7 +39,7 @@ function Stages(...between: string[]): QueryStage[] {
     { stage: "schema", options: { id: SCHEMA_ID }, args: [] },
     { stage: "instance", options: { id: "default" }, args: [] },
     { stage: "table", options: { id: TABLE_ID }, args: [] },
-    ...between.map((stage) => ({ stage, args: [] })),
+    ...between.map((stage) => UntypedStage(stage)),
     { stage: "changes", args: [] },
   ];
 }

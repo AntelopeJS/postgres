@@ -23,6 +23,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
+import { UntypedStage } from "./invalid-fixture";
 
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
@@ -98,7 +99,7 @@ describe("string stage dispatch", () => {
     for (const name of Object.keys(STRING_STAGES)) {
       const out = STAGES[name](
         { current, timezone: "'UTC'" },
-        QueryStage(name, undefined, "x"),
+        UntypedStage(name, undefined, "x"),
         NewContext(),
       );
       expect(out.timezone, name).to.equal(undefined);
@@ -109,7 +110,7 @@ describe("string stage dispatch", () => {
     for (const name of ["str_concat", "str_match"]) {
       expect(() =>
         CompileExpression(
-          [QueryStage("arg", undefined, ROW_ID), QueryStage(name)],
+          [QueryStage("arg", undefined, ROW_ID), UntypedStage(name)],
           NewContext(),
         ),
       ).to.throw(`'${name}'`);
@@ -263,7 +264,7 @@ describe("str_split", () => {
     const built = stages[stages.length - 1];
     expect(built.stage).to.equal("str_split");
     expect(built.args).to.deep.equal([]);
-    expect(built.options.separator).to.equal(",");
+    expect(built.options).to.include({ separator: "," });
   });
 
   it("splits on a space when the caller named no separator", () => {

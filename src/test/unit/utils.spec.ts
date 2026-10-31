@@ -3,6 +3,7 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 
 import { NormalizeInstanceId } from "../../implementations/database/utils";
+import { UntypedStage } from "./invalid-fixture";
 
 describe("NormalizeInstanceId", () => {
   it("maps an absent id to the default instance", () => {
@@ -15,7 +16,7 @@ describe("NormalizeInstanceId", () => {
     expect(
       NormalizeInstanceId(
         "createInstance",
-        QueryStage("createInstance", { id: null }),
+        UntypedStage("createInstance", { id: null }),
       ),
     ).to.equal("");
   });
@@ -33,13 +34,13 @@ describe("NormalizeInstanceId", () => {
     expect(() =>
       NormalizeInstanceId(
         "destroyInstance",
-        QueryStage("destroyInstance", { id: CROSS_INSTANCE }),
+        UntypedStage("destroyInstance", { id: CROSS_INSTANCE }),
       ),
     ).to.throw(/destroyInstance/);
     expect(() =>
       NormalizeInstanceId(
         "destroyInstance",
-        QueryStage("destroyInstance", { id: CROSS_INSTANCE }),
+        UntypedStage("destroyInstance", { id: CROSS_INSTANCE }),
       ),
     ).to.throw(/CROSS_INSTANCE/);
   });
@@ -48,7 +49,7 @@ describe("NormalizeInstanceId", () => {
     expect(() =>
       NormalizeInstanceId(
         "createInstance",
-        QueryStage("createInstance", { id: 7 }),
+        UntypedStage("createInstance", { id: 7 }),
       ),
     ).to.throw(/number/);
   });

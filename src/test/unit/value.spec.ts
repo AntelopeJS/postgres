@@ -32,6 +32,7 @@ import {
   TEXT,
   TIMESTAMP,
 } from "../../implementations/database/types";
+import { UntypedStage } from "./invalid-fixture";
 
 const STUB_EXPRESSION: Compiled = { sql: "EXPR", type: OPAQUE };
 const STUB_SUBQUERY: Compiled = { sql: "SUB", type: OPAQUE };
@@ -275,17 +276,17 @@ describe("DecodeFunction", () => {
 
 describe("RecordedLambda", () => {
   it("accepts the text parameter ids of a func rebuilt from JSON", () => {
-    const stage = QueryStage(
+    const stage = UntypedStage(
       "filter",
       undefined,
-      QueryStage("func", undefined, ["a"], true),
+      UntypedStage("func", undefined, ["a"], true),
     );
     expect(RecordedLambda(stage, 0).args[0]).to.deep.equal(["a"]);
   });
 
   it("does not take text parameter ids for a lambda where a document is allowed", () => {
     expect(
-      IsRecordedFunction(QueryStage("func", undefined, ["a"], true)),
+      IsRecordedFunction(UntypedStage("func", undefined, ["a"], true)),
     ).to.equal(false);
   });
 });

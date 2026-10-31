@@ -20,6 +20,7 @@ import {
   Write,
 } from "./pipeline-fixture";
 import { AGE_COLUMN, NAME_COLUMN } from "./pipeline-group-fixture";
+import { UntypedStage } from "./invalid-fixture";
 
 const ACTIVE_COLUMN = '"t0"."isActive"';
 
@@ -113,7 +114,7 @@ describe("the group stage", () => {
   });
 
   it("names itself when the stage carries no index to group on", () => {
-    expect(() => ApplyRaw([QueryStage("group", {})])).to.throw(
+    expect(() => ApplyRaw([UntypedStage("group", {})])).to.throw(
       "The 'group' stage is missing the index or field to group on",
     );
   });

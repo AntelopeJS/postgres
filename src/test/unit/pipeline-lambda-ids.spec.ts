@@ -3,6 +3,7 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 
 import { ApplyRaw } from "./pipeline-fixture";
 import { Render } from "../../implementations/database/render";
+import { UntypedStage } from "./invalid-fixture";
 
 const ODD_IDS = [
   { label: "boolean", id: true },
@@ -27,10 +28,10 @@ describe("lambda parameter ids that are neither numbers nor texts", () => {
   for (const { label, id } of ODD_IDS) {
     it(`compiles a filter whose only id is ${label} and whose body is a constant`, () => {
       const sql = Compile(
-        QueryStage(
+        UntypedStage(
           "filter",
           undefined,
-          QueryStage("func", undefined, [id], true),
+          UntypedStage("func", undefined, [id], true),
         ),
       );
 
@@ -39,10 +40,15 @@ describe("lambda parameter ids that are neither numbers nor texts", () => {
 
     it(`compiles a filter whose body reads the ${label} id back`, () => {
       const sql = Compile(
-        QueryStage(
+        UntypedStage(
           "filter",
           undefined,
-          QueryStage("func", undefined, [id], QueryStage("arg", undefined, id)),
+          UntypedStage(
+            "func",
+            undefined,
+            [id],
+            UntypedStage("arg", undefined, id),
+          ),
         ),
       );
 
@@ -52,7 +58,7 @@ describe("lambda parameter ids that are neither numbers nor texts", () => {
 
   it("compiles a map whose id is an empty object", () => {
     const sql = Compile(
-      QueryStage("map", undefined, QueryStage("func", undefined, [{}], 5)),
+      UntypedStage("map", undefined, UntypedStage("func", undefined, [{}], 5)),
     );
 
     expect(sql).to.equal(MAP_CONSTANT);

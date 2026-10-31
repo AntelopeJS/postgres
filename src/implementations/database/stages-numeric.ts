@@ -1,4 +1,5 @@
 import type { QueryStage } from "@antelopejs/interface-database/common";
+import { OptionsOf } from "./utils";
 
 import { Unify } from "./coerce";
 import type { Compiled } from "./sql";
@@ -199,7 +200,7 @@ const BitLshiftStage = BinaryStage((left, right) =>
 );
 
 const BitRshiftStage = BinaryStage((left, right, stage) => {
-  const preserveSign: unknown = stage.options?.preserveSign;
+  const preserveSign: unknown = OptionsOf(stage)?.preserveSign;
   const shifted = preserveSign ? Int32(left) : Uint32(left);
   return AsFloat(`${shifted} ${SHIFT_RIGHT} ${ShiftCount(right)}`);
 });

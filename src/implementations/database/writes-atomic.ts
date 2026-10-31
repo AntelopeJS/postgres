@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { DatabaseError } from "pg";
 import { ValidateAtomicMutation } from "@antelopejs/interface-database/atomic";
+import { IsQueryStage } from "@antelopejs/interface-database/common";
 import type {
   AtomicMutation,
   AtomicMutationOutcome,
@@ -107,11 +108,13 @@ function AtomicPredicate(
 
 export const AtomicWrite: WriteCompiler = (target, stage, context) => {
   assert(
-    stage.options === undefined && stage.args.length === ATOMIC_ARGUMENT_COUNT,
+    IsQueryStage(stage, ATOMIC_MUTATION) &&
+      stage.options === undefined &&
+      stage.args.length === ATOMIC_ARGUMENT_COUNT,
     "Atomic mutation requires exactly a key and request without options",
   );
   const instance = RequireInstance(target, stage);
-  const [key, request] = stage.args as [string, Mutation];
+  const [key, request] = stage.args;
   ValidateAtomicMutation(key, request, RESERVED_COLUMNS);
   const where = [
     `${QualifiedColumn(WRITE_ALIAS, INSTANCE_COLUMN)} = ${instance.sql}`,
