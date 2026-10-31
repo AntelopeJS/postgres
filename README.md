@@ -81,7 +81,7 @@ Then follow the [database interface guide](https://framework.antelopejs.com/docs
 Unlike the document-store backends, this module treats schema field declarations as real
 DDL: each AntelopeJS schema becomes a PostgreSQL schema, each table a real table, and each
 declared scalar field a natively typed, natively indexable column. Queries compile to a single
-SQL statement — filters become `WHERE` clauses, joins become `JOIN`s, and a `filter` or `orderBy`
+SQL statement. Filters become `WHERE` clauses, joins become `JOIN`s, and a `filter` or `orderBy`
 over a declared field reaches its btree index.
 
 - One PostgreSQL schema per AntelopeJS schema id
@@ -108,7 +108,7 @@ This repository documents what is specific to the PostgreSQL backend:
 | [External mode](./docs/external-mode.md)       | Reading tables the module did not create, in a database it does not own                                                                            |
 | [Change feeds](./docs/change-feeds.md)         | `changes()`, its ordering guarantee, its retention contract and its blind spots                                                                    |
 | [Errors and refusals](./docs/errors.md)        | Everything the module refuses, with the message it refuses by                                                                                      |
-| [Behaviour worth knowing](./docs/behaviour.md) | Things that answer rather than throw, where the answer may surprise you — including where this backend differs from the MongoDB and RethinkDB ones |
+| [Behaviour worth knowing](./docs/behaviour.md) | Things that answer rather than throw, where the answer may surprise you, including where this backend differs from the MongoDB and RethinkDB ones |
 
 ## Compatibility
 
