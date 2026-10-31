@@ -223,6 +223,9 @@ function CollectValue(value: Member, walk: SchemaWalk): void {
       for (const [, item] of value.document.entries()) {
         CollectValue(item, walk);
       }
+      return;
+    default:
+      return value satisfies never;
   }
 }
 
