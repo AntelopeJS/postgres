@@ -15,7 +15,7 @@ import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import { DeclaredColumns, DocumentKeys, type TableModel } from "./fields";
 import {
   DecodeValue,
-  FunctionBody,
+  FUNCTION_BODY,
   IsPlainObject,
   IsRecordedFunction,
   type RecordedFunction,
@@ -314,7 +314,7 @@ function MappedColumns(
   mapper: RecordedFunction,
   context: DecodingContext,
 ): ChangedColumns {
-  const body = FunctionBody(mapper);
+  const body = mapper.args[FUNCTION_BODY];
   const bindings = [WriteRowSource(target.origin)];
   if (IsPlainObject(body)) {
     const split = WithBoundArguments(mapper, context, bindings, () =>

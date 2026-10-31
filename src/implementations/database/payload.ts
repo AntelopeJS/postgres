@@ -100,7 +100,7 @@ function Refusal(name: string): Error {
 
 interface PayloadWalk {
   split: PayloadSplit;
-  added: Record<string, unknown>;
+  added: object;
   model: TableModel;
   context: DecodingContext;
   options: PayloadOptions;
