@@ -112,7 +112,8 @@ describe("arr_count and arr_empty", () => {
   it("reads a scalar operand as jsonb so the guard nulls it", () => {
     const age = `to_jsonb("t"."age")`;
     expect(
-      Compile((doc: ValueProxy<any>) => doc.key("age").count()).sql,
+      // @ts-expect-error a number column where count reads an array; the SQL guards jsonb_array_length of the column read through to_jsonb
+      Compile((doc) => doc.key("age").count()).sql,
     ).to.equal(
       Guarded(age, `((jsonb_array_length(${age}))::double precision)`),
     );
@@ -179,7 +180,8 @@ describe("arr_includes", () => {
   it("leaves a non-array operand to answer false, since @> cannot raise", () => {
     const age = `to_jsonb("t"."age")`;
     expect(
-      Compile((doc: ValueProxy<any>) => doc.key("age").includes("x")).sql,
+      // @ts-expect-error a number column where includes reads an array; the SQL is an unguarded @> of the column read through to_jsonb
+      Compile((doc) => doc.key("age").includes("x")).sql,
     ).to.equal(`(${age} @> jsonb_build_array(to_jsonb(($1::text))))`);
   });
 
