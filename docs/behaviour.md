@@ -66,8 +66,8 @@ Things that answer rather than throw, where the answer may not be the one you ex
 
 ## Atomic single-record mutations
 
-`table.atomicMutation(id, request)` uses the atomic contract that `interface-database` added
-in its 0.1.6 release; the supported range is in the README compatibility table. Antelope automatically
+`table.atomicMutation(id, request)` uses the atomic contract of `@antelopejs/interface-database`, in the range
+the README compatibility table lists. Antelope automatically
 runs its shared real-backend conformance tests alongside this provider's SQL,
 row-lock, storage, and fault tests.
 
