@@ -185,9 +185,9 @@ describe("RegisteredOrigin", () => {
 describe("CollectSchemaIds", () => {
   it("reads the schema a staged object reaches when it is neither a proxy nor a query", () => {
     const staged = new StagedObject(QueryStage("schema", { id: SCHEMA_ID }));
-    expect(CollectSchemaIds([QueryStage("insert", {}, staged)])).to.deep.equal([
-      SCHEMA_ID,
-    ]);
+    expect(
+      CollectSchemaIds([QueryStage("key", undefined, staged)]),
+    ).to.deep.equal([SCHEMA_ID]);
   });
 
   it("collects the schema a plain table query names", () => {
