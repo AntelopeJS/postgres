@@ -193,7 +193,7 @@ function DecodeObject(
 
 const FUNCTION_STAGE = "func";
 const PARAMETER_IDS = 0;
-const FUNCTION_BODY = 1;
+export const FUNCTION_BODY = 1;
 
 /** A lambda the query builder recorded: the ids of its parameters, then the body they are bound in. */
 export interface RecordedFunction {
@@ -253,11 +253,6 @@ export function RecordedLambda(
   return lambda;
 }
 
-/** Whatever a recorded lambda returned, which is a value for most callers and a document for one. */
-export function FunctionBody(func: RecordedFunction): unknown {
-  return func.args[FUNCTION_BODY];
-}
-
 /**
  * Runs a compilation with a recorded lambda's parameters bound to the given row sources or
  * subquery providers, and unbound again however it ends.
@@ -301,6 +296,6 @@ export function DecodeFunction(
   bindings: ArgumentBinding[],
 ): Compiled | undefined {
   return WithBoundArguments(func, context, bindings, () =>
-    DecodeValue(FunctionBody(func), context),
+    DecodeValue(func.args[FUNCTION_BODY], context),
   );
 }
