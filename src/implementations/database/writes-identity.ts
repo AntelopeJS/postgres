@@ -165,8 +165,8 @@ function UpdateStatement(
 }
 
 function ChangedDocument(stage: QueryStage): DocumentView {
-  const argument = ClassifyMember(stage.args[FIRST_OPERAND]);
-  const { document } = argument;
+  const argument: unknown = stage.args[FIRST_OPERAND];
+  const { document } = ClassifyMember(argument);
   assert(
     document,
     `The '${stage.stage}' stage takes a document, received ${DescribeKind(argument)}`,
