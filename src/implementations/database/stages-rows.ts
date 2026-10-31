@@ -28,6 +28,7 @@ import {
   WHERE_BLOCKERS,
 } from "./render";
 import { IsString } from "./guards";
+import { ClassifyMember } from "./member";
 
 /**
  * An `ORDER BY` runs before the row bounds, so those and an aggregate are what block it.
@@ -73,7 +74,7 @@ function Bound(
   index: number,
   context: DecodingContext,
 ): string {
-  const compiled = DecodeValue(stage.args[index], context);
+  const compiled = DecodeValue(ClassifyMember(stage.args[index]), context);
   const bound = RequireOperand(compiled, stage, index);
   return RowBound(ClampBound(Numeric(bound).sql));
 }

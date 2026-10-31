@@ -5,6 +5,7 @@ import { DecodeValue } from "./value";
 import type { DecodingContext } from "./context";
 import { JsonRowSource, type RowSource } from "./row-source";
 import { IsString } from "./guards";
+import { ClassifyMember } from "./member";
 
 /**
  * Accumulator threaded through the stages of one expression.
@@ -115,7 +116,9 @@ export function FieldNames(
 export function Lift(handler: ValueStage): StageHandler {
   return (state, stage, context) => {
     const value = AsValue(state);
-    const args = stage.args.map((arg) => DecodeValue(arg, context));
+    const args = stage.args.map((arg) =>
+      DecodeValue(ClassifyMember(arg), context),
+    );
     return { current: handler(value, args, stage, context) };
   };
 }
@@ -156,11 +159,15 @@ export function FieldOf(
   stage: QueryStage,
   context: DecodingContext,
 ): Compiled {
-  const def = DecodeValue(stage.args[SECOND_OPERAND], context);
+  const def = DecodeValue(ClassifyMember(stage.args[SECOND_OPERAND]), context);
   const name: unknown = stage.args[FIRST_OPERAND];
   if (IsString(name)) {
     return source.field(name, def);
   }
-  const key = RequireOperand(DecodeValue(name, context), stage, FIRST_OPERAND);
+  const key = RequireOperand(
+    DecodeValue(ClassifyMember(name), context),
+    stage,
+    FIRST_OPERAND,
+  );
   return source.dynamicField(key, def);
 }

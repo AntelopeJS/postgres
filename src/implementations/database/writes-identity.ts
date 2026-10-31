@@ -9,14 +9,12 @@ import type { DecodingContext } from "./context";
 import { type TableOrigin } from "./relation";
 import { Render } from "./render";
 import { GuardJson, OBJECT_TYPEOF, TextArray } from "./jsonb";
-import { IsDocument } from "./guards";
 import { EXTRA_COLUMN, ID_COLUMN, type QueryStage } from "./utils";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import { DeclaredColumns, DocumentKeys, type TableModel } from "./fields";
 import {
   DecodeValue,
   FUNCTION_BODY,
-  IsPlainObject,
   IsRecordedFunction,
   type RecordedFunction,
   WithBoundArguments,
@@ -43,6 +41,7 @@ import {
   WriteTable,
   type WriteTarget,
 } from "./writes-shared";
+import { ClassifyMember, type DocumentView } from "./member";
 
 /** Neither `update` nor `replace` is keyed by its payload: an `_id` it names states a target. */
 const CHANGED: PayloadOptions = { id: ID_AS_ASSERTION };
@@ -165,17 +164,18 @@ function UpdateStatement(
   };
 }
 
-function ChangedDocument(stage: QueryStage): Record<string, unknown> {
-  const argument: unknown = stage.args[FIRST_OPERAND];
+function ChangedDocument(stage: QueryStage): DocumentView {
+  const argument = ClassifyMember(stage.args[FIRST_OPERAND]);
+  const { document } = argument;
   assert(
-    IsDocument(argument),
+    document,
     `The '${stage.stage}' stage takes a document, received ${DescribeKind(argument)}`,
   );
-  return argument;
+  return document;
 }
 
 function ChangedPayload(
-  document: Record<string, unknown>,
+  document: DocumentView,
   target: WriteTarget,
   context: DecodingContext,
 ): PayloadSplit {
@@ -314,11 +314,11 @@ function MappedColumns(
   mapper: RecordedFunction,
   context: DecodingContext,
 ): ChangedColumns {
-  const body = mapper.args[FUNCTION_BODY];
+  const body = ClassifyMember(mapper.args[FUNCTION_BODY]);
   const bindings = [WriteRowSource(target.origin)];
-  if (IsPlainObject(body)) {
+  if (body.kind === "record") {
     const split = WithBoundArguments(mapper, context, bindings, () =>
-      ChangedPayload(body, target, context),
+      ChangedPayload(body.document, target, context),
     );
     return ChangedColumnsOf(split, stage);
   }

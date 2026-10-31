@@ -6,7 +6,8 @@ import {
   ID_COLUMN,
   INSTANCE_COLUMN,
 } from "./utils";
-import { IsDocument, IsNumber } from "./guards";
+import { IsDocument } from "./guards";
+import { ClassifyMember, type Member } from "./member";
 
 /**
  * What `pg`'s default type parsers answer for one column: text, a number, a boolean, a `Date`, a
@@ -30,15 +31,15 @@ export interface RowObject {
 }
 
 /** The instant a cell spells, read from its text unless it is a number; an invalid date if it spells none. */
-function InstantOf(cell: unknown): Date {
-  return IsNumber(cell) ? new Date(cell) : new Date(String(cell));
+function InstantOf(cell: Member): Date {
+  return cell.kind === "number" ? new Date(cell.value) : new Date(cell.text());
 }
 
 function ReviveTimestamp(value: RowValue): RowValue {
   if (value instanceof Date) {
     return value;
   }
-  const date = InstantOf(value);
+  const date = InstantOf(ClassifyMember(value));
   return Number.isNaN(date.getTime()) ? value : date;
 }
 

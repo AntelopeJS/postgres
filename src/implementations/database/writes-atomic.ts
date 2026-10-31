@@ -34,6 +34,7 @@ import {
   WriteRowSource,
 } from "./writes-shared";
 import { IsString } from "./guards";
+import { ClassifyMember } from "./member";
 
 export const ATOMIC_MUTATION = "atomicMutation";
 const ATOMIC_ARGUMENT_COUNT = 2;
@@ -78,7 +79,9 @@ function AtomicAssignments(
     ...request.patch,
     [request.revisionField]: request.nextRevision,
   };
-  const split = SplitPayload(document, target.origin.model, context, {
+  const view = ClassifyMember(document).document;
+  assert(view, "A patch spread into a literal is a document");
+  const split = SplitPayload(view, target.origin.model, context, {
     id: ID_AS_ASSERTION,
   });
   const assignments = split.members.map((member) =>
@@ -98,7 +101,7 @@ function AtomicPredicate(
   if (request.type !== "deleteIfEqual") {
     return RevisionPredicate(target, request, context);
   }
-  const expected = DecodeValue(request.expectedValue, context);
+  const expected = DecodeValue(ClassifyMember(request.expectedValue), context);
   assert(expected, "Expected a constant equality value");
   const field = WriteRowSource(target.origin).field(request.field);
   const pair = UnifyOperands(field, expected);

@@ -37,7 +37,8 @@ import {
   type WriteStatement,
   type WriteTarget,
 } from "./writes-shared";
-import { IsDocument, IsString } from "./guards";
+import { IsString } from "./guards";
+import { ClassifyMember, type DocumentView, type Member } from "./member";
 
 const ALIAS = QuoteIdentifier(WRITE_ALIAS);
 const SOURCE_ALIAS = QuoteIdentifier("src");
@@ -168,13 +169,14 @@ function TargetedRows(target: WriteTarget, key: ColumnDescriptor[]): string {
   return `(${written} IN (SELECT ${SOURCE_ALIAS}.${OUTPUT} FROM ${selected}))`;
 }
 
-function DocumentOf(stage: QueryStage): Record<string, unknown> {
-  const argument: unknown = stage.args[FIRST_OPERAND];
+function DocumentOf(stage: QueryStage): DocumentView {
+  const argument = ClassifyMember(stage.args[FIRST_OPERAND]);
+  const { document } = argument;
   assert(
-    IsDocument(argument),
+    document,
     `The '${stage.stage}' stage on an external relation takes a document, received ${DescribeKind(argument)}; an expression mapper is not supported on external relations in this version`,
   );
-  return argument;
+  return document;
 }
 
 /**
@@ -206,7 +208,7 @@ function Validation(
         `(${condition}) AS ${QuoteIdentifier(`c${conditions.length}`)}`,
       );
       failures.push(
-        `Field '${check.path}' cannot hold ${JSON.stringify(check.raw)}: the column is ${check.descriptor.native}`,
+        `Field '${check.path}' cannot hold ${check.raw.json()}: the column is ${check.descriptor.native}`,
       );
     }
   }
@@ -223,7 +225,7 @@ function Validation(
 interface ValueCheck {
   path: string;
   descriptor: ColumnDescriptor;
-  raw: unknown;
+  raw: Member;
 }
 
 function ChecksOf(
@@ -232,19 +234,23 @@ function ChecksOf(
   mode: ExternalWriteMode,
 ): ValueCheck[] {
   const path = `${external.schema}.${external.table}`;
-  const checks: ValueCheck[] = payload.assignments
-    .filter((assignment) => assignment.raw !== undefined)
-    .map((assignment) => ({
-      path: `${path}.${assignment.field}`,
-      descriptor: assignment.descriptor,
-      raw: assignment.raw,
-    }));
+  const checks: ValueCheck[] = payload.assignments.flatMap((assignment) =>
+    assignment.raw === undefined
+      ? []
+      : [
+          {
+            path: `${path}.${assignment.field}`,
+            descriptor: assignment.descriptor,
+            raw: assignment.raw,
+          },
+        ],
+  );
   if (mode === "insert") {
     for (const asserted of payload.asserted.values()) {
       checks.push({
         path: `${path}.${asserted.claimedBy}`,
         descriptor: asserted.descriptor,
-        raw: String(asserted.raw),
+        raw: ClassifyMember(String(asserted.raw)),
       });
     }
     for (const claim of payload.keyFields) {
