@@ -18,7 +18,12 @@ import {
 import { DecodingContext } from "./context";
 import { CompileSubquery } from "./subquery";
 import { CompileExpression } from "./expression";
-import { DecodeRow, ReviveValue } from "./result";
+import {
+  DecodeRow,
+  ReviveValue,
+  type RowObject,
+  type RowValue,
+} from "./result";
 import { ApplyStages, CompileRelation } from "./pipeline";
 import { DuplicateKeyFailure } from "./duplicate-key";
 import {
@@ -66,7 +71,7 @@ type WriteAnswer =
   | unknown[]
   | Awaited<ReturnType<typeof ExecuteAtomicWrite>>;
 
-export type ResultRow = Record<string, unknown>;
+export type ResultRow = RowObject;
 
 /** The root, the terminal write split off after it, and the fold over what was left. */
 interface CompiledQuery {
@@ -145,7 +150,7 @@ function Lifecycle(stages: QueryStage[]): Promise<LifecycleAnswer> | undefined {
  * that same query must be immediately done rather than yield one `undefined`. A `single` relation
  * simply has at most one row to yield and needs no case of its own.
  */
-export function DecodeRows(relation: Relation, rows: ResultRow[]): unknown[] {
+export function DecodeRows(relation: Relation, rows: ResultRow[]): RowValue[] {
   const projection = relation.projection;
   if (projection) {
     return rows.map((row) => ReviveValue(row[OUTPUT_COLUMN], projection.type));
@@ -164,7 +169,7 @@ export function DecodeRows(relation: Relation, rows: ResultRow[]): unknown[] {
  * Emptiness is decided by the row count, not by the decoded value being nullish, so a `get` whose
  * row decodes to `null` answers `null` — not the `undefined` that means there is no such row.
  */
-export function DecodeResult(relation: Relation, rows: ResultRow[]): unknown {
+export function DecodeResult(relation: Relation, rows: ResultRow[]): RowValue {
   const decoded = DecodeRows(relation, rows);
   if (!relation.single) {
     return decoded;
