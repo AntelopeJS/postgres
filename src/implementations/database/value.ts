@@ -78,8 +78,8 @@ export function DecodeValue(
       return Param(context.params, value.value, BOOL);
     case "staged":
     case "opaque":
-      throw new Error(`Unsupported value of type '${value.typeName}' in query`);
   }
+  throw new Error(`Unsupported value of type '${typeof value}' in query`);
 }
 
 /**

@@ -92,7 +92,7 @@ function SuppliedId(document: DocumentView): string | undefined {
   }
   assert(
     supplied.kind === "text",
-    `An inserted document's '${ID_COLUMN}' must be a string, received ${supplied.typeName}`,
+    `An inserted document's '${ID_COLUMN}' must be a string, received ${typeof supplied}`,
   );
   return supplied.value;
 }
