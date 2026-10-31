@@ -52,8 +52,6 @@ export interface UserDoc {
 
 export type Builder = (doc: ValueProxy<UserDoc>) => StagedObject;
 
-export type LooseBuilder = (doc: any) => StagedObject;
-
 export function NewContext(): DecodingContext {
   const context = new DecodingContext({
     ...RefusingCompilers(),
@@ -64,10 +62,6 @@ export function NewContext(): DecodingContext {
 }
 
 export function Compile(build: Builder): Compiled {
-  return CompileExpression(build(ValueProxy.arg(ROW_ID)).build(), NewContext());
-}
-
-export function CompileLoose(build: LooseBuilder): Compiled {
   return CompileExpression(build(ValueProxy.arg(ROW_ID)).build(), NewContext());
 }
 
