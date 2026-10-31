@@ -259,26 +259,27 @@ function TakeReadOnly(
   walk: ExternalWalk,
   name: string,
   descriptor: ColumnDescriptor,
-  value: unknown,
+  supplied: boolean,
 ): void {
-  if (walk.mode === "insert" && value !== undefined && value !== null) {
+  if (walk.mode === "insert" && supplied) {
     throw ReadOnlyValue(walk, name, descriptor);
   }
 }
 
 function TakeField(walk: ExternalWalk, name: string, value: unknown): void {
   const spec = walk.model.fields[name];
+  const supplied = value !== undefined && value !== null;
   const descriptor = spec.native;
   assert(descriptor, "An external field needs the column it was resolved to");
   if (KeyColumn(walk, descriptor.column)) {
     if (IsReadOnly(descriptor)) {
-      TakeReadOnly(walk, name, descriptor, value);
+      TakeReadOnly(walk, name, descriptor, supplied);
     }
     TakeKeyField(walk, name, descriptor, value);
     return;
   }
   if (IsReadOnly(descriptor)) {
-    TakeReadOnly(walk, name, descriptor, value);
+    TakeReadOnly(walk, name, descriptor, supplied);
     return;
   }
   if (value === undefined && walk.mode === "insert") {
@@ -328,12 +329,12 @@ function TakeKey(walk: ExternalWalk, name: string, value: unknown): void {
  */
 function ClearSilentFields(
   walk: ExternalWalk,
-  document: Record<string, unknown>,
+  supplied: ReadonlySet<string>,
 ): void {
   for (const [name, spec] of Object.entries(walk.model.fields)) {
     const descriptor = spec.native;
     assert(descriptor, "An external field needs the column it was resolved to");
-    const silent = !Object.hasOwn(document, name);
+    const silent = !supplied.has(name);
     if (
       silent &&
       !KeyColumn(walk, descriptor.column) &&
@@ -377,7 +378,7 @@ export function SplitExternalPayload(
     SettleInsertKeys(walk);
   }
   if (mode === "replace") {
-    ClearSilentFields(walk, document);
+    ClearSilentFields(walk, new Set(Object.getOwnPropertyNames(document)));
   }
   return walk.payload;
 }
