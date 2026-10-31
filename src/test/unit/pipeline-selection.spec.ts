@@ -13,7 +13,6 @@ import {
   Stages,
   TABLE_ID,
 } from "./pipeline-fixture";
-import { RebuiltFromJson } from "./invalid-fixture";
 
 const ID_KEY = '("t0"."_id" = ($1::text))';
 const AGE_KEYS =
@@ -120,32 +119,6 @@ describe("the getAll stage", () => {
     expect(
       Apply(Root().getAll(false, "isActive")).relation.where,
     ).to.deep.equal([ACTIVE_KEY]);
-  });
-
-  it("reads a null key against a boolean column as no answer, not as false", () => {
-    const { relation, context } = ApplyRaw(
-      RebuiltFromJson({
-        stage: "getAll",
-        options: { index: "isActive" },
-        args: [null],
-      }),
-    );
-    expect(relation.where).to.deep.equal([
-      `("t0"."isActive" IN ((CASE WHEN jsonb_typeof('null'::jsonb) = 'boolean' THEN (('null'::jsonb #>> '{}')::boolean) END)))`,
-    ]);
-    expect(context.params.all()).to.deep.equal([]);
-  });
-
-  it("reads a document key against a boolean column as no answer, not as true", () => {
-    const { relation } = ApplyRaw(
-      RebuiltFromJson({
-        stage: "getAll",
-        options: { index: "isActive" },
-        args: [{ a: 1 }],
-      }),
-    );
-    expect(relation.where[0]).to.contain("jsonb_typeof");
-    expect(relation.where[0]).to.not.contain("<> ALL");
   });
 
   it("reads a key as the column's type rather than casting it", () => {

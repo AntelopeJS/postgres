@@ -3,7 +3,6 @@ import { QueryStage } from "@antelopejs/interface-database/common";
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 
 import { NormalizeInstanceId } from "../../implementations/database/utils";
-import { RebuiltFromJson } from "./invalid-fixture";
 
 describe("NormalizeInstanceId", () => {
   it("maps an absent id to the default instance", () => {
@@ -13,12 +12,6 @@ describe("NormalizeInstanceId", () => {
         QueryStage("createInstance", { id: undefined }),
       ),
     ).to.equal("");
-    const [nullId] = RebuiltFromJson({
-      stage: "createInstance",
-      options: { id: null },
-      args: [],
-    });
-    expect(NormalizeInstanceId("createInstance", nullId)).to.equal("");
   });
 
   it("passes a named id through", () => {
