@@ -1,8 +1,11 @@
+import assert from "node:assert";
+
 import { Query, ValueProxy } from "@antelopejs/interface-database";
 import { StagedObject } from "@antelopejs/interface-database/common";
 
 import { IsBoolean, IsDocument, IsNumber, IsObject, IsString } from "./guards";
 import type { ConstantJson } from "./sql";
+import { ID_COLUMN } from "./utils";
 
 /**
  * A non-array object read as a document: its own members, classified when they are asked for.
@@ -19,14 +22,14 @@ export interface DocumentView {
 
 /** What every member answers, whichever kind it is. */
 interface MemberFacts {
-  /** What `typeof` answers for the value, which is the only thing a refusal says about it. */
-  typeName: string;
   /** The value as `JSON.stringify` spells it, for a message or a key's text. */
   json(): string;
-  /** The value as `String` spells it, which is what a timestamp cell that is no number is read from. */
-  text(): string;
   /** The value read as a document, for a non-array object. */
   document: DocumentView | undefined;
+  /** Refuses the value as one a query cannot decode, naming what `typeof` answers for it. */
+  refuseInQuery(): never;
+  /** Refuses the value as an inserted document's key, naming what `typeof` answers for it. */
+  refuseAsId(): never;
 }
 
 interface Scalar<Kind extends string, Value> extends MemberFacts {
@@ -116,33 +119,6 @@ function IsConstantJson(value: unknown): value is ConstantJson {
   return IsString(value) || IsNumber(value) || IsBoolean(value);
 }
 
-function IsBigInt(value: unknown): value is bigint {
-  return typeof value === "bigint";
-}
-
-function IsSymbol(value: unknown): value is symbol {
-  return typeof value === "symbol";
-}
-
-function IsUndefined(value: unknown): value is undefined {
-  return typeof value === "undefined";
-}
-
-function IsNullOrObject(value: unknown): value is object | null {
-  return value === null || IsObject(value);
-}
-
-/** What `typeof` answers, spelled from the guards; a value none of them takes is a function. */
-const TYPE_NAMES = [
-  [IsString, "string"],
-  [IsNumber, "number"],
-  [IsBoolean, "boolean"],
-  [IsUndefined, "undefined"],
-  [IsBigInt, "bigint"],
-  [IsSymbol, "symbol"],
-  [IsNullOrObject, "object"],
-] as const;
-
 /**
  * Parses one caller value into the kind every walker branches on. Total: every value has a kind.
  *
@@ -164,10 +140,17 @@ export function ClassifyMember(value: unknown): Member {
       }
     : undefined;
   const facts: MemberFacts = {
-    typeName: TYPE_NAMES.find(([test]) => test(value))?.[1] ?? "function",
     json: () => JSON.stringify(value),
-    text: () => String(value),
     document,
+    refuseInQuery: () => {
+      throw new Error(`Unsupported value of type '${typeof value}' in query`);
+    },
+    refuseAsId: () => {
+      assert(
+        false,
+        `An inserted document's '${ID_COLUMN}' must be a string, received ${typeof value}`,
+      );
+    },
   };
   if (value === undefined) {
     return { ...facts, kind: "absent" };

@@ -1,3 +1,5 @@
+import { AssertionError } from "node:assert";
+
 import { expect } from "chai";
 import { Query, ValueProxy } from "@antelopejs/interface-database";
 import {
@@ -35,6 +37,12 @@ const NAMED_KINDS = [
     label: "a query",
     value: new Query(QueryStage("table", { id: "t" })),
     kind: "query",
+    type: "object",
+  },
+  {
+    label: "a staged object",
+    value: new StagedObject(QueryStage("table", { id: "t" })),
+    kind: "staged",
     type: "object",
   },
   { label: "a list", value: [1], kind: "list", type: "object" },
@@ -97,10 +105,17 @@ interface Cyclic {
 
 describe("ClassifyMember", () => {
   for (const { label, value, kind, type } of NAMED_KINDS) {
-    it(`reads ${label} as ${kind}, answering what typeof answers`, () => {
+    it(`reads ${label} as ${kind}, refusing it with what typeof answers`, () => {
       const member = ClassifyMember(value);
       expect(member.kind).to.equal(kind);
-      expect(member.typeName).to.equal(type);
+      expect(() => member.refuseInQuery()).to.throw(
+        Error,
+        `Unsupported value of type '${type}' in query`,
+      );
+      expect(() => member.refuseAsId()).to.throw(
+        AssertionError,
+        `An inserted document's '_id' must be a string, received ${type}`,
+      );
     });
   }
 
@@ -162,6 +177,13 @@ describe("ClassifyMember", () => {
       { b: null },
     ]);
     expect(stamped.kind === "list" && stamped.constant()).to.equal(undefined);
+  });
+
+  it("offers a list whole when an object in it holds an undefined member", () => {
+    const holed = ClassifyMember([{ a: undefined }]);
+    expect(holed.kind === "list" && holed.constant()).to.deep.equal([
+      { a: undefined },
+    ]);
   });
 });
 
