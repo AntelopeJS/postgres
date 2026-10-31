@@ -3,7 +3,7 @@ import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 
 import { Logger } from "../../logger";
 import { ExternalFeedRefusal } from "./external-refusals";
-import { ReviveValue } from "./result";
+import { ReviveValue, type RowValue } from "./result";
 import type { SqlType } from "./types";
 import { QuoteIdentifier } from "./sql";
 import { EnsureTriggers } from "./migrate";
@@ -40,7 +40,7 @@ import { IsString } from "./guards";
 
 /** One side of an event as the laterals answered it: what it projects, and whether it matched. */
 interface LoggedSide {
-  [DOC_KEY]: unknown;
+  [DOC_KEY]: RowValue;
   [MATCHED_KEY]: boolean | null;
 }
 
