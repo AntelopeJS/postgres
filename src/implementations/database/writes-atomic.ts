@@ -4,6 +4,7 @@ import { ValidateAtomicMutation } from "@antelopejs/interface-database/atomic";
 import { IsQueryStage } from "@antelopejs/interface-database/common";
 import type {
   AtomicMutation,
+  AtomicRecord,
   AtomicMutationOutcome,
   AtomicDelete,
   AtomicUpdate,
@@ -37,10 +38,8 @@ import { IsString } from "./guards";
 export const ATOMIC_MUTATION = "atomicMutation";
 const ATOMIC_ARGUMENT_COUNT = 2;
 
-type Mutation = AtomicMutation<Record<string, unknown>>;
-type RevisionMutation =
-  | AtomicDelete<Record<string, unknown>>
-  | AtomicUpdate<Record<string, unknown>>;
+type Mutation = AtomicMutation<AtomicRecord>;
+type RevisionMutation = AtomicDelete<AtomicRecord> | AtomicUpdate<AtomicRecord>;
 
 function RevisionPredicate(
   target: WriteTarget,
