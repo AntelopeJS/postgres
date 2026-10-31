@@ -1,7 +1,8 @@
 import assert from "node:assert";
 
 import type { Compiled } from "./sql";
-import { DecodeValue } from "./value";
+import { DecodeEntries, DecodeValue } from "./value";
+import type { DocumentView, Member } from "./member";
 import { WrittenAs } from "./readings";
 import { IsJsonBacked, TEXT } from "./types";
 import { NULL_VALUE } from "./writes-shared";
@@ -100,13 +101,13 @@ function Refusal(name: string): Error {
 
 interface PayloadWalk {
   split: PayloadSplit;
-  added: object;
+  added: [string, Member][];
   model: TableModel;
   context: DecodingContext;
   options: PayloadOptions;
 }
 
-function Decoded(walk: PayloadWalk, value: unknown): Compiled {
+function Decoded(walk: PayloadWalk, value: Member): Compiled {
   const compiled = DecodeValue(value, walk.context);
   assert(compiled, "A supplied payload value always decodes");
   return compiled;
@@ -119,8 +120,8 @@ function Decoded(walk: PayloadWalk, value: unknown): Compiled {
  * that generated a key on the way in but asserted a null on the way back would answer 0 for the
  * document it had just written.
  */
-export function NoIdSupplied(value: unknown): value is null | undefined {
-  return value === undefined || value === null;
+export function NoIdSupplied(value: Member): boolean {
+  return value.kind === "absent" || value.kind === "null";
 }
 
 /** Names a key in the message {@link WrittenAs} raises for a value the column cannot hold. */
@@ -144,7 +145,7 @@ function KeySubject(name: string): string {
  * A declared field is written into its own typed column, read as that column's type. A null is SQL
  * NULL and never a stored json null, so the read, `pluck` and `hasfields` agree.
  */
-function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
+function TakeKey(walk: PayloadWalk, name: string, value: Member): void {
   if (RESERVED_COLUMNS.includes(name)) {
     if (name === INSTANCE_COLUMN) {
       return;
@@ -163,11 +164,11 @@ function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
   }
   if (Object.hasOwn(walk.model.fields, name)) {
     const spec = walk.model.fields[name];
-    if (value === undefined) {
+    if (value.kind === "absent") {
       walk.split.cleared.push(spec.column);
       return;
     }
-    if (value === null && IsJsonBacked(spec.type)) {
+    if (value.kind === "null" && IsJsonBacked(spec.type)) {
       walk.split.members.push({
         column: spec.column,
         value: { sql: NULL_VALUE, type: spec.type },
@@ -180,16 +181,11 @@ function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
     });
     return;
   }
-  if (value === undefined) {
+  if (value.kind === "absent") {
     walk.split.removed.push(name);
     return;
   }
-  Object.defineProperty(walk.added, name, {
-    value,
-    enumerable: true,
-    writable: true,
-    configurable: true,
-  });
+  walk.added.push([name, value]);
 }
 
 /**
@@ -213,23 +209,23 @@ function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
  * never names.
  */
 export function SplitPayload(
-  document: Record<string, unknown>,
+  document: DocumentView,
   model: TableModel,
   context: DecodingContext,
   options: PayloadOptions,
 ): PayloadSplit {
   const walk: PayloadWalk = {
     split: { members: [], cleared: [], removed: [] },
-    added: {},
+    added: [],
     model,
     context,
     options,
   };
-  for (const [name, value] of Object.entries(document)) {
+  for (const [name, value] of document.entries()) {
     TakeKey(walk, name, value);
   }
-  if (Object.keys(walk.added).length > 0) {
-    walk.split.extra = DecodeValue(walk.added, context);
+  if (walk.added.length > 0) {
+    walk.split.extra = DecodeEntries(walk.added, context);
   }
   return walk.split;
 }

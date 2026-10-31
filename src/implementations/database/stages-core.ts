@@ -12,6 +12,7 @@ import {
   type StageMap,
 } from "./stage";
 import { IsSubqueryProvider } from "./context";
+import { ClassifyMember } from "./member";
 
 type Equality = (value: Compiled, other: Compiled) => Compiled;
 
@@ -42,7 +43,7 @@ const ArgStage: StageHandler = (_state, stage, context) => {
 
 const ConstantStage: StageHandler = (_state, stage, context) => ({
   current: RequireOperand(
-    DecodeValue(stage.args[FIRST_OPERAND], context),
+    DecodeValue(ClassifyMember(stage.args[FIRST_OPERAND]), context),
     stage,
     FIRST_OPERAND,
   ),

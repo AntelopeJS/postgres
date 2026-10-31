@@ -28,6 +28,7 @@ import {
 } from "./relation";
 import { Prepare, SINGLE_ROW, WHERE_BLOCKERS } from "./render";
 import { IsString } from "./guards";
+import { ClassifyMember } from "./member";
 
 const NO_KEYS = "FALSE";
 const EQUALITY = "=";
@@ -117,7 +118,7 @@ function KeyValue(
   operator = EQUALITY,
 ): string {
   const value = RequireOperand(
-    DecodeValue(key, selection.context),
+    DecodeValue(ClassifyMember(key), selection.context),
     selection.stage,
     index,
   );

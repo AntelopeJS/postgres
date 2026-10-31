@@ -1,3 +1,4 @@
+import { ClassifyMember as Parsed } from "../../implementations/database/member";
 import assert from "node:assert";
 import { expect } from "chai";
 import { QueryStage } from "@antelopejs/interface-database/common";
@@ -65,13 +66,13 @@ function NewContext(recorded: Recorded): DecodingContext {
 
 describe("DecodeValue", () => {
   it("leaves undefined absent", () => {
-    expect(DecodeValue(undefined, NewContext(NewRecorded()))).to.equal(
+    expect(DecodeValue(Parsed(undefined), NewContext(NewRecorded()))).to.equal(
       undefined,
     );
   });
 
   it("encodes null as a json null rather than SQL NULL", () => {
-    const out = DecodeValue(null, NewContext(NewRecorded()));
+    const out = DecodeValue(Parsed(null), NewContext(NewRecorded()));
     expect(out?.sql).to.equal("'null'::jsonb");
     expect(out?.type).to.equal(OPAQUE);
   });
@@ -79,7 +80,7 @@ describe("DecodeValue", () => {
   it("passes a Date through as a timestamptz parameter", () => {
     const context = NewContext(NewRecorded());
     const date = new Date("2003-01-01T00:00:00Z");
-    const out = DecodeValue(date, context);
+    const out = DecodeValue(Parsed(date), context);
     expect(out?.sql).to.equal("($1::timestamptz)");
     expect(out?.type).to.equal(TIMESTAMP);
     expect(context.params.all()).to.deep.equal([date]);
@@ -88,22 +89,25 @@ describe("DecodeValue", () => {
 
   it("maps primitives onto their physical types", () => {
     const context = NewContext(NewRecorded());
-    expect(DecodeValue("x", context)?.sql).to.equal("($1::text)");
-    expect(DecodeValue(12, context)?.sql).to.equal("($2::double precision)");
-    expect(DecodeValue(true, context)?.sql).to.equal("($3::boolean)");
-    expect(DecodeValue("x", context)?.type).to.equal(TEXT);
+    expect(DecodeValue(Parsed("x"), context)?.sql).to.equal("($1::text)");
+    expect(DecodeValue(Parsed(12), context)?.sql).to.equal(
+      "($2::double precision)",
+    );
+    expect(DecodeValue(Parsed(true), context)?.sql).to.equal("($3::boolean)");
+    expect(DecodeValue(Parsed("x"), context)?.type).to.equal(TEXT);
     expect(context.params.all()).to.deep.equal(["x", 12, true, "x"]);
   });
 
   it("rejects a value it cannot represent", () => {
     const context = NewContext(NewRecorded());
-    expect(() => DecodeValue(() => 1, context)).to.throw(/function/);
+    const refused = Parsed(() => 1);
+    expect(() => DecodeValue(refused, context)).to.throw(/function/);
   });
 
   it("dispatches a ValueProxy to the expression compiler", () => {
     const recorded = NewRecorded();
     const proxy = ValueProxy.constant(5);
-    const out = DecodeValue(proxy, NewContext(recorded));
+    const out = DecodeValue(Parsed(proxy), NewContext(recorded));
     expect(out).to.equal(STUB_EXPRESSION);
     expect(recorded.expressions).to.deep.equal([proxy.build()]);
     expect(recorded.subqueries).to.deep.equal([]);
@@ -112,7 +116,7 @@ describe("DecodeValue", () => {
   it("dispatches a Query to the subquery compiler", () => {
     const recorded = NewRecorded();
     const query = new Query(QueryStage("table", { id: "vehicles" }));
-    const out = DecodeValue(query, NewContext(recorded));
+    const out = DecodeValue(Parsed(query), NewContext(recorded));
     expect(out).to.equal(STUB_SUBQUERY);
     expect(recorded.subqueries).to.deep.equal([query.build()]);
   });
@@ -120,13 +124,15 @@ describe("DecodeValue", () => {
   it("dispatches a Query subclass to the subquery compiler", () => {
     const recorded = NewRecorded();
     const datum = new Datum(QueryStage("table", { id: "vehicles" }));
-    expect(DecodeValue(datum, NewContext(recorded))).to.equal(STUB_SUBQUERY);
+    expect(DecodeValue(Parsed(datum), NewContext(recorded))).to.equal(
+      STUB_SUBQUERY,
+    );
     expect(recorded.expressions).to.deep.equal([]);
   });
 
   it("builds a jsonb object from a plain object", () => {
     const context = NewContext(NewRecorded());
-    const out = DecodeValue({ a: 1 }, context);
+    const out = DecodeValue(Parsed({ a: 1 }), context);
     expect(out?.sql).to.equal(
       "jsonb_build_object('a', to_jsonb(($1::double precision)))",
     );
@@ -135,7 +141,7 @@ describe("DecodeValue", () => {
 
   it("omits an undefined member from both the sql and the shape", () => {
     const context = NewContext(NewRecorded());
-    const out = DecodeValue({ a: 1, b: undefined }, context);
+    const out = DecodeValue(Parsed({ a: 1, b: undefined }), context);
     expect(out?.sql).to.equal(
       "jsonb_build_object('a', to_jsonb(($1::double precision)))",
     );
@@ -146,7 +152,7 @@ describe("DecodeValue", () => {
   it("keeps a nested Date as a timestamptz parameter, not a json string", () => {
     const context = NewContext(NewRecorded());
     const date = new Date("2003-01-01T00:00:00Z");
-    const out = DecodeValue({ at: date }, context);
+    const out = DecodeValue(Parsed({ at: date }), context);
     expect(out?.sql).to.equal(
       "jsonb_build_object('at', to_jsonb(($1::timestamptz)))",
     );
@@ -156,7 +162,7 @@ describe("DecodeValue", () => {
 
   it("builds a jsonb array with a uniform element type", () => {
     const context = NewContext(NewRecorded());
-    const out = DecodeValue([1, 2], context);
+    const out = DecodeValue(Parsed([1, 2]), context);
     expect(out?.sql).to.equal("($1::jsonb)");
     expect(context.params.all()).to.deep.equal(["[1,2]"]);
     expect(out?.type).to.deep.equal(ArrayOf(FLOAT));
@@ -164,14 +170,14 @@ describe("DecodeValue", () => {
 
   it("joins a mixed array down to the bottom element type", () => {
     const context = NewContext(NewRecorded());
-    const out = DecodeValue([1, "a", 2], context);
+    const out = DecodeValue(Parsed([1, "a", 2]), context);
     expect(out?.type).to.deep.equal(ArrayOf(OPAQUE));
   });
 
   it("binds a list longer than postgresql's argument cap as one parameter", () => {
     const context = NewContext(NewRecorded());
     const values = Array.from({ length: ARGUMENT_CAP * 2 }, (_, i) => `k${i}`);
-    const out = DecodeValue(values, context);
+    const out = DecodeValue(Parsed(values), context);
     expect(out?.sql).to.equal("($1::jsonb)");
     expect(context.params.all()).to.have.lengthOf(1);
     expect(out?.type).to.deep.equal(ArrayOf(TEXT));
@@ -179,13 +185,13 @@ describe("DecodeValue", () => {
 
   it("still compiles an element the row has to supply", () => {
     const context = NewContext(NewRecorded());
-    const out = DecodeValue([1, ValueProxy.constant(2)], context);
+    const out = DecodeValue(Parsed([1, ValueProxy.constant(2)]), context);
     expect(out?.sql).to.contain("jsonb_build_array");
   });
 
   it("keeps a null array member as a json null", () => {
     const context = NewContext(NewRecorded());
-    const out = DecodeValue([null], context);
+    const out = DecodeValue(Parsed([null]), context);
     expect(out?.sql).to.equal("($1::jsonb)");
     expect(out?.type).to.deep.equal(ArrayOf(OPAQUE));
   });

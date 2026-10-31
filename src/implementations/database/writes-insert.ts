@@ -32,6 +32,7 @@ import {
   WriteTable,
 } from "./writes-shared";
 import { IsString } from "./guards";
+import type { DocumentView } from "./member";
 
 const EXCLUDED_ROW = "EXCLUDED";
 const INSERTED: PayloadOptions = { id: ID_AS_KEY };
@@ -84,18 +85,12 @@ interface InsertRow {
  * The key a document supplies, if it supplies one at all.
  * Read off the raw payload as well as split out of it, since `insert` answers the id it wrote.
  */
-function SuppliedId(document: Record<string, unknown>): string | undefined {
-  const supplied = Object.hasOwn(document, ID_COLUMN)
-    ? document[ID_COLUMN]
-    : undefined;
-  if (NoIdSupplied(supplied)) {
+function SuppliedId(document: DocumentView): string | undefined {
+  const supplied = document.own(ID_COLUMN);
+  if (supplied === undefined || NoIdSupplied(supplied)) {
     return undefined;
   }
-  assert(
-    IsString(supplied),
-    `An inserted document's '${ID_COLUMN}' must be a string, received ${typeof supplied}`,
-  );
-  return supplied;
+  return supplied.kind === "text" ? supplied.value : supplied.refuseAsId();
 }
 
 /**
@@ -103,7 +98,7 @@ function SuppliedId(document: Record<string, unknown>): string | undefined {
  * A generated key is bound before the split, so a tuple's `$n` run in the order it reads them.
  */
 function InsertRowOf(
-  document: Record<string, unknown>,
+  document: DocumentView,
   model: TableModel,
   context: DecodingContext,
 ): InsertRow {

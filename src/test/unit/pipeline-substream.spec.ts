@@ -1,3 +1,4 @@
+import { ClassifyMember } from "../../implementations/database/member";
 import { expect } from "chai";
 import assert from "node:assert";
 import { Stream } from "@antelopejs/interface-database";
@@ -127,7 +128,7 @@ function Collects(target: string, deduped = ""): string {
  */
 function LedgerOver(members: Record<string, StagedObject>): ParamLedger {
   const { relation, context } = GroupedTable();
-  const document = DecodeValue(members, context);
+  const document = DecodeValue(ClassifyMember(members), context);
   assert(document, "this fixture compiles a document of sub-streams");
   return ReadParamLedger({
     relation: SetProjection(relation, document),

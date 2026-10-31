@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { StagedObject } from "@antelopejs/interface-database/common";
+import { ClassifyMember, type DocumentView, type Member } from "./member";
 
 import { PhysicalType, type SqlType, TEXT } from "./types";
 import { DecodeValue } from "./value";
@@ -14,7 +14,6 @@ import {
   IsReadOnly,
   ReadOnlyReason,
 } from "./external-types";
-import { IsString } from "./guards";
 
 /** Which statement a payload is split for: the three treat keys and absences differently. */
 export type ExternalWriteMode = "insert" | "update" | "replace";
@@ -29,7 +28,7 @@ export interface ExternalAssignment {
   field: string;
   descriptor: ColumnDescriptor;
   value: Compiled;
-  raw?: unknown;
+  raw?: Member;
   /** A field `replace` left out of a column with a default: it is reset to that default. */
   toDefault?: boolean;
 }
@@ -59,7 +58,7 @@ export interface KeyFieldClaim {
   field: string;
   descriptor: ColumnDescriptor;
   type: SqlType;
-  raw: unknown;
+  raw: Member;
 }
 
 /** A key field's value read as the field's declared kind, decoded where it is used. */
@@ -87,7 +86,7 @@ export function KeyValue(
   asserted: AssertedKey,
   context: DecodingContext,
 ): Compiled {
-  const decoded = DecodeValue(asserted.raw, context);
+  const decoded = DecodeValue(ClassifyMember(asserted.raw), context);
   assert(decoded, "A claimed key is a string, so it always decodes");
   return WrittenAs(decoded, TEXT, `Key column "${asserted.descriptor.column}"`);
 }
@@ -101,7 +100,7 @@ interface ExternalWalk {
   payload: ExternalPayload;
 }
 
-function Decoded(walk: ExternalWalk, value: unknown): Compiled {
+function Decoded(walk: ExternalWalk, value: Member): Compiled {
   const decoded = DecodeValue(value, walk.context);
   if (!decoded) {
     throw new Error(`A payload value for '${walk.path}' could not be read`);
@@ -155,8 +154,8 @@ function Claim(walk: ExternalWalk, claimed: AssertedKey): void {
 }
 
 /** A key value as the text a key column is matched by: a number or a string as it is spelled. */
-function KeyText(value: unknown): string {
-  return IsString(value) ? value : JSON.stringify(value);
+function KeyText(value: Member): string {
+  return value.kind === "text" ? value.value : value.json();
 }
 
 /** The items of a JSON array spelled by `text`, or none when it spells anything else. */
@@ -170,8 +169,8 @@ function JsonList(text: string): unknown[] {
 }
 
 /** Claims `_id`'s parts: the value itself for a one-column key, a JSON array of their texts for a wider one. */
-function TakeId(walk: ExternalWalk, value: unknown): void {
-  if (value === undefined || value === null) {
+function TakeId(walk: ExternalWalk, value: Member): void {
+  if (value.kind === "absent" || value.kind === "null") {
     return;
   }
   const key = walk.external.key ?? [];
@@ -183,13 +182,13 @@ function TakeId(walk: ExternalWalk, value: unknown): void {
     });
     return;
   }
-  const parts = IsString(value) ? JsonList(value) : [];
+  const parts = value.kind === "text" ? JsonList(value.value) : [];
   if (
     parts.length !== key.length ||
     !parts.every((part): part is string => typeof part === "string")
   ) {
     throw new Error(
-      `Payload key '_id' of '${walk.path}' is ${JSON.stringify(value)}, which is not a key of this relation: a key of ${key.length} columns is spelled as a JSON array of their texts`,
+      `Payload key '_id' of '${walk.path}' is ${value.json()}, which is not a key of this relation: a key of ${key.length} columns is spelled as a JSON array of their texts`,
     );
   }
   parts.forEach((part, position) =>
@@ -206,7 +205,7 @@ function Disagrees(claim: KeyFieldClaim, text: string): boolean {
     return KeyText(claim.raw) !== text;
   }
   if (claim.type.kind === "float" && !claim.descriptor.lossy) {
-    return Number(text) !== claim.raw;
+    return claim.raw.kind !== "number" || claim.raw.value !== Number(text);
   }
   return false;
 }
@@ -249,9 +248,9 @@ function TakeReadOnly(
   }
 }
 
-function TakeField(walk: ExternalWalk, name: string, value: unknown): void {
+function TakeField(walk: ExternalWalk, name: string, value: Member): void {
   const spec = walk.model.fields[name];
-  const supplied = value !== undefined && value !== null;
+  const supplied = value.kind !== "absent" && value.kind !== "null";
   const descriptor = spec.native;
   assert(descriptor, "An external field needs the column it was resolved to");
   if (KeyColumn(walk, descriptor.column)) {
@@ -272,23 +271,25 @@ function TakeField(walk: ExternalWalk, name: string, value: unknown): void {
     TakeReadOnly(walk, name, descriptor, supplied);
     return;
   }
-  if (value === undefined && walk.mode === "insert") {
+  if (value.kind === "absent" && walk.mode === "insert") {
     return;
   }
-  const written: Compiled =
-    value === undefined || value === null
-      ? Absent(spec.type)
-      : WrittenAs(
-          Decoded(walk, value),
-          spec.type,
-          `Field '${walk.path}.${name}'`,
-        );
+  const written: Compiled = !supplied
+    ? Absent(spec.type)
+    : WrittenAs(
+        Decoded(walk, value),
+        spec.type,
+        `Field '${walk.path}.${name}'`,
+      );
   walk.payload.assignments.push({
     field: name,
     descriptor,
     value: written,
     raw:
-      value !== undefined && value !== null && !(value instanceof StagedObject)
+      supplied &&
+      value.kind !== "proxy" &&
+      value.kind !== "query" &&
+      value.kind !== "staged"
         ? value
         : undefined,
   });
@@ -299,7 +300,7 @@ function Absent(type: SqlType): Compiled {
   return { sql: `(NULL::${PhysicalType(type)})`, type };
 }
 
-function TakeKey(walk: ExternalWalk, name: string, value: unknown): void {
+function TakeKey(walk: ExternalWalk, name: string, value: Member): void {
   if (name === ID_COLUMN) {
     TakeId(walk, value);
     return;
@@ -346,7 +347,7 @@ function ClearSilentFields(
  * insert, the columns only the database writes left to it.
  */
 export function SplitExternalPayload(
-  document: Record<string, unknown>,
+  document: DocumentView,
   model: TableModel,
   context: DecodingContext,
   mode: ExternalWriteMode,
@@ -361,14 +362,14 @@ export function SplitExternalPayload(
     context,
     payload: { assignments: [], asserted: new Map(), keyFields: [] },
   };
-  for (const [name, value] of Object.entries(document)) {
+  for (const [name, value] of document.entries()) {
     TakeKey(walk, name, value);
   }
   if (mode === "insert") {
     SettleInsertKeys(walk);
   }
   if (mode === "replace") {
-    ClearSilentFields(walk, new Set(Object.getOwnPropertyNames(document)));
+    ClearSilentFields(walk, new Set(document.ownNames()));
   }
   return walk.payload;
 }

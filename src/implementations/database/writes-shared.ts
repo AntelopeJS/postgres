@@ -9,7 +9,7 @@ import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import { type Relation, RequireOrigin, type TableOrigin } from "./relation";
 import { AliasedColumns, ColumnRowSource, type RowSource } from "./row-source";
 import { FIRST_OPERAND } from "./stage";
-import { IsDocument } from "./guards";
+import { ClassifyMember, type DocumentView } from "./member";
 
 /**
  * The rows a write changes, and everything it may know about them.
@@ -164,17 +164,16 @@ export function DescribeKind(value: unknown): string {
  * An array is the batch and never a document, which is the reading every other write shares. The
  * refusal names the position, since a batch is where a caller would look for the entry.
  */
-export function InsertedDocuments(
-  stage: QueryStage,
-): Record<string, unknown>[] {
+export function InsertedDocuments(stage: QueryStage): DocumentView[] {
   const argument: unknown = stage.args[FIRST_OPERAND];
-  const list = Array.isArray(argument) ? argument : [argument];
+  const list: unknown[] = Array.isArray(argument) ? argument : [argument];
   return list.map((entry, position) => {
+    const { document } = ClassifyMember(entry);
     assert(
-      IsDocument(entry),
+      document,
       `The '${stage.stage}' stage takes documents, and the one at position ${position} is ${DescribeKind(entry)}`,
     );
-    return entry;
+    return document;
   });
 }
 

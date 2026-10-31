@@ -3,7 +3,7 @@ import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 import { SchemaInstance, ValueProxy } from "@antelopejs/interface-database";
 import {
   QueryStage,
-  type StagedObject,
+  StagedObject,
 } from "@antelopejs/interface-database/common";
 
 import { RefusingCompilers, WithOptions } from "./spec-fixture";
@@ -183,6 +183,13 @@ describe("RegisteredOrigin", () => {
 });
 
 describe("CollectSchemaIds", () => {
+  it("reads the schema a staged object reaches when it is neither a proxy nor a query", () => {
+    const staged = new StagedObject(QueryStage("schema", { id: SCHEMA_ID }));
+    expect(CollectSchemaIds([QueryStage("insert", {}, staged)])).to.deep.equal([
+      SCHEMA_ID,
+    ]);
+  });
+
   it("collects the schema a plain table query names", () => {
     expect(CollectSchemaIds(Root().build())).to.deep.equal([SCHEMA_ID]);
   });

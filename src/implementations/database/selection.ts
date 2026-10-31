@@ -1,10 +1,9 @@
 import assert from "node:assert";
-import { StagedObject } from "@antelopejs/interface-database/common";
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 
 import { TEXT } from "./types";
 import { IndexFields } from "./ddl";
-import { IsPlainObject } from "./value";
+import { ClassifyMember, type Member } from "./member";
 import type { ExternalRelation } from "./fields";
 import { QualifiedName, TableReference } from "./identifier";
 import type { DecodingContext } from "./context";
@@ -17,7 +16,7 @@ import {
   OptionsOf,
   type QueryStage,
 } from "./utils";
-import { IsObject, IsString } from "./guards";
+import { IsString } from "./guards";
 
 export const SCHEMA_STAGE = "schema";
 const INSTANCE_STAGE = "instance";
@@ -206,25 +205,24 @@ interface SchemaWalk {
  * Walks a stage argument, which is caller data and may be any shape a document may be.
  * Plain objects reach every recorded lambda body; the visited set is for a caller's cyclic object.
  */
-function CollectValue(value: unknown, walk: SchemaWalk): void {
-  if (!IsObject(value) || walk.visited.has(value)) {
+function CollectValue(value: Member, walk: SchemaWalk): void {
+  if (!("identity" in value) || walk.visited.has(value.identity)) {
     return;
   }
-  walk.visited.add(value);
-  if (value instanceof StagedObject) {
-    CollectInto(value.build(), walk);
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      CollectValue(item, walk);
-    }
-    return;
-  }
-  if (IsPlainObject(value)) {
-    for (const item of Object.values(value)) {
-      CollectValue(item, walk);
-    }
+  walk.visited.add(value.identity);
+  switch (value.kind) {
+    case "proxy":
+    case "query":
+    case "staged":
+      CollectInto(value.value.build(), walk);
+      return;
+    case "list":
+      value.items().forEach((item) => CollectValue(item, walk));
+      return;
+    case "record":
+      for (const [, item] of value.document.entries()) {
+        CollectValue(item, walk);
+      }
   }
 }
 
@@ -235,7 +233,7 @@ function CollectInto(stages: QueryStage[], walk: SchemaWalk): void {
       walk.ids.add(id);
     }
     for (const arg of stage.args ?? []) {
-      CollectValue(arg, walk);
+      CollectValue(ClassifyMember(arg), walk);
     }
   }
 }

@@ -1,6 +1,5 @@
 import assert from "node:assert";
 
-import { Query, ValueProxy } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
 
 import { Cast, UnifyAll } from "./coerce";
@@ -23,6 +22,12 @@ import {
   TIMESTAMP,
 } from "./types";
 import { IsBoolean, IsNumber, IsString } from "./guards";
+import {
+  ClassifyMember,
+  IsPlainObject,
+  type ListMember,
+  type Member,
+} from "./member";
 
 /**
  * The single json null every `null` in a query decodes to.
@@ -47,78 +52,36 @@ export const NULL_JSON: Compiled = { sql: JSON_NULL, type: OPAQUE };
  * what keeps that obligation checkable rather than a matter of trust.
  */
 export function DecodeValue(
-  value: unknown,
+  value: Member,
   context: DecodingContext,
 ): Compiled | undefined {
-  if (value === undefined) {
-    return undefined;
+  switch (value.kind) {
+    case "absent":
+      return undefined;
+    case "null":
+      return NULL_JSON;
+    case "proxy":
+      return context.expression(value.value.build());
+    case "query":
+      return context.subquery(value.value.build());
+    case "date":
+      return Param(context.params, value.value, TIMESTAMP);
+    case "list":
+      return DecodeArray(value, context);
+    case "record":
+      return DecodeEntries(value.document.entries(), context);
+    case "text":
+      return Param(context.params, value.value, TEXT);
+    case "number":
+      return Param(context.params, value.value, FLOAT);
+    case "boolean":
+      return Param(context.params, value.value, BOOL);
+    case "staged":
+    case "opaque":
+      return value.refuseInQuery();
+    default:
+      return value satisfies never;
   }
-  if (value === null) {
-    return NULL_JSON;
-  }
-  if (value instanceof ValueProxy) {
-    return context.expression(value.build());
-  }
-  if (value instanceof Query) {
-    return context.subquery(value.build());
-  }
-  if (value instanceof Date) {
-    return Param(context.params, value, TIMESTAMP);
-  }
-  if (Array.isArray(value)) {
-    return DecodeArray(value, context);
-  }
-  if (IsPlainObject(value)) {
-    return DecodeObject(value, context);
-  }
-  if (IsString(value)) {
-    return Param(context.params, value, TEXT);
-  }
-  if (IsNumber(value)) {
-    return Param(context.params, value, FLOAT);
-  }
-  if (IsBoolean(value)) {
-    return Param(context.params, value, BOOL);
-  }
-  throw new Error(`Unsupported value of type '${typeof value}' in query`);
-}
-
-/**
- * Whether a value is an object literal rather than an instance of something.
- *
- * The distinction is what tells a document apart from a `ValueProxy`, which is an object too: a
- * membership test that only asked whether the value is an object would read a recorded expression
- * as a document of the keys its class happens to carry.
- */
-export function IsPlainObject(
-  value: unknown,
-): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Object.getPrototypeOf(value) === Object.prototype
-  );
-}
-
-/**
- * Whether a value is json the driver can send whole, rather than an expression to compile.
- *
- * A `ValueProxy` or a `Query` reads the row and has to be emitted as SQL; a `Date` is deliberately
- * excluded because `to_jsonb(timestamptz)` and `JSON.stringify` do not spell the same instant.
- */
-function IsConstantJson(value: unknown): value is ConstantJson {
-  if (value === null) {
-    return true;
-  }
-  if (Array.isArray(value)) {
-    return value.every(IsConstantJson);
-  }
-  if (IsPlainObject(value)) {
-    return Object.values(value).every(
-      (item) => item === undefined || IsConstantJson(item),
-    );
-  }
-  return IsString(value) || IsNumber(value) || IsBoolean(value);
 }
 
 /**
@@ -160,24 +123,28 @@ function ConstantType(value: ConstantJson): SqlType {
  * the ones they did not count, like every route of an application. Sending the array itself keeps
  * the same value, the same type, and one parameter whatever its length.
  */
-function DecodeArray(values: unknown[], context: DecodingContext): Compiled {
-  if (values.every(IsConstantJson)) {
-    const type = ArrayOf(UnifyAll(values.map(ConstantType)));
-    return { sql: Param(context.params, values, OPAQUE).sql, type };
+function DecodeArray(list: ListMember, context: DecodingContext): Compiled {
+  const constant = list.constant();
+  if (constant) {
+    const type = ArrayOf(UnifyAll(constant.map(ConstantType)));
+    return { sql: Param(context.params, constant, OPAQUE).sql, type };
   }
-  const items = values.map((item) => DecodeValue(item, context) ?? NULL_JSON);
+  const items = list
+    .items()
+    .map((item) => DecodeValue(item, context) ?? NULL_JSON);
   const elem = UnifyAll(items.map((item) => item.type));
   const parts = items.map((item) => Cast(item, OPAQUE).sql);
   return { sql: `jsonb_build_array(${parts.join(", ")})`, type: ArrayOf(elem) };
 }
 
-function DecodeObject(
-  value: Record<string, unknown>,
+/** A document built from named members, each cast to jsonb; an absent member is left out. */
+export function DecodeEntries(
+  entries: [string, Member][],
   context: DecodingContext,
 ): Compiled {
   const parts: string[] = [];
   const keyTypes: Record<string, SqlType> = {};
-  for (const [name, item] of Object.entries(value)) {
+  for (const [name, item] of entries) {
     const compiled = DecodeValue(item, context);
     if (!compiled) {
       continue;
@@ -296,6 +263,6 @@ export function DecodeFunction(
   bindings: ArgumentBinding[],
 ): Compiled | undefined {
   return WithBoundArguments(func, context, bindings, () =>
-    DecodeValue(func.args[FUNCTION_BODY], context),
+    DecodeValue(ClassifyMember(func.args[FUNCTION_BODY]), context),
   );
 }

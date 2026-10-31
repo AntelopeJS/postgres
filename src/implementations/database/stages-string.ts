@@ -14,6 +14,7 @@ import {
 } from "./stage";
 import { IsString } from "./guards";
 import { OptionsOf } from "./utils";
+import { ClassifyMember } from "./member";
 
 interface SplitOptions {
   separator?: string;
@@ -99,7 +100,11 @@ const MatchStage = LiftRaw((value, stage, context) => {
   const raw: unknown = stage.args[FIRST_OPERAND];
   const pattern = IsString(raw)
     ? Param(context.params, Translated(raw), TEXT)
-    : RequireOperand(DecodeValue(raw, context), stage, FIRST_OPERAND);
+    : RequireOperand(
+        DecodeValue(ClassifyMember(raw), context),
+        stage,
+        FIRST_OPERAND,
+      );
   return {
     sql: `(${Text(value).sql} ${MATCH_OPERATOR} ${Text(pattern).sql})`,
     type: BOOL,
