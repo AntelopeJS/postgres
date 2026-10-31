@@ -9,8 +9,7 @@
     "anti-slop/no-unsafe-dictionary-type": 19,
     "anti-slop/require-safety-comment-for-type-assertion": 14,
     "typescript/no-unsafe-assignment": 1,
-    "typescript/no-unsafe-return": 22,
-    "typescript/unbound-method": 1
+    "typescript/no-unsafe-return": 22
   },
   "oversizeFiles": {}
 }
