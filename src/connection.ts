@@ -275,10 +275,10 @@ function WarnSlowAcquire() {
  * checkout — three on one client, measured. `pg-pool` *reassigns* `client.release` on every
  * checkout, so a wrapper installed once per client would be thrown away by the next one; this
  * wraps whatever `release` the current checkout installed, forwards every argument to it, and puts
- * it back.
+ * it back, bound to the client.
  */
 export function GuardHeldClient(client: PoolClient): PoolClient {
-  const checkin = client.release;
+  const checkin = client.release.bind(client);
   client.on(CLIENT_ERROR, ReportHeldClientError);
   client.release = (...args: Parameters<PoolClient["release"]>) => {
     client.off(CLIENT_ERROR, ReportHeldClientError);
