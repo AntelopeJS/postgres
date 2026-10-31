@@ -6,7 +6,7 @@ import { WrittenAs } from "./readings";
 import { IsJsonBacked, TEXT } from "./types";
 import { NULL_VALUE } from "./writes-shared";
 import type { DecodingContext } from "./context";
-import type { FieldSpec, TableModel } from "./fields";
+import type { TableModel } from "./fields";
 import { ID_COLUMN, INSTANCE_COLUMN, RESERVED_COLUMNS } from "./utils";
 
 /**
@@ -85,7 +85,7 @@ export const ID_AS_ASSERTION: IdDisposition = (split, value) => {
  *
  * `_extra` is the adapter's own and is refused under every stage. `_id` and `_instance` are the
  * two a read document carries: `id` says what this stage makes of the first, and the second is
- * dropped under all of them for the reason {@link TakeReserved} gives.
+ * dropped under all of them for the reason {@link TakeKey} gives.
  */
 export interface PayloadOptions {
   id: IdDisposition;
@@ -129,8 +129,10 @@ function KeySubject(name: string): string {
 }
 
 /**
- * Routes the two reserved columns a payload may name, and refuses the one it may not.
- * The key is read as `TEXT` the way `get` reads it, and no value at all asserts nothing.
+ * Sorts one key of a payload into the split.
+ *
+ * The two reserved columns a payload may name are routed, and the one it may not is refused. The
+ * key is read as `TEXT` the way `get` reads it, and no value at all asserts nothing.
  *
  * `_instance` is read and dropped rather than refused, because it is a key every read document
  * carries and writing one straight back has to be the no-op the same round trip through `_id` is.
@@ -138,57 +140,44 @@ function KeySubject(name: string): string {
  * instance, and a cross-instance one addresses its rows by an identity tuple that names each row's
  * instance, so no reachable write would target different rows for having honoured it. It is never
  * an assignment either — a write does not move a row between instances.
+ *
+ * A declared field is written into its own typed column, read as that column's type. A null is SQL
+ * NULL and never a stored json null, so the read, `pluck` and `hasfields` agree.
  */
-function TakeReserved(walk: PayloadWalk, name: string, value: unknown): void {
-  if (name === INSTANCE_COLUMN) {
-    return;
-  }
-  if (name !== ID_COLUMN) {
-    throw Refusal(name);
-  }
-  if (NoIdSupplied(value)) {
-    return;
-  }
-  walk.options.id(
-    walk.split,
-    WrittenAs(Decoded(walk, value), TEXT, KeySubject(name)),
-  );
-}
-
-/**
- * Writes one declared field into its own typed column, read as that column's type.
- * A null is SQL NULL and never a stored json null, so the read, `pluck` and `hasfields` agree.
- */
-function TakeDeclared(
-  walk: PayloadWalk,
-  name: string,
-  spec: FieldSpec,
-  value: unknown,
-): void {
-  if (value === undefined) {
-    walk.split.cleared.push(spec.column);
-    return;
-  }
-  if (value === null && IsJsonBacked(spec.type)) {
-    walk.split.members.push({
-      column: spec.column,
-      value: { sql: NULL_VALUE, type: spec.type },
-    });
-    return;
-  }
-  walk.split.members.push({
-    column: spec.column,
-    value: WrittenAs(Decoded(walk, value), spec.type, KeySubject(name)),
-  });
-}
-
 function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
   if (RESERVED_COLUMNS.includes(name)) {
-    TakeReserved(walk, name, value);
+    if (name === INSTANCE_COLUMN) {
+      return;
+    }
+    if (name !== ID_COLUMN) {
+      throw Refusal(name);
+    }
+    if (NoIdSupplied(value)) {
+      return;
+    }
+    walk.options.id(
+      walk.split,
+      WrittenAs(Decoded(walk, value), TEXT, KeySubject(name)),
+    );
     return;
   }
   if (Object.hasOwn(walk.model.fields, name)) {
-    TakeDeclared(walk, name, walk.model.fields[name], value);
+    const spec = walk.model.fields[name];
+    if (value === undefined) {
+      walk.split.cleared.push(spec.column);
+      return;
+    }
+    if (value === null && IsJsonBacked(spec.type)) {
+      walk.split.members.push({
+        column: spec.column,
+        value: { sql: NULL_VALUE, type: spec.type },
+      });
+      return;
+    }
+    walk.split.members.push({
+      column: spec.column,
+      value: WrittenAs(Decoded(walk, value), spec.type, KeySubject(name)),
+    });
     return;
   }
   if (value === undefined) {
@@ -216,7 +205,7 @@ function TakeKey(walk: PayloadWalk, name: string, value: unknown): void {
  * indistinguishable from a key that was never written. The walk reads the payload's own entries
  * rather than its defined values, since a key present with an `undefined` value is still a key the
  * caller wrote. That rule holds for every declared field and every undeclared key; `_id` is its one
- * exception and {@link TakeReserved} states why, since a null is neither a value it could store nor
+ * exception and {@link TakeKey} states why, since a null is neither a value it could store nor
  * a claim it could make.
  *
  * Nothing is decoded that the returned split does not carry: every `DecodeValue` appends to the
