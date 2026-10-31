@@ -6,7 +6,7 @@ feed structurally cannot see.
 `table.changes()` returns an async iterable of `{ changeType, oldValue?, newValue? }`. It must be
 **iterated**, and it must be the **last** stage of a query.
 
-```typescript
+```typescript fragment
 for await (const change of table
   .filter((d) => d.key("price").lt(100))
   .changes()) {

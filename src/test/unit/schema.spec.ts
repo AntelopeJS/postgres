@@ -65,3 +65,22 @@ describe("the registry accessors", () => {
     expect(WaitForSchemaReady(INHERITED)).to.be.an.instanceOf(Promise);
   });
 });
+
+describe("a schema registered under an id named after an Object.prototype member", () => {
+  const definition: SchemaDefinition = {
+    accounts: { fields: { name: "string" }, indexes: {} },
+  };
+
+  for (const schemaId of ["__proto__", "constructor"]) {
+    it(`finds ${schemaId} again like any other id`, async () => {
+      const registered = Schemas.register(schemaId, definition);
+      try {
+        expect(GetSchema(schemaId)).to.equal(definition);
+        expect(GetTableNames(schemaId)).to.deep.equal(["accounts"]);
+      } finally {
+        await registered.catch(() => undefined);
+        Schemas.unregister(schemaId);
+      }
+    });
+  }
+});

@@ -4,7 +4,7 @@
 and reads and writes their rows. It is for describing an existing database to AntelopeJS, typically
 a schema written by inspecting the client's catalog. It never changes that database's structure.
 
-```typescript
+```typescript fragment
 {
     mode: "external",
     url: "postgres://dms_reader@client-db:5432/erp",
@@ -15,7 +15,7 @@ a schema written by inspecting the client's catalog. It never changes that datab
 rather than falling back to the owned mode's default. Projects normally set it through
 `envOverrides`, so the credentials stay out of the repository:
 
-```typescript
+```typescript fragment
 envOverrides: { ERP_DATABASE_URL: "modules.postgres-erp.config.url" },
 ```
 
@@ -145,7 +145,7 @@ accepts.
 It is a development tool. It answers under `ajs project dev` and `ajs project run`, and refuses under
 `ajs project start` unless enabled explicitly:
 
-```typescript
+```typescript fragment
 {
     mode: "external",
     url: "…",
@@ -182,7 +182,7 @@ owned instance always fails construct when it cannot connect.
 Each consumer reaches the catalog through a connection on its own module entry, and two consumers
 of the same database give theirs the same id:
 
-```typescript
+```typescript fragment
 "dms-builder": {
     importOverrides: [
         { interface: "@antelopejs/interface-database-catalog", source: "postgres-erp", id: "erp" },

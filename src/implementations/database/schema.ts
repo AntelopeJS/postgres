@@ -17,11 +17,11 @@ export type CrossInstanceScanNotice = (indexId: string) => void;
 
 type TableScanNotices = Record<string, CrossInstanceScanNotice>;
 
-const definitions: Record<string, SchemaDefinition> = {};
-const schemaModels: Record<string, SchemaModel> = {};
-const scanNotices: Record<string, TableScanNotices> = {};
-const ready: Record<string, Promise<void>> = {};
-const indexing: Record<string, Promise<void>> = {};
+const definitions = new Map<string, SchemaDefinition>();
+const schemaModels = new Map<string, SchemaModel>();
+const scanNotices = new Map<string, TableScanNotices>();
+const ready = new Map<string, Promise<void>>();
+const indexing = new Map<string, Promise<void>>();
 const guardedWrites = new Set<string>();
 
 function UnservedScanWarning(
@@ -91,12 +91,11 @@ async function InitializeExternal(
   schema: SchemaDefinition,
   parsed: SchemaModel,
 ) {
-  schemaModels[schemaId] = await DescribeExternalSchema(
+  schemaModels.set(
     schemaId,
-    schema,
-    parsed,
+    await DescribeExternalSchema(schemaId, schema, parsed),
   );
-  scanNotices[schemaId] = QuietNotices(schema);
+  scanNotices.set(schemaId, QuietNotices(schema));
 }
 
 /**
@@ -109,10 +108,10 @@ async function initialize(schemaId: string, schema: SchemaDefinition) {
     await InitializeExternal(schemaId, schema, model);
     return;
   }
-  schemaModels[schemaId] = model;
-  scanNotices[schemaId] = SchemaScanNotices(schemaId, schema, model);
+  schemaModels.set(schemaId, model);
+  scanNotices.set(schemaId, SchemaScanNotices(schemaId, schema, model));
   const plans = await ConvergeTables(schemaId, schema, model);
-  indexing[schemaId] = BuildIndexes(schemaId, plans);
+  indexing.set(schemaId, BuildIndexes(schemaId, plans));
   guardedWrites.delete(schemaId);
   if (DeclaresUniqueIndex(schema)) {
     guardedWrites.add(schemaId);
@@ -140,7 +139,7 @@ function DeclaresUniqueIndex(schema: SchemaDefinition): boolean {
  * **A failed registration only rolls back state it still owns.** Registration is fire-and-forget
  * and re-registering an id is legal, so a slow failure can settle *after* a later registration of
  * the same id has already succeeded and installed its own definition, shape and gate. Deleting
- * unconditionally there wipes the live schema and leaves the worst of both: `ready[schemaId]` is
+ * unconditionally there wipes the live schema and leaves the worst of both: `ready.get(schemaId)` is
  * the second registration's *resolved* promise, so every subsequent query passes
  * {@link WaitForSchemaReady} and then dies in {@link GetTableModel} with `Unknown schema` — for a
  * schema that is registered, converged, and whose tables exist. Comparing the gate against this
@@ -148,28 +147,28 @@ function DeclaresUniqueIndex(schema: SchemaDefinition): boolean {
  */
 export const Schemas = {
   register(schemaId: string, schema: SchemaDefinition) {
-    definitions[schemaId] = schema;
+    definitions.set(schemaId, schema);
     const pending: Promise<void> = initialize(schemaId, schema).catch(
       (err: unknown) => {
-        if (Object.hasOwn(ready, schemaId) && ready[schemaId] === pending) {
-          delete definitions[schemaId];
-          delete schemaModels[schemaId];
-          delete scanNotices[schemaId];
+        if (ready.get(schemaId) === pending) {
+          definitions.delete(schemaId);
+          schemaModels.delete(schemaId);
+          scanNotices.delete(schemaId);
           guardedWrites.delete(schemaId);
         }
         throw err;
       },
     );
-    ready[schemaId] = pending;
+    ready.set(schemaId, pending);
     pending.catch(() => {});
     return pending;
   },
   unregister(schemaId: string) {
-    delete definitions[schemaId];
-    delete schemaModels[schemaId];
-    delete scanNotices[schemaId];
-    delete ready[schemaId];
-    delete indexing[schemaId];
+    definitions.delete(schemaId);
+    schemaModels.delete(schemaId);
+    scanNotices.delete(schemaId);
+    ready.delete(schemaId);
+    indexing.delete(schemaId);
     guardedWrites.delete(schemaId);
   },
 };
@@ -183,12 +182,13 @@ function MissingTable(schemaId: string, tableId: string): string {
 }
 
 export function WaitForSchemaReady(schemaId: string): Promise<void> {
-  return Object.hasOwn(ready, schemaId) ? ready[schemaId] : Promise.resolve();
+  return ready.get(schemaId) ?? Promise.resolve();
 }
 
 export function GetSchema(schemaId: string): SchemaDefinition {
-  assert(Object.hasOwn(definitions, schemaId), MissingSchema(schemaId));
-  return definitions[schemaId];
+  const schema = definitions.get(schemaId);
+  assert(schema, MissingSchema(schemaId));
+  return schema;
 }
 
 export function GetTable(schemaId: string, tableId: string): TableDefinition {
@@ -198,8 +198,8 @@ export function GetTable(schemaId: string, tableId: string): TableDefinition {
 }
 
 export function GetTableModel(schemaId: string, tableId: string): TableModel {
-  assert(Object.hasOwn(schemaModels, schemaId), MissingSchema(schemaId));
-  const model = schemaModels[schemaId];
+  const model = schemaModels.get(schemaId);
+  assert(model, MissingSchema(schemaId));
   assert(Object.hasOwn(model, tableId), MissingTable(schemaId, tableId));
   return model[tableId];
 }
@@ -239,8 +239,8 @@ export function GetCrossInstanceScanNotice(
   schemaId: string,
   tableId: string,
 ): CrossInstanceScanNotice {
-  assert(Object.hasOwn(scanNotices, schemaId), MissingSchema(schemaId));
-  const notices = scanNotices[schemaId];
+  const notices = scanNotices.get(schemaId);
+  assert(notices, MissingSchema(schemaId));
   assert(Object.hasOwn(notices, tableId), MissingTable(schemaId, tableId));
   return notices[tableId];
 }
@@ -251,9 +251,7 @@ export function GetCrossInstanceScanNotice(
  */
 export async function WaitForIndexes(schemaId: string): Promise<void> {
   await WaitForSchemaReady(schemaId);
-  if (Object.hasOwn(indexing, schemaId)) {
-    await indexing[schemaId];
-  }
+  await indexing.get(schemaId);
 }
 
 /**
