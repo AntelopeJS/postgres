@@ -272,9 +272,13 @@ describe("DecodeFunction", () => {
   it("unbinds even when the body fails to decode", () => {
     const context = NewContext(NewRecorded());
     const source = new ColumnRowSource(AliasedColumns("t"), emptyTable);
-    const func = LambdaStage(QueryStage("func", undefined, [7], () => 1));
+    const func = LambdaStage(
+      QueryStage("func", undefined, [7], ValueProxy.arg(99)),
+    );
 
-    expect(() => DecodeFunction(func, context, [source])).to.throw(/function/);
+    expect(() => DecodeFunction(func, context, [source])).to.throw(
+      /Unbound lambda parameter 99/,
+    );
     expect(() => context.arg(7)).to.throw(/7/);
   });
 });

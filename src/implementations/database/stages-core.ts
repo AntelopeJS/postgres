@@ -1,3 +1,5 @@
+import assert from "node:assert";
+import { IsQueryStage } from "@antelopejs/interface-database/common";
 import type { Compiled } from "./sql";
 import { AsJson, Predicate } from "./readings";
 import { DecodeValue, NULL_JSON } from "./value";
@@ -34,6 +36,7 @@ const ORDERING_OPERATORS = {
 };
 
 const ArgStage: StageHandler = (_state, stage, context) => {
+  assert(IsQueryStage(stage, "arg"), "The 'arg' stage reads an 'arg' stage");
   const binding = context.arg(String(stage.args[FIRST_OPERAND]));
   if (IsSubqueryProvider(binding)) {
     return { current: binding([stage]) };
