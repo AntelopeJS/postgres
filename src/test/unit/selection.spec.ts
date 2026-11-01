@@ -74,10 +74,10 @@ function Build(query: StagedObject, context: DecodingContext): RootSelection {
 
 type TableQuery = ReturnType<typeof Root>;
 
-interface CyclicPayload {
+type CyclicPayload = {
   nested: TableQuery;
   self?: CyclicPayload;
-}
+};
 
 function Cyclic(): CyclicPayload {
   const payload: CyclicPayload = { nested: Root(OTHER_SCHEMA_ID) };
