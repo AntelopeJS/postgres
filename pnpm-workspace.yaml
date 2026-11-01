@@ -1,4 +1,4 @@
 packages:
   - "./"
 overrides:
-  "@antelopejs/interface-database": "file:.campaign/tgz/antelopejs-interface-database-028abec.tgz"
+  "@antelopejs/interface-database": "file:.campaign/tgz/antelopejs-interface-database-642bb6b.tgz"
