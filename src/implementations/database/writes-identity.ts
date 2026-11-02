@@ -28,7 +28,6 @@ import {
 } from "./payload";
 import {
   Assignment,
-  DescribeKind,
   EMPTY_EXTRA,
   EXISTING_EXTRA,
   MergeExtra,
@@ -169,7 +168,7 @@ function ChangedDocument(stage: QueryStage): DocumentView {
   const { document } = ClassifyMember(argument);
   assert(
     document,
-    `The '${stage.stage}' stage takes a document, received ${DescribeKind(argument)}`,
+    `The '${stage.stage}' stage takes a document, received ${Array.isArray(argument) ? "an array" : `a ${typeof argument}`}`,
   );
   return document;
 }

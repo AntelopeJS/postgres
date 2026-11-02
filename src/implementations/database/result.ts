@@ -30,6 +30,7 @@ export interface RowObject {
 }
 
 /** The instant a cell spells, read from its text unless it is a number; an invalid date if it spells none. */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- cell is a stored timestamp cell as pg answered it (text, a number or whatever the column holds), read as the instant it spells or an invalid date; the stored-cell rule forbids a parse on read, and typing it RowValue only moves the row to typescript/no-base-to-string
 function InstantOf(cell: unknown): Date {
   return IsNumber(cell) ? new Date(cell) : new Date(String(cell));
 }
@@ -96,6 +97,7 @@ export function DecodeRow(row: RowObject, table: TableModel): RowObject {
     }
     document[name] = ReviveValue(value, spec.type);
   }
+  // SAFETY: `_extra` is declared `jsonb NOT NULL DEFAULT '{}'` and the adapter writes it only as a jsonb object (EMPTY_EXTRA, MergeExtra), which pg parses to an object; it reads null only for a row the column predates, and undefined, which the spread drops, when the select list leaves it out.
   const extra = {
     ...(overflow as RowObject | null),
   };
