@@ -154,11 +154,6 @@ export function MergeExtra(incoming: string): string {
   return `(${EXISTING_EXTRA} || ${incoming})`;
 }
 
-/** What a caller passed where a write wanted a document, for the error that refuses it. */
-export function DescribeKind(value: unknown): string {
-  return Array.isArray(value) ? "an array" : `a ${typeof value}`;
-}
-
 /**
  * The documents one `insert` stage writes, whether the caller passed one or a batch.
  * An array is the batch and never a document, which is the reading every other write shares. The
@@ -171,7 +166,7 @@ export function InsertedDocuments(stage: QueryStage): DocumentView[] {
     const { document } = ClassifyMember(entry);
     assert(
       document,
-      `The '${stage.stage}' stage takes documents, and the one at position ${position} is ${DescribeKind(entry)}`,
+      `The '${stage.stage}' stage takes documents, and the one at position ${position} is ${Array.isArray(entry) ? "an array" : `a ${typeof entry}`}`,
     );
     return document;
   });

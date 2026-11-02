@@ -31,7 +31,6 @@ import {
 } from "./external-payload";
 import {
   InsertedDocuments,
-  DescribeKind,
   WRITE_ALIAS,
   type WriteCompiler,
   type WriteStatement,
@@ -174,7 +173,7 @@ function DocumentOf(stage: QueryStage): DocumentView {
   const { document } = ClassifyMember(argument);
   assert(
     document,
-    `The '${stage.stage}' stage on an external relation takes a document, received ${DescribeKind(argument)}; an expression mapper is not supported on external relations in this version`,
+    `The '${stage.stage}' stage on an external relation takes a document, received ${Array.isArray(argument) ? "an array" : `a ${typeof argument}`}; an expression mapper is not supported on external relations in this version`,
   );
   return document;
 }

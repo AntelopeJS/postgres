@@ -6,7 +6,7 @@ import {
   ID_COLUMN,
   INSTANCE_COLUMN,
 } from "./utils";
-import { IsDocument, IsNumber } from "./guards";
+import { IsDocument, IsNumber, IsString } from "./guards";
 
 /**
  * What `pg`'s default type parsers answer for one column: text, a number, a boolean, a `Date`, a
@@ -30,8 +30,10 @@ export interface RowObject {
 }
 
 /** The instant a cell spells, read from its text unless it is a number; an invalid date if it spells none. */
-function InstantOf(cell: unknown): Date {
-  return IsNumber(cell) ? new Date(cell) : new Date(String(cell));
+function InstantOf(cell: RowValue): Date {
+  return IsNumber(cell) || IsString(cell)
+    ? new Date(cell)
+    : new Date(Number.NaN);
 }
 
 function ReviveTimestamp(value: RowValue): RowValue {
@@ -96,6 +98,7 @@ export function DecodeRow(row: RowObject, table: TableModel): RowObject {
     }
     document[name] = ReviveValue(value, spec.type);
   }
+  // SAFETY: `_extra` is declared `jsonb NOT NULL DEFAULT '{}'` and the adapter writes it only as a jsonb object (EMPTY_EXTRA, MergeExtra), which pg parses to an object; it reads null only for a copy of a row that lacks the key (the column is NOT NULL), and undefined, which the spread drops, when the select list leaves it out.
   const extra = {
     ...(overflow as RowObject | null),
   };

@@ -1,9 +1,0 @@
-{
-  "pack": "0.2.17",
-  "rules": {
-    "anti-slop/no-runtime-typeof": 7,
-    "anti-slop/no-unknown-parameters": 3,
-    "anti-slop/require-safety-comment-for-type-assertion": 1
-  },
-  "oversizeFiles": {}
-}
