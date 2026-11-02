@@ -75,6 +75,11 @@ describe("ReviveValue", () => {
     expect(out).to.deep.equal(new Date(1712345678000));
   });
 
+  it("leaves a cell that is no string, number or Date untouched", () => {
+    const list = [2020];
+    expect(ReviveValue(list, TIMESTAMP)).to.equal(list);
+  });
+
   it("leaves an unparseable timestamp untouched", () => {
     expect(ReviveValue("not a date", TIMESTAMP)).to.equal("not a date");
     const blob = { a: 1 };

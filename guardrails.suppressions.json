@@ -1,6 +1,6 @@
 {
   "rules": {
-    "anti-slop/no-unknown-parameters": 2
+    "anti-slop/no-unknown-parameters": 1
   },
   "tsExpectError": 56,
   "tsIgnore": 0,
