@@ -140,3 +140,10 @@ Read the [contribution guidelines](CONTRIBUTING.md) before opening a pull reques
 ## License
 
 [Apache-2.0](LICENSE)
+
+## Requirements
+
+<!-- antelopejs-docs-node:start -->
+
+This package requires Node.js `>=22`.
+<!-- antelopejs-docs-node:end -->
