@@ -6,7 +6,7 @@ settings:
 
 overrides:
   '@antelopejs/interface-database': file:.campaign/tgz/antelopejs-interface-database-724ff72.tgz
-  '@antelopejs/tooling-configs': file:.campaign/tgz/antelopejs-tooling-configs-6b759e6.tgz
+  '@antelopejs/tooling-configs': file:.campaign/tgz/antelopejs-tooling-configs-a2779d6.tgz
 
 importers:
 
@@ -29,8 +29,8 @@ importers:
         specifier: ^1.14.0
         version: 1.14.0
       '@antelopejs/tooling-configs':
-        specifier: file:.campaign/tgz/antelopejs-tooling-configs-6b759e6.tgz
-        version: file:.campaign/tgz/antelopejs-tooling-configs-6b759e6.tgz(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))
+        specifier: file:.campaign/tgz/antelopejs-tooling-configs-a2779d6.tgz
+        version: file:.campaign/tgz/antelopejs-tooling-configs-a2779d6.tgz(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))
       '@testcontainers/postgresql':
         specifier: ^12.0.4
         version: 12.0.4
@@ -104,8 +104,8 @@ packages:
     peerDependencies:
       '@antelopejs/interface-core': '>=0.2.4 <1.0.0'
 
-  '@antelopejs/tooling-configs@file:.campaign/tgz/antelopejs-tooling-configs-6b759e6.tgz':
-    resolution: {integrity: sha512-QfhlLga353+OolT4PpYHawrSwecx+FmHg0AR3bxEF/R4t2ea6l87n2IAiNcjnLDQQlv2SfWaBhaszDkH8AnmWQ==, tarball: file:.campaign/tgz/antelopejs-tooling-configs-6b759e6.tgz}
+  '@antelopejs/tooling-configs@file:.campaign/tgz/antelopejs-tooling-configs-a2779d6.tgz':
+    resolution: {integrity: sha512-gXsUuLi3V220mzDrk7wefiOdZIZnMZnJlg9tElIh3k2Zy1u1ZKGR2rr0HEBOcRH01hrCZzF6x8WWE5RqCVGrMg==, tarball: file:.campaign/tgz/antelopejs-tooling-configs-a2779d6.tgz}
     version: 0.2.17
     engines: {node: '>=22.18.0'}
     hasBin: true
@@ -2958,7 +2958,7 @@ snapshots:
     dependencies:
       '@antelopejs/interface-core': 0.2.0
 
-  '@antelopejs/tooling-configs@file:.campaign/tgz/antelopejs-tooling-configs-6b759e6.tgz(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))':
+  '@antelopejs/tooling-configs@file:.campaign/tgz/antelopejs-tooling-configs-a2779d6.tgz(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2001))':
     dependencies:
       '@oxlint/plugins': 1.81.0
       dts-bundle-generator: 9.5.1
