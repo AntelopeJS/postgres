@@ -17,6 +17,13 @@ The PostgreSQL backend of AntelopeJS. It runs the queries of the database interf
 
 The database interface pages document schemas, tables, queries, change feeds and atomic mutations.
 
+## Requirements
+
+<!-- antelopejs-docs-node:start -->
+
+This package requires Node.js `>=22`.
+<!-- antelopejs-docs-node:end -->
+
 ## Install
 
 ```bash
@@ -54,13 +61,13 @@ export default defineConfig({
 });
 ```
 
-| Key            | Description                                                                                                                                                      |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`         | `"owned"` (default) creates and converges the tables. `"external"` serves existing tables without changing them.                                                 |
-| `url`          | PostgreSQL connection string.                                                                                                                                    |
-| `migrations`   | `"safe"` (default) only adds columns and indexes. `"destructive"` also alters and drops columns. See [Schema convergence](./docs/storage.md#schema-convergence). |
-| `schemaPrefix` | Prefix for generated PostgreSQL schema names, for several applications sharing one database.                                                                     |
-| `pool`         | Optional [`pg.Pool`](https://node-postgres.com/apis/pool) options, merged over the URL.                                                                          |
+| Key            | Description                                                                                                                                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mode`         | `"owned"` (default) creates and converges the tables. `"external"` serves existing tables without changing them.                                                                                                   |
+| `url`          | PostgreSQL connection string.                                                                                                                                                                                      |
+| `migrations`   | `"safe"` (default) adds columns and indexes, and also drops or swaps indexes that the adapter owns. `"destructive"` also alters and drops columns. See [Schema convergence](./docs/storage.md#schema-convergence). |
+| `schemaPrefix` | Prefix for generated PostgreSQL schema names, for several applications sharing one database.                                                                                                                       |
+| `pool`         | Optional [`pg.Pool`](https://node-postgres.com/apis/pool) options, merged over the URL.                                                                                                                            |
 
 [docs/configuration.md](./docs/configuration.md) lists the options for cursors, the statement timeout and change feeds.
 
@@ -81,7 +88,7 @@ Unlike the document-store backends, this module turns schema field declarations 
 - One PostgreSQL schema per AntelopeJS schema id.
 - Declared scalar fields become typed columns. Objects, arrays and undeclared fields live in `jsonb`.
 - An `_instance` discriminator column keeps schema instances apart.
-- Schema convergence only adds, and refuses destructive changes unless you turn them on.
+- Schema convergence adds columns and indexes, drops or swaps the indexes the adapter owns, and refuses destructive column changes unless you turn them on.
 - Change feeds are a durable log plus a pull-based reader.
 
 ## Documentation
@@ -140,10 +147,3 @@ Read the [contribution guidelines](CONTRIBUTING.md) before opening a pull reques
 ## License
 
 [Apache-2.0](LICENSE)
-
-## Requirements
-
-<!-- antelopejs-docs-node:start -->
-
-This package requires Node.js `>=22`.
-<!-- antelopejs-docs-node:end -->
