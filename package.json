@@ -1,6 +1,6 @@
 {
   "name": "@antelopejs/postgres",
-  "version": "0.2.3",
+  "version": "0.3.0-rc.0",
   "description": "PostgreSQL backend for AntelopeJS, implementing the Database interface on relational tables, with an external mode for existing databases.",
   "keywords": [
     "antelopejs",
