@@ -96,6 +96,9 @@
       "url": "postgres://postgres@localhost:5432/antelopejs",
       "migrations": "safe"
     },
-    "test": "src/test/antelope.test.ts"
+    "test": "src/test/antelope.test.ts",
+    "docs": {
+      "standard": true
+    }
   }
 }
