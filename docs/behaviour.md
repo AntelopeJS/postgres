@@ -1,6 +1,10 @@
-# Behaviour worth knowing
+---
+title: Behaviour worth knowing
+description: Reference for the PostgreSQL module's queries that answer instead of throwing where the answer may surprise you, and where it differs from the MongoDB and RethinkDB backends.
+mode: reference
+---
 
-Things that answer rather than throw, where the answer may not be the one you expected.
+These queries answer instead of throwing, and the answer may not be the one you expected.
 
 ## Reading a value
 
@@ -14,14 +18,14 @@ Things that answer rather than throw, where the answer may not be the one you ex
 
 ## Selecting rows
 
-| Behaviour                                                                                  | Detail                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getAll` cannot address a single array-valued key                                          | An array at the top level is always read as a _key list_, since the interface supplies no marker distinguishing the two. Both other backends read it the same way                                                                                                                                                                                        |
-| A `null` key is a value, not an open bound                                                 | The interface has no spelling for an open-ended `between`, and reading `null` as one would answer a different question. On an _undeclared_ key it matches a stored JSON null; on a **declared** field it becomes SQL NULL and so matches nothing at all, including rows whose value is null — for the reason a declared null is stored as absence at all |
-| `getAll` on a field declared as an array matches by _containment_                          | The key is looked for among the elements of the stored list rather than compared against the list itself. See [storage](./storage.md) for the index that serves it                                                                                                                                                                                       |
-| `orderBy`, `getAll` and `between` on an _undeclared_ field use jsonb's type-first ordering | There is no declared type to compare by, and no index to serve it                                                                                                                                                                                                                                                                                        |
-| Every document carries the instance it came from under `_instance`                         | Which is what lets a `CROSS_INSTANCE` read tell its rows apart. The default instance carries no key at all, matching the MongoDB backend, where a default-instance document stores a null one                                                                                                                                                            |
-| `get(k)` under `CROSS_INSTANCE` picks the lowest `_instance` holding the key               | `_id` is unique _per instance_, so reading every instance at once makes one key name one row per instance. The same row is chosen on every call, and it is the row a subsequent delete removes                                                                                                                                                           |
+| Behaviour                                                                                  | Detail                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getAll` cannot address a single array-valued key                                          | An array at the top level is always read as a _key list_, since the interface supplies no marker distinguishing the two. Both other backends read it the same way                                                                                                                                                                                     |
+| A `null` key is a value, not an open bound                                                 | The interface has no spelling for an open-ended `between`, and reading `null` as one would answer a different question. On an _undeclared_ key it matches a stored JSON null; on a **declared** field it becomes SQL NULL and so matches nothing at all, including rows whose value is null. A declared null is stored as absence for the same reason |
+| `getAll` on a field declared as an array matches by _containment_                          | The key is looked for among the elements of the stored list rather than compared against the list itself. See [storage](./storage.md) for the index that serves it                                                                                                                                                                                    |
+| `orderBy`, `getAll` and `between` on an _undeclared_ field use jsonb's type-first ordering | There is no declared type to compare by, and no index to serve it                                                                                                                                                                                                                                                                                     |
+| Every document carries the instance it came from under `_instance`                         | Which is what lets a `CROSS_INSTANCE` read tell its rows apart. The default instance carries no key at all, matching the MongoDB backend, where a default-instance document stores a null one                                                                                                                                                         |
+| `get(k)` under `CROSS_INSTANCE` picks the lowest `_instance` holding the key               | `_id` is unique _per instance_, so reading every instance at once makes one key name one row per instance. The same row is chosen on every call, and it is the row a subsequent delete removes                                                                                                                                                        |
 
 ## Shaping a stream
 
@@ -66,32 +70,15 @@ Things that answer rather than throw, where the answer may not be the one you ex
 
 ## Atomic single-record mutations
 
-`table.atomicMutation(id, request)` uses the atomic contract of `@antelopejs/interface-database`, in the range
-the README compatibility table lists. Antelope automatically
-runs its shared real-backend conformance tests alongside this provider's SQL,
-row-lock, storage, and fault tests.
+`table.atomicMutation(id, request)` implements the atomic contract of `@antelopejs/interface-database`, in the range that the README compatibility table lists. `pnpm test` runs the interface's shared conformance suite against a real PostgreSQL, beside this module's own SQL, row-lock, storage, and fault tests.
 
-The adapter places instance, identity, and the revision or scalar equality condition directly in
-the target row's `WHERE` clause and uses `RETURNING` to distinguish `applied` from `not-applied`.
-PostgreSQL rechecks those conditions after a competing writer releases its row lock. The generic
-`filter(...).update(...)` and `filter(...).delete()` paths do not provide this guarantee: their
-identity subqueries can retain stale matches after a concurrent update.
+The adapter puts the instance, the identity, and the revision or scalar equality condition directly in the `WHERE` clause of the target row. It uses `RETURNING` to tell `applied` from `not-applied`. PostgreSQL checks those conditions again after a competing writer releases its row lock. The generic `filter(...).update(...)` and `filter(...).delete()` paths do not give this guarantee. Their identity subqueries can keep stale matches after a concurrent update.
 
-Revision updates replace supplied top-level fields and install the new revision in the same
-statement. They never upsert or retry. Validation and definitive PostgreSQL error responses throw;
-other dispatch failures conservatively return `unknown`, including a lost acknowledgement after
-commit. Callers must reconcile unknown outcomes rather than treating them as a failed match.
+A revision update replaces the supplied top-level fields and writes the new revision in the same statement. It never upserts or retries. A validation failure or a definitive PostgreSQL error response throws. Any other dispatch failure returns `unknown`, including a lost acknowledgement after commit. Callers must reconcile an `unknown` outcome and must not treat it as a failed match.
 
-An absent-only `{ kind: "missing" }` revision condition works on undeclared fields stored in
-`_extra`. It does not match JSON null or an absent record. Declared SQL columns cannot distinguish
-absent fields from null, so the adapter rejects missing-revision bootstrap there. String revision
-conditions support declared text columns and undeclared fields. Raw inserts, reads, and filters
-preserve undeclared revision tokens.
+An absent-only `{ kind: "missing" }` revision condition works on undeclared fields stored in `_extra`. It does not match a JSON null or an absent record. A declared SQL column cannot tell an absent field from null, so the adapter refuses a missing-revision bootstrap there. String revision conditions work on declared `text` columns and on undeclared fields. Raw inserts, reads, and filters keep undeclared revision tokens.
 
-`deleteIfEqual` compares one scalar field without providing revision or no-ABA guarantees. Date
-comparisons use the adapter's native typed-value conversion. Every variant requires one instance,
-rejects `CROSS_INSTANCE`, and protects identity and adapter-owned fields. Immutable record IDs and
-revision tokens must not be reused across record incarnations.
+`deleteIfEqual` compares one scalar field and gives no revision or no-ABA guarantee. Date comparisons use the adapter's native typed-value conversion. Every variant requires one instance, refuses `CROSS_INSTANCE`, and protects the identity and the fields that the adapter owns. Do not reuse immutable record IDs or revision tokens across record incarnations.
 
 ## Matching text
 
