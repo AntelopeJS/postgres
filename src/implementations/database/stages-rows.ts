@@ -1,12 +1,13 @@
 import assert from "node:assert";
 import { Query } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
+import { OptionsOf } from "./utils";
 
 import type { Compiled } from "./sql";
 import { Cast, Widen } from "./coerce";
 import type { SqlType } from "./types";
 import type { DecodingContext } from "./context";
-import { DecodeFunction, DecodeValue } from "./value";
+import { DecodeFunction, DecodeValue, RecordedLambda } from "./value";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { ClampToRange, INT4_MAX, Numeric, Predicate } from "./readings";
 import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
@@ -27,6 +28,7 @@ import {
   WHERE_BLOCKERS,
 } from "./render";
 import { IsString } from "./guards";
+import { ClassifyMember } from "./member";
 
 /**
  * An `ORDER BY` runs before the row bounds, so those and an aggregate are what block it.
@@ -72,7 +74,7 @@ function Bound(
   index: number,
   context: DecodingContext,
 ): string {
-  const compiled = DecodeValue(stage.args[index], context);
+  const compiled = DecodeValue(ClassifyMember(stage.args[index]), context);
   const bound = RequireOperand(compiled, stage, index);
   return RowBound(ClampBound(Numeric(bound).sql));
 }
@@ -83,7 +85,7 @@ function Bound(
  */
 const FilterStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, WHERE_BLOCKERS, context);
-  const body = DecodeFunction(stage.args[FIRST_OPERAND], context, [
+  const body = DecodeFunction(RecordedLambda(stage, FIRST_OPERAND), context, [
     prepared.source,
   ]);
   const predicate = RequireOperand(body, stage, FIRST_OPERAND);
@@ -92,7 +94,7 @@ const FilterStage: PipelineStage = (relation, stage, context) => {
 };
 
 function SortName(stage: QueryStage): string {
-  const name = stage.options?.index;
+  const name: unknown = OptionsOf(stage)?.index;
   assert(
     IsString(name),
     "The 'orderBy' stage is missing the index or field to sort on",
@@ -106,7 +108,7 @@ function SortName(stage: QueryStage): string {
  */
 const OrderByStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, ORDER_BLOCKERS, context);
-  const descending = stage.options?.direction === DESCENDING;
+  const descending = OptionsOf(stage)?.direction === DESCENDING;
   const terms = ScanColumns(prepared, SortName(stage)).flatMap(
     (column): OrderTerm[] =>
       (column.native?.order ?? [column.sql]).map((sql) => ({
@@ -159,7 +161,7 @@ function Materialize(side: UnionSide, type: SqlType): string {
  * Read off the stage and compiled through the same context, whose fold it asks for rather imports.
  */
 function Concatenated(stage: QueryStage, context: DecodingContext): Relation {
-  const other = stage.args[FIRST_OPERAND];
+  const other: unknown = stage.args[FIRST_OPERAND];
   assert(
     other instanceof Query,
     "The 'union' stage takes another query to concatenate",

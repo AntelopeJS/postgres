@@ -70,13 +70,12 @@ export const REJECTED_STAGES = {
     "A 'changes' feed must be the last stage of a query and must be iterated rather than awaited",
 } satisfies Record<string, string>;
 
-function IsRejectedStage(name: string): name is keyof typeof REJECTED_STAGES {
-  return Object.hasOwn(REJECTED_STAGES, name);
-}
+const REFUSALS = new Map<string, string>(Object.entries(REJECTED_STAGES));
 
 function StageError(name: string): Error {
-  if (IsRejectedStage(name)) {
-    return new Error(REJECTED_STAGES[name]);
+  const refusal = REFUSALS.get(name);
+  if (refusal !== undefined) {
+    return new Error(refusal);
   }
   if (Object.hasOwn(DEFERRED_STAGES, name)) {
     return new Error(`${DEFERRED_STAGES[name]} (stage '${name}')`);

@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { DatabaseError } from "pg";
 import { ValidateAtomicMutationTable } from "@antelopejs/interface-database/atomic";
 
 import { Query } from "../../connection";
@@ -9,11 +10,20 @@ import {
 } from "./external-refusals";
 import { CHANGES_STAGE } from "./changes";
 import type { ExternalRelation } from "./fields";
-import { ExternalWriteFailure, InvalidValues } from "./external-errors";
+import {
+  ExternalWriteFailure,
+  InvalidValues,
+  IsDatabaseError,
+} from "./external-errors";
 import { DecodingContext } from "./context";
 import { CompileSubquery } from "./subquery";
 import { CompileExpression } from "./expression";
-import { DecodeRow, ReviveValue } from "./result";
+import {
+  DecodeRow,
+  ReviveValue,
+  type RowObject,
+  type RowValue,
+} from "./result";
 import { ApplyStages, CompileRelation } from "./pipeline";
 import { DuplicateKeyFailure } from "./duplicate-key";
 import {
@@ -61,7 +71,7 @@ type WriteAnswer =
   | unknown[]
   | Awaited<ReturnType<typeof ExecuteAtomicWrite>>;
 
-export type ResultRow = Record<string, unknown>;
+export type ResultRow = RowObject;
 
 /** The root, the terminal write split off after it, and the fold over what was left. */
 interface CompiledQuery {
@@ -78,31 +88,31 @@ const LIFECYCLE_STAGE_COUNT = 2;
 /** What the driver's nullable `rowCount` means when it declines to count. */
 const NO_ROWS = 0;
 
-const LIFECYCLE_HANDLERS = {
-  [CREATE_INSTANCE]: (schemaId, stage) =>
-    CreateInstance(schemaId, stage.options?.id),
-  [DESTROY_INSTANCE]: (schemaId, stage) =>
-    DestroyInstance(schemaId, GetTableNames(schemaId), stage.options?.id),
-  listInstances: ListInstances,
-} satisfies Record<string, LifecycleHandler>;
-
-function IsLifecycleStage(
-  name: string,
-): name is keyof typeof LIFECYCLE_HANDLERS {
-  return Object.hasOwn(LIFECYCLE_HANDLERS, name);
-}
+const LIFECYCLE_HANDLERS = new Map<string, LifecycleHandler>([
+  [CREATE_INSTANCE, CreateInstance],
+  [
+    DESTROY_INSTANCE,
+    (schemaId, stage) =>
+      DestroyInstance(schemaId, GetTableNames(schemaId), stage),
+  ],
+  ["listInstances", ListInstances],
+]);
 
 /**
  * The lifecycle stages on an external instance, whose relations have no instances: creating or
  * destroying one is refused rather than recorded nowhere, and the list of them is empty.
  */
-const EXTERNAL_LIFECYCLE = {
-  [CREATE_INSTANCE]: (_schemaId, stage) =>
-    Promise.reject(ExternalInstanceRefusal(stage.stage)),
-  [DESTROY_INSTANCE]: (_schemaId, stage) =>
-    Promise.reject(ExternalInstanceRefusal(stage.stage)),
-  listInstances: () => Promise.resolve([]),
-} satisfies Record<keyof typeof LIFECYCLE_HANDLERS, LifecycleHandler>;
+const EXTERNAL_LIFECYCLE = new Map<string, LifecycleHandler>([
+  [
+    CREATE_INSTANCE,
+    (_schemaId, stage) => Promise.reject(ExternalInstanceRefusal(stage.stage)),
+  ],
+  [
+    DESTROY_INSTANCE,
+    (_schemaId, stage) => Promise.reject(ExternalInstanceRefusal(stage.stage)),
+  ],
+  ["listInstances", () => Promise.resolve([])],
+]);
 
 /**
  * Dispatches a schema-rooted instance lifecycle query, or declines it synchronously.
@@ -116,13 +126,13 @@ function Lifecycle(stages: QueryStage[]): Promise<LifecycleAnswer> | undefined {
     return undefined;
   }
   const stage = stages[1];
-  if (!IsLifecycleStage(stage.stage)) {
+  const handler = (IsExternal() ? EXTERNAL_LIFECYCLE : LIFECYCLE_HANDLERS).get(
+    stage.stage,
+  );
+  if (!handler) {
     return undefined;
   }
-  const handler = (IsExternal() ? EXTERNAL_LIFECYCLE : LIFECYCLE_HANDLERS)[
-    stage.stage
-  ];
-  const schemaId = stages[0].options?.id;
+  const schemaId: unknown = stages[0].options?.id;
   assert(IsString(schemaId), MISSING_SCHEMA_ID);
   return WaitForSchemaReady(schemaId).then(() => handler(schemaId, stage));
 }
@@ -140,7 +150,7 @@ function Lifecycle(stages: QueryStage[]): Promise<LifecycleAnswer> | undefined {
  * that same query must be immediately done rather than yield one `undefined`. A `single` relation
  * simply has at most one row to yield and needs no case of its own.
  */
-export function DecodeRows(relation: Relation, rows: ResultRow[]): unknown[] {
+export function DecodeRows(relation: Relation, rows: ResultRow[]): RowValue[] {
   const projection = relation.projection;
   if (projection) {
     return rows.map((row) => ReviveValue(row[OUTPUT_COLUMN], projection.type));
@@ -159,20 +169,12 @@ export function DecodeRows(relation: Relation, rows: ResultRow[]): unknown[] {
  * Emptiness is decided by the row count, not by the decoded value being nullish, so a `get` whose
  * row decodes to `null` answers `null` — not the `undefined` that means there is no such row.
  */
-export function DecodeResult(relation: Relation, rows: ResultRow[]): unknown {
+export function DecodeResult(relation: Relation, rows: ResultRow[]): RowValue {
   const decoded = DecodeRows(relation, rows);
   if (!relation.single) {
     return decoded;
   }
   return decoded.length > 0 ? decoded[0] : relation.absent;
-}
-
-async function RunRead(
-  relation: Relation,
-  context: DecodingContext,
-): Promise<unknown> {
-  const result = await Query<ResultRow>(Render(relation), context.params.all());
-  return DecodeResult(relation, result.rows);
 }
 
 /**
@@ -197,7 +199,9 @@ async function RunWrite(
   try {
     return await RunManagedWrite(statement, stage, context);
   } catch (err) {
-    throw await DuplicateKeyFailure(err, target.origin);
+    throw await (err instanceof DatabaseError
+      ? DuplicateKeyFailure(err, target.origin)
+      : err);
   }
 }
 
@@ -251,7 +255,7 @@ async function RunExternalWrite(
     }
     return result.rowCount ?? NO_ROWS;
   } catch (err) {
-    throw ExternalWriteFailure(err, external);
+    throw IsDatabaseError(err) ? ExternalWriteFailure(err, external) : err;
   }
 }
 
@@ -294,7 +298,11 @@ export async function RunQuery(stages: QueryStage[]): Promise<any> {
   }
   const compiled = await ReadyQuery(stages, QueryContext());
   if (!compiled.split.write) {
-    return RunRead(compiled.relation, compiled.context);
+    const result = await Query<ResultRow>(
+      Render(compiled.relation),
+      compiled.context.params.all(),
+    );
+    return DecodeResult(compiled.relation, result.rows);
   }
   if (
     compiled.root.external &&

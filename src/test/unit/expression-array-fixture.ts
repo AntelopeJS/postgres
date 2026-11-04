@@ -1,4 +1,5 @@
 import { ValueProxy } from "@antelopejs/interface-database";
+import type { StagedObject } from "@antelopejs/interface-database/common";
 
 import { RefusingCompilers } from "./spec-fixture";
 import type { Compiled } from "../../implementations/database/sql";
@@ -36,7 +37,20 @@ export const users: TableModel = {
   },
 };
 
-export type Builder = (doc: any) => any;
+export interface UserDoc {
+  age: number;
+  name: string;
+  tags: string[];
+  scores: number[];
+  visits: Date[];
+  entries: { at: Date }[];
+  flags: boolean[];
+  nested: number[][];
+  metadata: { level: number };
+  nope: number[][][];
+}
+
+export type Builder = (doc: ValueProxy<UserDoc>) => StagedObject;
 
 export function NewContext(): DecodingContext {
   const context = new DecodingContext({

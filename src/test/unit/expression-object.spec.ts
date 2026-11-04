@@ -1,6 +1,9 @@
 import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
-import { QueryStage } from "@antelopejs/interface-database/common";
+import {
+  QueryStage,
+  type StagedObject,
+} from "@antelopejs/interface-database/common";
 
 import { Occurrences, RefusingCompilers } from "./spec-fixture";
 import type { Compiled } from "../../implementations/database/sql";
@@ -41,7 +44,7 @@ const users: TableModel = {
   },
 };
 
-type Builder = (doc: ValueProxy<any>) => any;
+type Builder = (doc: ValueProxy<any>) => StagedObject;
 
 function NewContext(): DecodingContext {
   const context = new DecodingContext({
@@ -206,6 +209,7 @@ describe("obj_merge", () => {
   it("names the stage when the other object is absent", () => {
     expect(() =>
       CompileExpression(
+        // @ts-expect-error no other object, which the obj_merge stage refuses by naming itself
         [QueryStage("arg", undefined, ROW_ID), QueryStage("obj_merge")],
         NewContext(),
       ),
@@ -324,6 +328,7 @@ describe("obj_has", () => {
   it("names the stage when the field list is not a list", () => {
     expect(() =>
       CompileExpression(
+        // @ts-expect-error no field list, which the obj_has stage refuses by naming itself
         [QueryStage("arg", undefined, ROW_ID), QueryStage("obj_has")],
         NewContext(),
       ),
@@ -335,6 +340,7 @@ describe("obj_has", () => {
       CompileExpression(
         [
           QueryStage("arg", undefined, ROW_ID),
+          // @ts-expect-error a field name that is not a string, which the obj_has stage refuses by naming itself
           QueryStage("obj_has", undefined, [5]),
         ],
         NewContext(),

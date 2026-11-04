@@ -1,7 +1,8 @@
+import assert from "node:assert";
 import { expect } from "chai";
+import { QueryStage } from "@antelopejs/interface-database/common";
 
 import { WhileConfigured } from "./spec-fixture";
-import type { QueryStage } from "../../implementations/database/utils";
 import type { TableOrigin } from "../../implementations/database/relation";
 import { CloseCursor, ReadCursor } from "../../implementations/database/query";
 import {
@@ -32,12 +33,12 @@ const LATER_EPOCH = new Date("2026-08-12T10:00:00.000Z");
 
 const SETTLE_MS = 60;
 
-function Stages(...between: string[]): QueryStage[] {
+function Stages(...between: QueryStage[]): QueryStage[] {
   return [
     { stage: "schema", options: { id: SCHEMA_ID }, args: [] },
     { stage: "instance", options: { id: "default" }, args: [] },
     { stage: "table", options: { id: TABLE_ID }, args: [] },
-    ...between.map((stage) => ({ stage, args: [] })),
+    ...between,
     { stage: "changes", args: [] },
   ];
 }
@@ -115,7 +116,7 @@ function Feed<T>(body: (reqId: number) => Promise<T>) {
 }
 
 /** Reads one event, with the environment supplied so nothing touches a pool. */
-function Step(reqId: number, read: FeedEnvironment, ...between: string[]) {
+function Step(reqId: number, read: FeedEnvironment, ...between: QueryStage[]) {
   return ReadFeedEvent(reqId, Stages(...between), read);
 }
 
@@ -123,9 +124,10 @@ describe("a change feed's refusals", () => {
   it("refuses a stage that needs an order, naming the stage and the position", async () => {
     const { read } = Reader([{}]);
     await Feed(async (reqId) => {
-      await Step(reqId, read, "orderBy").then(
+      await Step(reqId, read, QueryStage("orderBy", { index: "at" })).then(
         () => expect.fail("a feed has no total order to sort by"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("'orderBy'");
           expect(err.message).to.contain("'changes'");
         },
@@ -136,9 +138,10 @@ describe("a change feed's refusals", () => {
   it("refuses a stage that needs a finite relation, for the reason it names", async () => {
     const { read } = Reader([{}]);
     await Feed(async (reqId) => {
-      await Step(reqId, read, "count").then(
+      await Step(reqId, read, QueryStage("count", {})).then(
         () => expect.fail("a feed is not finite"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("'count'");
           expect(err.message).to.contain("total order or a finite relation");
         },
@@ -149,9 +152,10 @@ describe("a change feed's refusals", () => {
   it("refuses a terminal write before a feed, which is legal one level out", async () => {
     const { read } = Reader([{}]);
     await Feed(async (reqId) => {
-      await Step(reqId, read, "insert").then(
+      await Step(reqId, read, QueryStage("insert", undefined, {})).then(
         () => expect.fail("a feed writes nothing"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("'insert'");
           expect(err.message).to.contain("'changes'");
         },
@@ -162,9 +166,11 @@ describe("a change feed's refusals", () => {
   it("keeps the fold's own wording for a stage nothing knows, which is a typo", async () => {
     const { read } = Reader([{}]);
     await Feed(async (reqId) => {
-      await Step(reqId, read, "filtr").then(
+      // @ts-expect-error a stage outside the union, which the feed refuses by naming it
+      await Step(reqId, read, QueryStage("filtr")).then(
         () => expect.fail("no such stage"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("Unsupported query stage 'filtr'");
           expect(err.message).to.not.contain("'changes'");
         },
@@ -175,9 +181,15 @@ describe("a change feed's refusals", () => {
   it("names the first unsupported stage rather than the last", async () => {
     const { read } = Reader([{}]);
     await Feed(async (reqId) => {
-      await Step(reqId, read, "orderBy", "slice").then(
+      await Step(
+        reqId,
+        read,
+        QueryStage("orderBy", { index: "at" }),
+        QueryStage("slice", undefined, 0),
+      ).then(
         () => expect.fail("neither stage is supported"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("'orderBy'");
           expect(err.message).to.not.contain("'slice'");
         },
@@ -384,7 +396,8 @@ describe("the three ways a change feed ends", () => {
     await Feed(async (reqId) => {
       await Step(reqId, read).then(
         () => expect.fail("a lapsed feed must not continue"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("changeRetentionMs");
           expect(err.message).to.contain("events 6 through 9");
           expect(err.message).to.contain(`${SCHEMA_ID}.${TABLE_ID}`);
@@ -415,7 +428,8 @@ describe("the three ways a change feed ends", () => {
     await Feed(async (reqId) => {
       await Step(reqId, read).then(
         () => expect.fail("a restarted server must not be read through"),
-        (err: Error) => {
+        (err: unknown) => {
+          assert(err instanceof Error, "the feed rejects with an Error");
           expect(err.message).to.contain("restarted");
           expect(err.message).to.contain(`${SCHEMA_ID}.${TABLE_ID}`);
         },

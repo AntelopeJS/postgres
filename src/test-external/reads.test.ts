@@ -190,11 +190,7 @@ describe("reading across external relations", () => {
     const rows = await Contacts()
       .orderBy("first_name", "asc")
       .slice(0, 3)
-      .lookup(
-        Accounts().pluck("_internal", "_id", "name") as never,
-        "account_id",
-        "_id",
-      )
+      .lookup(Accounts().pluck("_internal", "_id", "name"), "account_id", "_id")
       .pluck("first_name", "account_id");
     const expected = await Native<Row>(
       `SELECT c.first_name, jsonb_build_object('_id', a.id::text, 'name', a.name) AS account_id

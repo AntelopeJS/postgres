@@ -64,8 +64,8 @@ describe("array stage dispatch", () => {
       (doc) => doc.key("tags").index(0),
       (doc) => doc.key("tags").includes("x"),
       (doc) => doc.key("tags").slice(1),
-      (doc) => doc.key("tags").map((tag: any) => tag.upcase()),
-      (doc) => doc.key("tags").filter((tag: any) => tag.eq("x")),
+      (doc) => doc.key("tags").map((tag) => tag.upcase()),
+      (doc) => doc.key("tags").filter((tag) => tag.eq("x")),
       (doc) => doc.key("tags").isempty(),
       (doc) => doc.key("tags").count(),
       (doc) => doc.key("scores").sum(),
@@ -111,7 +111,10 @@ describe("arr_count and arr_empty", () => {
 
   it("reads a scalar operand as jsonb so the guard nulls it", () => {
     const age = `to_jsonb("t"."age")`;
-    expect(Compile((doc) => doc.key("age").count()).sql).to.equal(
+    expect(
+      // @ts-expect-error a number column where count reads an array; the SQL guards jsonb_array_length of the column read through to_jsonb
+      Compile((doc) => doc.key("age").count()).sql,
+    ).to.equal(
       Guarded(age, `((jsonb_array_length(${age}))::double precision)`),
     );
   });
@@ -148,6 +151,7 @@ describe("arr_index", () => {
   it("names the stage when the position is absent", () => {
     expect(() =>
       CompileExpression(
+        // @ts-expect-error no position, which the arr_index stage refuses by naming itself
         [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_index")],
         NewContext(),
       ),
@@ -168,21 +172,23 @@ describe("arr_includes", () => {
     expect(Compile((doc) => doc.key("tags").includes("x")).sql).to.not.contain(
       "CASE",
     );
-    expect(Compile((doc) => doc.key("nope").includes("x")).sql).to.not.contain(
-      "CASE",
-    );
+    expect(
+      Compile((doc) => doc.key("nope").includes([[1]])).sql,
+    ).to.not.contain("CASE");
   });
 
   it("leaves a non-array operand to answer false, since @> cannot raise", () => {
     const age = `to_jsonb("t"."age")`;
-    expect(Compile((doc) => doc.key("age").includes("x")).sql).to.equal(
-      `(${age} @> jsonb_build_array(to_jsonb(($1::text))))`,
-    );
+    expect(
+      // @ts-expect-error a number column where includes reads an array; the SQL is an unguarded @> of the column read through to_jsonb
+      Compile((doc) => doc.key("age").includes("x")).sql,
+    ).to.equal(`(${age} @> jsonb_build_array(to_jsonb(($1::text))))`);
   });
 
   it("names the stage when the value is absent", () => {
     expect(() =>
       CompileExpression(
+        // @ts-expect-error no value, which the arr_includes stage refuses by naming itself
         [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_includes")],
         NewContext(),
       ),
@@ -247,6 +253,7 @@ describe("arr_slice", () => {
   it("names the stage when the start is absent", () => {
     expect(() =>
       CompileExpression(
+        // @ts-expect-error no start, which the arr_slice stage refuses by naming itself
         [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_slice")],
         NewContext(),
       ),

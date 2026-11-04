@@ -2,13 +2,19 @@ import { AsJson } from "./readings";
 import { WithDefault } from "./coerce";
 import { type Compiled, QuoteLiteral } from "./sql";
 import { JsonOf, OPAQUE, KeyTypesOf, type SqlType } from "./types";
-import { DecodeFunction, DecodeValue, NULL_JSON } from "./value";
+import {
+  DecodeFunction,
+  DecodeValue,
+  NULL_JSON,
+  RecordedLambda,
+} from "./value";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { BuildDocument, type DocumentMember } from "./row-source";
 import { ARRAY_TYPEOF, HeldOnce, OBJECT_TYPEOF, TextArray } from "./jsonb";
 import { FIRST_OPERAND, FieldNames, FieldOf, RequireOperand } from "./stage";
 import { CurrentValue, SetPlainProjection, SetProjection } from "./relation";
 import { Prepare, type RelationFlag } from "./render";
+import { ClassifyMember } from "./member";
 
 /**
  * Every projection stage is blocked by a pending projection and by nothing else.
@@ -28,7 +34,9 @@ const KeyStage: PipelineStage = (relation, stage, context) => {
 
 const DefaultStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, PROJECTION_BLOCKERS, context);
-  const def = DecodeValue(stage.args[FIRST_OPERAND], context) ?? NULL_JSON;
+  const def =
+    DecodeValue(ClassifyMember(stage.args[FIRST_OPERAND]), context) ??
+    NULL_JSON;
   return SetProjection(prepared, WithDefault(CurrentValue(prepared), def));
 };
 
@@ -38,7 +46,7 @@ const DefaultStage: PipelineStage = (relation, stage, context) => {
  */
 const MapStage: PipelineStage = (relation, stage, context) => {
   const prepared = Prepare(relation, PROJECTION_BLOCKERS, context);
-  const body = DecodeFunction(stage.args[FIRST_OPERAND], context, [
+  const body = DecodeFunction(RecordedLambda(stage, FIRST_OPERAND), context, [
     prepared.source,
   ]);
   return SetProjection(prepared, RequireOperand(body, stage, FIRST_OPERAND));

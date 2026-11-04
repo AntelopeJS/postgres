@@ -9,7 +9,7 @@ import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import { type Relation, RequireOrigin, type TableOrigin } from "./relation";
 import { AliasedColumns, ColumnRowSource, type RowSource } from "./row-source";
 import { FIRST_OPERAND } from "./stage";
-import { IsDocument } from "./guards";
+import { ClassifyMember, type DocumentView } from "./member";
 
 /**
  * The rows a write changes, and everything it may know about them.
@@ -154,27 +154,21 @@ export function MergeExtra(incoming: string): string {
   return `(${EXISTING_EXTRA} || ${incoming})`;
 }
 
-/** What a caller passed where a write wanted a document, for the error that refuses it. */
-export function DescribeKind(value: unknown): string {
-  return Array.isArray(value) ? "an array" : `a ${typeof value}`;
-}
-
 /**
  * The documents one `insert` stage writes, whether the caller passed one or a batch.
  * An array is the batch and never a document, which is the reading every other write shares. The
  * refusal names the position, since a batch is where a caller would look for the entry.
  */
-export function InsertedDocuments(
-  stage: QueryStage,
-): Record<string, unknown>[] {
-  const argument = stage.args[FIRST_OPERAND];
-  const list = Array.isArray(argument) ? argument : [argument];
+export function InsertedDocuments(stage: QueryStage): DocumentView[] {
+  const argument: unknown = stage.args[FIRST_OPERAND];
+  const list: unknown[] = Array.isArray(argument) ? argument : [argument];
   return list.map((entry, position) => {
+    const { document } = ClassifyMember(entry);
     assert(
-      IsDocument(entry),
-      `The '${stage.stage}' stage takes documents, and the one at position ${position} is ${DescribeKind(entry)}`,
+      document,
+      `The '${stage.stage}' stage takes documents, and the one at position ${position} is ${Array.isArray(entry) ? "an array" : `a ${typeof entry}`}`,
     );
-    return entry;
+    return document;
   });
 }
 

@@ -38,15 +38,18 @@ import {
 describe("CompileExpression dispatch", () => {
   it("rejects a stage it does not know", () => {
     expect(() =>
+      // @ts-expect-error a stage outside the union, which the compiler refuses as unsupported
       CompileExpression([QueryStage("not_a_stage")], NewContext()),
     ).to.throw(/Unsupported expression stage 'not_a_stage'/);
   });
 
   it("does not dispatch a stage name inherited from Object.prototype", () => {
     expect(() =>
+      // @ts-expect-error a stage named after an inherited member, which the compiler refuses as unsupported
       CompileExpression([QueryStage("constructor")], NewContext()),
     ).to.throw(/Unsupported expression stage 'constructor'/);
     expect(() =>
+      // @ts-expect-error a stage named after an inherited member, which the compiler refuses as unsupported
       CompileExpression([QueryStage("__proto__")], NewContext()),
     ).to.throw(/Unsupported expression stage '__proto__'/);
   });
@@ -130,10 +133,27 @@ describe("arg", () => {
 
   it("does not resolve a binding inherited from Object.prototype", () => {
     for (const key of ["valueOf", "constructor", "__proto__", "toString"]) {
-      expect(() =>
-        CompileExpression(ValueProxy.arg(key as never).build(), NewContext()),
-      ).to.throw(`Unbound lambda parameter ${key}`);
+      expect(() => NewContext().arg(key)).to.throw(
+        `Unbound lambda parameter ${key}`,
+      );
     }
+  });
+
+  it("reads a text parameter id as unbound rather than refusing it", () => {
+    expect(() =>
+      CompileExpression(
+        // @ts-expect-error a text parameter id, which the arg stage refuses as an unbound lambda parameter
+        [QueryStage("arg", undefined, "valueOf")],
+        NewContext(),
+      ),
+    ).to.throw("Unbound lambda parameter valueOf");
+  });
+
+  it("reads an arg stage whose parameter id is neither a number nor a text as unbound", () => {
+    expect(() =>
+      // @ts-expect-error a boolean parameter id, which the arg stage refuses as an unbound lambda parameter
+      CompileExpression([QueryStage("arg", undefined, true)], NewContext()),
+    ).to.throw("Unbound lambda parameter true");
   });
 
   it("clears a pending timezone", () => {
@@ -326,6 +346,7 @@ describe("boolean stages", () => {
   it("rejects a missing operand naming the stage", () => {
     expect(() =>
       CompileExpression(
+        // @ts-expect-error no operand, which the and stage refuses by naming itself
         [QueryStage("arg", undefined, ROW_ID), QueryStage("and")],
         NewContext(),
       ),

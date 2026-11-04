@@ -29,7 +29,6 @@ import {
   Changes,
   Update,
 } from "./writes-update-fixture";
-import { NotADocument } from "./invalid-fixture";
 
 const INSTANCE_PREDICATE = '"_instance" = ';
 
@@ -105,15 +104,17 @@ describe("the update statement", () => {
   });
 
   it("refuses a payload that is not a document, naming the stage", () => {
-    expect(() => Update(NotADocument("a"))).to.throw(
-      "The 'update' stage takes a document, received a string",
-    );
+    expect(() =>
+      // @ts-expect-error a string payload; update refuses it, naming the stage and the kind received
+      Update("a"),
+    ).to.throw("The 'update' stage takes a document, received a string");
   });
 
   it("refuses an array rather than writing its indices as keys", () => {
-    expect(() => Update(NotADocument([]))).to.throw(
-      "The 'update' stage takes a document, received an array",
-    );
+    expect(() =>
+      // @ts-expect-error an array payload; update refuses it, naming the stage and the kind received
+      Update([]),
+    ).to.throw("The 'update' stage takes a document, received an array");
   });
 });
 

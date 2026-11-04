@@ -1,3 +1,5 @@
+import assert from "node:assert";
+import { IsQueryStage } from "@antelopejs/interface-database/common";
 import type { Compiled } from "./sql";
 import { AsJson, Predicate } from "./readings";
 import { DecodeValue, NULL_JSON } from "./value";
@@ -12,6 +14,7 @@ import {
   type StageMap,
 } from "./stage";
 import { IsSubqueryProvider } from "./context";
+import { ClassifyMember } from "./member";
 
 type Equality = (value: Compiled, other: Compiled) => Compiled;
 
@@ -33,7 +36,8 @@ const ORDERING_OPERATORS = {
 };
 
 const ArgStage: StageHandler = (_state, stage, context) => {
-  const binding = context.arg(stage.args[FIRST_OPERAND]);
+  assert(IsQueryStage(stage, "arg"), "The 'arg' stage reads an 'arg' stage");
+  const binding = context.arg(String(stage.args[FIRST_OPERAND]));
   if (IsSubqueryProvider(binding)) {
     return { current: binding([stage]) };
   }
@@ -42,7 +46,7 @@ const ArgStage: StageHandler = (_state, stage, context) => {
 
 const ConstantStage: StageHandler = (_state, stage, context) => ({
   current: RequireOperand(
-    DecodeValue(stage.args[FIRST_OPERAND], context),
+    DecodeValue(ClassifyMember(stage.args[FIRST_OPERAND]), context),
     stage,
     FIRST_OPERAND,
   ),

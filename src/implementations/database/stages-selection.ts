@@ -1,4 +1,10 @@
 import assert from "node:assert";
+import {
+  type IndexBound,
+  type IndexKeys,
+  IsQueryStage,
+  type StagedObject,
+} from "@antelopejs/interface-database/common";
 
 import { IsArray } from "./types";
 import { StoredAs } from "./readings";
@@ -6,7 +12,12 @@ import { DecodeValue } from "./value";
 import type { DecodingContext } from "./context";
 import { type Compiled, QualifiedColumn } from "./sql";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
-import { ID_COLUMN, INSTANCE_COLUMN, type QueryStage } from "./utils";
+import {
+  ID_COLUMN,
+  INSTANCE_COLUMN,
+  OptionsOf,
+  type QueryStage,
+} from "./utils";
 import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import { KeylessRefusal } from "./external-refusals";
 import {
@@ -17,6 +28,7 @@ import {
 } from "./relation";
 import { Prepare, SINGLE_ROW, WHERE_BLOCKERS } from "./render";
 import { IsString } from "./guards";
+import { ClassifyMember } from "./member";
 
 const NO_KEYS = "FALSE";
 const EQUALITY = "=";
@@ -24,6 +36,9 @@ const AT_LEAST = ">=";
 const BELOW = "<";
 const SINGLE_FIELD = 1;
 const CONTAINS = "@>";
+
+/** A key as a selection stage records it: an expression, one index value, or a compound tuple. */
+type RecordedKey = StagedObject | IndexBound;
 
 /**
  * One selection stage mid-compilation: the columns, the stage and index name, and the context.
@@ -80,7 +95,7 @@ function Addressed(column: Compiled): Compiled {
 }
 
 function IndexOption(stage: QueryStage): string | undefined {
-  const name = stage.options?.index;
+  const name: unknown = OptionsOf(stage)?.index;
   if (name === undefined || name === null) {
     return undefined;
   }
@@ -97,13 +112,13 @@ function IndexOption(stage: QueryStage): string | undefined {
  */
 function KeyValue(
   selection: KeySelection,
-  key: unknown,
+  key: RecordedKey,
   column: Compiled,
   index: number,
   operator = EQUALITY,
 ): string {
   const value = RequireOperand(
-    DecodeValue(key, selection.context),
+    DecodeValue(ClassifyMember(key), selection.context),
     selection.stage,
     index,
   );
@@ -112,26 +127,22 @@ function KeyValue(
 }
 
 /** An array at the top level is always a list of keys, which is what the varargs form means. */
-function KeyList(argument: unknown): unknown[] {
+function KeyList(argument: IndexKeys): RecordedKey[] {
   return Array.isArray(argument) ? argument : [argument];
-}
-
-function KeyArity(key: unknown): string {
-  return Array.isArray(key) ? `${key.length} values` : `a ${typeof key}`;
 }
 
 /**
  * One key, taken whole against a single-field index and element-wise against a compound one.
  * A hole inside a tuple is named by the index and the position it is missing from.
  */
-function KeyTuple(selection: KeySelection, key: unknown): string {
+function KeyTuple(selection: KeySelection, key: RecordedKey): string {
   const columns = selection.columns;
   if (columns.length === SINGLE_FIELD) {
     return KeyValue(selection, key, columns[0], FIRST_OPERAND);
   }
   assert(
     Array.isArray(key) && key.length === columns.length,
-    `The '${selection.indexId}' index takes a key of ${columns.length} values, received ${KeyArity(key)}`,
+    `The '${selection.indexId}' index takes a key of ${columns.length} values, received ${Array.isArray(key) ? `${key.length} values` : `a ${typeof key}`}`,
   );
   const parts = key.map((part, position) => {
     assert(
@@ -147,7 +158,7 @@ function KeyTuple(selection: KeySelection, key: unknown): string {
  * Matches a key against a column holding a *list* of values, which is what `multi` declares.
  * Deliberately unguarded and spelled as a disjunction, so the GIN index stays reachable.
  */
-function Contained(selection: KeySelection, keys: unknown[]): string {
+function Contained(selection: KeySelection, keys: RecordedKey[]): string {
   const column = selection.columns[0];
   const tests = keys.map(
     (key) =>
@@ -171,7 +182,7 @@ function RequireAddressable(selection: KeySelection): void {
  * Matches a key list against one column, or a list of key tuples against a row of them.
  * An empty list is `FALSE`; a column declared as an array takes {@link Contained} instead.
  */
-function KeySet(selection: KeySelection, keys: unknown[]): string {
+function KeySet(selection: KeySelection, keys: RecordedKey[]): string {
   if (keys.length === 0) {
     return NO_KEYS;
   }
@@ -208,6 +219,7 @@ function BoundToOneInstance(relation: Relation): void {
  * No index name is read off the stage: `get` addresses the primary key by definition.
  */
 const GetStage: PipelineStage = (relation, stage, context) => {
+  assert(IsQueryStage(stage, "get"), "The 'get' stage reads a 'get' stage");
   const selection = Selected(relation, stage, context, undefined);
   const prepared = selection.relation;
   const column = selection.columns[0];
@@ -226,6 +238,10 @@ const GetStage: PipelineStage = (relation, stage, context) => {
 
 /** Naming no index selects on the primary key, which is the contract's own default. */
 const GetAllStage: PipelineStage = (relation, stage, context) => {
+  assert(
+    IsQueryStage(stage, "getAll"),
+    "The 'getAll' stage reads a 'getAll' stage",
+  );
   const selection = Selected(relation, stage, context, IndexOption(stage));
   const keys = KeyList(stage.args[FIRST_OPERAND]);
   selection.relation.where.push(`(${KeySet(selection, keys)})`);
@@ -237,6 +253,10 @@ const GetAllStage: PipelineStage = (relation, stage, context) => {
  * A compound index and an array field are both refused by name, having no reading to offer.
  */
 const BetweenStage: PipelineStage = (relation, stage, context) => {
+  assert(
+    IsQueryStage(stage, "between"),
+    "The 'between' stage reads a 'between' stage",
+  );
   const name = IndexOption(stage);
   assert(name !== undefined, "The 'between' stage is missing its field name");
   const selection = Selected(relation, stage, context, name);

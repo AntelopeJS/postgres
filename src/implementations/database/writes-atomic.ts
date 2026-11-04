@@ -1,8 +1,10 @@
 import assert from "node:assert";
 import { DatabaseError } from "pg";
 import { ValidateAtomicMutation } from "@antelopejs/interface-database/atomic";
+import { IsQueryStage } from "@antelopejs/interface-database/common";
 import type {
   AtomicMutation,
+  AtomicRecord,
   AtomicMutationOutcome,
   AtomicDelete,
   AtomicUpdate,
@@ -32,14 +34,13 @@ import {
   WriteRowSource,
 } from "./writes-shared";
 import { IsString } from "./guards";
+import { ClassifyMember } from "./member";
 
 export const ATOMIC_MUTATION = "atomicMutation";
 const ATOMIC_ARGUMENT_COUNT = 2;
 
-type Mutation = AtomicMutation<Record<string, unknown>>;
-type RevisionMutation =
-  | AtomicDelete<Record<string, unknown>>
-  | AtomicUpdate<Record<string, unknown>>;
+type Mutation = AtomicMutation<AtomicRecord>;
+type RevisionMutation = AtomicDelete<AtomicRecord> | AtomicUpdate<AtomicRecord>;
 
 function RevisionPredicate(
   target: WriteTarget,
@@ -78,7 +79,9 @@ function AtomicAssignments(
     ...request.patch,
     [request.revisionField]: request.nextRevision,
   };
-  const split = SplitPayload(document, target.origin.model, context, {
+  const view = ClassifyMember(document).document;
+  assert(view, "A patch spread into a literal is a document");
+  const split = SplitPayload(view, target.origin.model, context, {
     id: ID_AS_ASSERTION,
   });
   const assignments = split.members.map((member) =>
@@ -98,7 +101,7 @@ function AtomicPredicate(
   if (request.type !== "deleteIfEqual") {
     return RevisionPredicate(target, request, context);
   }
-  const expected = DecodeValue(request.expectedValue, context);
+  const expected = DecodeValue(ClassifyMember(request.expectedValue), context);
   assert(expected, "Expected a constant equality value");
   const field = WriteRowSource(target.origin).field(request.field);
   const pair = UnifyOperands(field, expected);
@@ -107,11 +110,13 @@ function AtomicPredicate(
 
 export const AtomicWrite: WriteCompiler = (target, stage, context) => {
   assert(
-    stage.options === undefined && stage.args.length === ATOMIC_ARGUMENT_COUNT,
+    IsQueryStage(stage, ATOMIC_MUTATION) &&
+      stage.options === undefined &&
+      stage.args.length === ATOMIC_ARGUMENT_COUNT,
     "Atomic mutation requires exactly a key and request without options",
   );
   const instance = RequireInstance(target, stage);
-  const [key, request] = stage.args as [string, Mutation];
+  const [key, request] = stage.args;
   ValidateAtomicMutation(key, request, RESERVED_COLUMNS);
   const where = [
     `${QualifiedColumn(WRITE_ALIAS, INSTANCE_COLUMN)} = ${instance.sql}`,

@@ -106,21 +106,17 @@ export interface SchemaModel {
   [tableId: string]: TableModel;
 }
 
-const SCALAR_TYPES = {
-  string: TEXT,
-  number: FLOAT,
-  boolean: BOOL,
-  date: TIMESTAMP,
-  object: OPAQUE,
-  any: OPAQUE,
-} satisfies Record<string, SqlType>;
-
-function IsScalarToken(token: string): token is keyof typeof SCALAR_TYPES {
-  return Object.hasOwn(SCALAR_TYPES, token);
-}
+const SCALAR_TYPES = new Map<string, SqlType>([
+  ["string", TEXT],
+  ["number", FLOAT],
+  ["boolean", BOOL],
+  ["date", TIMESTAMP],
+  ["object", OPAQUE],
+  ["any", OPAQUE],
+]);
 
 const ARRAY_SUFFIX = "[]";
-const SUPPORTED_TOKENS = Object.keys(SCALAR_TYPES).join(", ");
+const SUPPORTED_TOKENS = [...SCALAR_TYPES.keys()].join(", ");
 
 function IsCodec(
   value: Exclude<FieldType, string | StringFieldType[]>,
@@ -146,10 +142,11 @@ function ParseToken(token: string, path: string): SqlType {
   if (normalized.endsWith(ARRAY_SUFFIX)) {
     return ArrayOf(ParseToken(normalized.slice(0, -ARRAY_SUFFIX.length), path));
   }
-  if (!IsScalarToken(normalized)) {
+  const scalar = SCALAR_TYPES.get(normalized);
+  if (!scalar) {
     throw UnsupportedFieldType(token, path);
   }
-  return SCALAR_TYPES[normalized];
+  return scalar;
 }
 
 function ParseKeyTypes(

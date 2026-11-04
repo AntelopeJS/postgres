@@ -9,8 +9,7 @@ import { FIRST_OPERAND } from "./stage";
 import { KeylessRefusal } from "./external-refusals";
 import { SetProjection } from "./relation";
 import { Render } from "./render";
-import type { QueryStage } from "./utils";
-import { ID_COLUMN } from "./utils";
+import { ID_COLUMN, OptionsOf, type QueryStage } from "./utils";
 import { QualifiedColumn, QuoteIdentifier } from "./sql";
 import {
   type ColumnDescriptor,
@@ -32,13 +31,13 @@ import {
 } from "./external-payload";
 import {
   InsertedDocuments,
-  DescribeKind,
   WRITE_ALIAS,
   type WriteCompiler,
   type WriteStatement,
   type WriteTarget,
 } from "./writes-shared";
-import { IsDocument, IsString } from "./guards";
+import { IsString } from "./guards";
+import { ClassifyMember, type DocumentView, type Member } from "./member";
 
 const ALIAS = QuoteIdentifier(WRITE_ALIAS);
 const SOURCE_ALIAS = QuoteIdentifier("src");
@@ -169,13 +168,14 @@ function TargetedRows(target: WriteTarget, key: ColumnDescriptor[]): string {
   return `(${written} IN (SELECT ${SOURCE_ALIAS}.${OUTPUT} FROM ${selected}))`;
 }
 
-function DocumentOf(stage: QueryStage): Record<string, unknown> {
-  const argument = stage.args[FIRST_OPERAND];
+function DocumentOf(stage: QueryStage): DocumentView {
+  const argument: unknown = stage.args[FIRST_OPERAND];
+  const { document } = ClassifyMember(argument);
   assert(
-    IsDocument(argument),
-    `The '${stage.stage}' stage on an external relation takes a document, received ${DescribeKind(argument)}; an expression mapper is not supported on external relations in this version`,
+    document,
+    `The '${stage.stage}' stage on an external relation takes a document, received ${Array.isArray(argument) ? "an array" : `a ${typeof argument}`}; an expression mapper is not supported on external relations in this version`,
   );
-  return argument;
+  return document;
 }
 
 /**
@@ -207,7 +207,7 @@ function Validation(
         `(${condition}) AS ${QuoteIdentifier(`c${conditions.length}`)}`,
       );
       failures.push(
-        `Field '${check.path}' cannot hold ${JSON.stringify(check.raw)}: the column is ${check.descriptor.native}`,
+        `Field '${check.path}' cannot hold ${check.raw.json()}: the column is ${check.descriptor.native}`,
       );
     }
   }
@@ -224,7 +224,7 @@ function Validation(
 interface ValueCheck {
   path: string;
   descriptor: ColumnDescriptor;
-  raw: unknown;
+  raw: Member;
 }
 
 function ChecksOf(
@@ -233,19 +233,23 @@ function ChecksOf(
   mode: ExternalWriteMode,
 ): ValueCheck[] {
   const path = `${external.schema}.${external.table}`;
-  const checks: ValueCheck[] = payload.assignments
-    .filter((assignment) => assignment.raw !== undefined)
-    .map((assignment) => ({
-      path: `${path}.${assignment.field}`,
-      descriptor: assignment.descriptor,
-      raw: assignment.raw,
-    }));
+  const checks: ValueCheck[] = payload.assignments.flatMap((assignment) =>
+    assignment.raw === undefined
+      ? []
+      : [
+          {
+            path: `${path}.${assignment.field}`,
+            descriptor: assignment.descriptor,
+            raw: assignment.raw,
+          },
+        ],
+  );
   if (mode === "insert") {
     for (const asserted of payload.asserted.values()) {
       checks.push({
         path: `${path}.${asserted.claimedBy}`,
         descriptor: asserted.descriptor,
-        raw: String(asserted.raw),
+        raw: ClassifyMember(String(asserted.raw)),
       });
     }
     for (const claim of payload.keyFields) {
@@ -306,7 +310,7 @@ const ExternalDelete: WriteCompiler = (target) => {
 };
 
 function ConflictOf(stage: QueryStage): string | undefined {
-  const conflict = stage.options?.conflict;
+  const conflict: unknown = OptionsOf(stage)?.conflict;
   if (conflict === undefined || conflict === null) {
     return undefined;
   }

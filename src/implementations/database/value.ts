@@ -1,4 +1,5 @@
-import { Query, ValueProxy } from "@antelopejs/interface-database";
+import assert from "node:assert";
+
 import type { QueryStage } from "@antelopejs/interface-database/common";
 
 import { Cast, UnifyAll } from "./coerce";
@@ -21,6 +22,12 @@ import {
   TIMESTAMP,
 } from "./types";
 import { IsBoolean, IsNumber, IsString } from "./guards";
+import {
+  ClassifyMember,
+  IsPlainObject,
+  type ListMember,
+  type Member,
+} from "./member";
 
 /**
  * The single json null every `null` in a query decodes to.
@@ -45,78 +52,36 @@ export const NULL_JSON: Compiled = { sql: JSON_NULL, type: OPAQUE };
  * what keeps that obligation checkable rather than a matter of trust.
  */
 export function DecodeValue(
-  value: unknown,
+  value: Member,
   context: DecodingContext,
 ): Compiled | undefined {
-  if (value === undefined) {
-    return undefined;
+  switch (value.kind) {
+    case "absent":
+      return undefined;
+    case "null":
+      return NULL_JSON;
+    case "proxy":
+      return context.expression(value.value.build());
+    case "query":
+      return context.subquery(value.value.build());
+    case "date":
+      return Param(context.params, value.value, TIMESTAMP);
+    case "list":
+      return DecodeArray(value, context);
+    case "record":
+      return DecodeEntries(value.document.entries(), context);
+    case "text":
+      return Param(context.params, value.value, TEXT);
+    case "number":
+      return Param(context.params, value.value, FLOAT);
+    case "boolean":
+      return Param(context.params, value.value, BOOL);
+    case "staged":
+    case "opaque":
+      return value.refuseInQuery();
+    default:
+      return value satisfies never;
   }
-  if (value === null) {
-    return NULL_JSON;
-  }
-  if (value instanceof ValueProxy) {
-    return context.expression(value.build());
-  }
-  if (value instanceof Query) {
-    return context.subquery(value.build());
-  }
-  if (value instanceof Date) {
-    return Param(context.params, value, TIMESTAMP);
-  }
-  if (Array.isArray(value)) {
-    return DecodeArray(value, context);
-  }
-  if (IsPlainObject(value)) {
-    return DecodeObject(value, context);
-  }
-  if (IsString(value)) {
-    return Param(context.params, value, TEXT);
-  }
-  if (IsNumber(value)) {
-    return Param(context.params, value, FLOAT);
-  }
-  if (IsBoolean(value)) {
-    return Param(context.params, value, BOOL);
-  }
-  throw new Error(`Unsupported value of type '${typeof value}' in query`);
-}
-
-/**
- * Whether a value is an object literal rather than an instance of something.
- *
- * The distinction is what tells a document apart from a `ValueProxy`, which is an object too: a
- * membership test that only asked whether the value is an object would read a recorded expression
- * as a document of the keys its class happens to carry.
- */
-export function IsPlainObject(
-  value: unknown,
-): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Object.getPrototypeOf(value) === Object.prototype
-  );
-}
-
-/**
- * Whether a value is json the driver can send whole, rather than an expression to compile.
- *
- * A `ValueProxy` or a `Query` reads the row and has to be emitted as SQL; a `Date` is deliberately
- * excluded because `to_jsonb(timestamptz)` and `JSON.stringify` do not spell the same instant.
- */
-function IsConstantJson(value: unknown): value is ConstantJson {
-  if (value === null) {
-    return true;
-  }
-  if (Array.isArray(value)) {
-    return value.every(IsConstantJson);
-  }
-  if (IsPlainObject(value)) {
-    return Object.values(value).every(
-      (item) => item === undefined || IsConstantJson(item),
-    );
-  }
-  return IsString(value) || IsNumber(value) || IsBoolean(value);
 }
 
 /**
@@ -158,24 +123,28 @@ function ConstantType(value: ConstantJson): SqlType {
  * the ones they did not count, like every route of an application. Sending the array itself keeps
  * the same value, the same type, and one parameter whatever its length.
  */
-function DecodeArray(values: unknown[], context: DecodingContext): Compiled {
-  if (values.every(IsConstantJson)) {
-    const type = ArrayOf(UnifyAll(values.map(ConstantType)));
-    return { sql: Param(context.params, values, OPAQUE).sql, type };
+function DecodeArray(list: ListMember, context: DecodingContext): Compiled {
+  const constant = list.constant();
+  if (constant) {
+    const type = ArrayOf(UnifyAll(constant.map(ConstantType)));
+    return { sql: Param(context.params, constant, OPAQUE).sql, type };
   }
-  const items = values.map((item) => DecodeValue(item, context) ?? NULL_JSON);
+  const items = list
+    .items()
+    .map((item) => DecodeValue(item, context) ?? NULL_JSON);
   const elem = UnifyAll(items.map((item) => item.type));
   const parts = items.map((item) => Cast(item, OPAQUE).sql);
   return { sql: `jsonb_build_array(${parts.join(", ")})`, type: ArrayOf(elem) };
 }
 
-function DecodeObject(
-  value: Record<string, unknown>,
+/** A document built from named members, each cast to jsonb; an absent member is left out. */
+export function DecodeEntries(
+  entries: [string, Member][],
   context: DecodingContext,
 ): Compiled {
   const parts: string[] = [];
   const keyTypes: Record<string, SqlType> = {};
-  for (const [name, item] of Object.entries(value)) {
+  for (const [name, item] of entries) {
     const compiled = DecodeValue(item, context);
     if (!compiled) {
       continue;
@@ -191,7 +160,13 @@ function DecodeObject(
 
 const FUNCTION_STAGE = "func";
 const PARAMETER_IDS = 0;
-const FUNCTION_BODY = 1;
+export const FUNCTION_BODY = 1;
+
+/** A lambda the query builder recorded: the ids of its parameters, then the body they are bound in. */
+export interface RecordedFunction {
+  stage: typeof FUNCTION_STAGE;
+  args: [ids: unknown[], body: unknown];
+}
 
 /**
  * Whether a value is a lambda a caller recorded, for a stage that accepts either a lambda or a plain
@@ -207,7 +182,17 @@ const FUNCTION_BODY = 1;
  * the value to the stage it tested, so a caller that goes on to compile the body reaches
  * {@link DecodeFunction} without asserting the same shape a second time.
  */
-export function IsRecordedFunction(value: unknown): value is QueryStage {
+export function IsRecordedFunction(value: unknown): value is RecordedFunction {
+  return IsLambdaStage(value) && value.args[PARAMETER_IDS].every(IsNumber);
+}
+
+/**
+ * Whether a value is a `func` stage whose parameter ids are a list. A stage that takes only a
+ * callback accepts whatever ids a `func` rebuilt from JSON may carry, which the adapter has always
+ * bound by their property-key text; {@link IsRecordedFunction} stays strict because `update` has to
+ * tell a lambda from a document.
+ */
+function IsLambdaStage(value: unknown): value is RecordedFunction {
   if (!IsPlainObject(value) || value.stage !== FUNCTION_STAGE) {
     return false;
   }
@@ -216,12 +201,23 @@ export function IsRecordedFunction(value: unknown): value is QueryStage {
     return false;
   }
   const ids: unknown = args[PARAMETER_IDS];
-  return Array.isArray(ids) && ids.every(IsNumber);
+  return Array.isArray(ids);
 }
 
-/** Whatever a recorded lambda returned, which is a value for most callers and a document for one. */
-export function FunctionBody(func: QueryStage): unknown {
-  return func.args[FUNCTION_BODY];
+/**
+ * The lambda a stage records as its argument at `index`.
+ *
+ * `map`, `filter` and the other callback stages take nothing else, and the builder always records
+ * one, so a stage that carries any other value is refused here by name rather than failing on
+ * whatever the compiler reads from it first.
+ */
+export function RecordedLambda(
+  stage: QueryStage,
+  index: number,
+): RecordedFunction {
+  const lambda: unknown = stage.args[index];
+  assert(IsLambdaStage(lambda), `Stage '${stage.stage}' requires a callback`);
+  return lambda;
 }
 
 /**
@@ -235,24 +231,24 @@ export function FunctionBody(func: QueryStage): unknown {
  * document as one jsonb object and lose the columns.
  */
 export function WithBoundArguments<T>(
-  func: QueryStage,
+  func: RecordedFunction,
   context: DecodingContext,
   bindings: ArgumentBinding[],
   compile: () => T,
 ): T {
-  const ids: number[] = func.args[PARAMETER_IDS];
+  const ids = func.args[PARAMETER_IDS];
   const missing = ids.findIndex((_, index) => !bindings[index]);
   if (missing >= 0) {
     throw new Error(`Missing binding for lambda parameter ${missing}`);
   }
   ids.forEach((id, index) => {
-    context.bind(id, bindings[index]);
+    context.bind(String(id), bindings[index]);
   });
   try {
     return compile();
   } finally {
     ids.forEach((id) => {
-      context.unbind(id);
+      context.unbind(String(id));
     });
   }
 }
@@ -262,11 +258,11 @@ export function WithBoundArguments<T>(
  * given row sources or subquery providers for the duration of the decode.
  */
 export function DecodeFunction(
-  func: QueryStage,
+  func: RecordedFunction,
   context: DecodingContext,
   bindings: ArgumentBinding[],
 ): Compiled | undefined {
   return WithBoundArguments(func, context, bindings, () =>
-    DecodeValue(FunctionBody(func), context),
+    DecodeValue(ClassifyMember(func.args[FUNCTION_BODY]), context),
   );
 }

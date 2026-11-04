@@ -3,7 +3,7 @@ import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 import { SchemaInstance, ValueProxy } from "@antelopejs/interface-database";
 import {
   QueryStage,
-  type StagedObject,
+  StagedObject,
 } from "@antelopejs/interface-database/common";
 
 import { RefusingCompilers, WithOptions } from "./spec-fixture";
@@ -17,7 +17,6 @@ import {
   RegisteredOrigin,
   type RootSelection,
 } from "../../implementations/database/selection";
-import { NotAString } from "./invalid-fixture";
 
 interface Vehicle {
   car: string;
@@ -41,13 +40,7 @@ const VEHICLES: TableModel = {
   },
 };
 
-const INDEXES = {
-  byCar: ["car", "price"],
-} satisfies Record<string, string[]>;
-
-function IsIndexKey(name: string): name is keyof typeof INDEXES {
-  return Object.hasOwn(INDEXES, name);
-}
+const INDEXES = new Map<string, string[]>([["byCar", ["car", "price"]]]);
 
 type InstanceId = string | typeof CROSS_INSTANCE | undefined;
 
@@ -56,7 +49,7 @@ function StubOrigin(schemaId: string, tableId: string): TableOrigin {
     schemaId,
     tableId,
     model: VEHICLES,
-    index: (name) => (IsIndexKey(name) ? INDEXES[name] : [name]),
+    index: (name) => INDEXES.get(name) ?? [name],
   };
 }
 
@@ -81,10 +74,10 @@ function Build(query: StagedObject, context: DecodingContext): RootSelection {
 
 type TableQuery = ReturnType<typeof Root>;
 
-interface CyclicPayload {
+type CyclicPayload = {
   nested: TableQuery;
   self?: CyclicPayload;
-}
+};
 
 function Cyclic(): CyclicPayload {
   const payload: CyclicPayload = { nested: Root(OTHER_SCHEMA_ID) };
@@ -136,7 +129,8 @@ describe("BuildRoot", () => {
   });
 
   it("rejects an instance id that is neither a string nor the sentinel", () => {
-    const query = Root(SCHEMA_ID, NotAString(7));
+    // @ts-expect-error the number 7 as an instance id; building the query refuses it, naming the type received
+    const query = Root(SCHEMA_ID, 7);
     expect(() => Build(query, NewContext())).to.throw(
       "An instance id must be a string or CROSS_INSTANCE, received number",
     );
@@ -172,6 +166,7 @@ describe("BuildRoot", () => {
 
   it("rejects a prefix stage carrying no id", () => {
     const stages = Root().build();
+    // @ts-expect-error no id, which BuildRoot refuses on the schema stage
     stages[0] = QueryStage("schema");
     expect(() =>
       WithOptions({}, () => BuildRoot(stages, NewContext())),
@@ -188,6 +183,13 @@ describe("RegisteredOrigin", () => {
 });
 
 describe("CollectSchemaIds", () => {
+  it("reads the schema a staged object reaches when it is neither a proxy nor a query", () => {
+    const staged = new StagedObject(QueryStage("schema", { id: SCHEMA_ID }));
+    expect(
+      CollectSchemaIds([QueryStage("key", undefined, staged)]),
+    ).to.deep.equal([SCHEMA_ID]);
+  });
+
   it("collects the schema a plain table query names", () => {
     expect(CollectSchemaIds(Root().build())).to.deep.equal([SCHEMA_ID]);
   });

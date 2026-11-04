@@ -9,15 +9,14 @@ import type { DecodingContext } from "./context";
 import { type TableOrigin } from "./relation";
 import { Render } from "./render";
 import { GuardJson, OBJECT_TYPEOF, TextArray } from "./jsonb";
-import { IsDocument } from "./guards";
 import { EXTRA_COLUMN, ID_COLUMN, type QueryStage } from "./utils";
 import { type Compiled, QualifiedColumn, QuoteIdentifier } from "./sql";
 import { DeclaredColumns, DocumentKeys, type TableModel } from "./fields";
 import {
   DecodeValue,
-  FunctionBody,
-  IsPlainObject,
+  FUNCTION_BODY,
   IsRecordedFunction,
+  type RecordedFunction,
   WithBoundArguments,
 } from "./value";
 import {
@@ -29,7 +28,6 @@ import {
 } from "./payload";
 import {
   Assignment,
-  DescribeKind,
   EMPTY_EXTRA,
   EXISTING_EXTRA,
   MergeExtra,
@@ -42,6 +40,7 @@ import {
   WriteTable,
   type WriteTarget,
 } from "./writes-shared";
+import { ClassifyMember, type DocumentView } from "./member";
 
 /** Neither `update` nor `replace` is keyed by its payload: an `_id` it names states a target. */
 const CHANGED: PayloadOptions = { id: ID_AS_ASSERTION };
@@ -164,19 +163,18 @@ function UpdateStatement(
   };
 }
 
-function ChangedDocument(
-  stage: QueryStage,
-  argument: unknown,
-): Record<string, unknown> {
+function ChangedDocument(stage: QueryStage): DocumentView {
+  const argument: unknown = stage.args[FIRST_OPERAND];
+  const { document } = ClassifyMember(argument);
   assert(
-    IsDocument(argument),
-    `The '${stage.stage}' stage takes a document, received ${DescribeKind(argument)}`,
+    document,
+    `The '${stage.stage}' stage takes a document, received ${Array.isArray(argument) ? "an array" : `a ${typeof argument}`}`,
   );
-  return argument;
+  return document;
 }
 
 function ChangedPayload(
-  document: Record<string, unknown>,
+  document: DocumentView,
   target: WriteTarget,
   context: DecodingContext,
 ): PayloadSplit {
@@ -312,14 +310,14 @@ function MultiAssignment(
 function MappedColumns(
   target: WriteTarget,
   stage: QueryStage,
-  mapper: QueryStage,
+  mapper: RecordedFunction,
   context: DecodingContext,
 ): ChangedColumns {
-  const body = FunctionBody(mapper);
+  const body = ClassifyMember(mapper.args[FUNCTION_BODY]);
   const bindings = [WriteRowSource(target.origin)];
-  if (IsPlainObject(body)) {
+  if (body.kind === "record") {
     const split = WithBoundArguments(mapper, context, bindings, () =>
-      ChangedPayload(body, target, context),
+      ChangedPayload(body.document, target, context),
     );
     return ChangedColumnsOf(split, stage);
   }
@@ -347,11 +345,11 @@ function MappedColumns(
  * states what it costs.
  */
 export const UpdateWrite: WriteCompiler = (target, stage, context) => {
-  const argument = stage.args[FIRST_OPERAND];
+  const argument: unknown = stage.args[FIRST_OPERAND];
   const changed = IsRecordedFunction(argument)
     ? MappedColumns(target, stage, argument, context)
     : ChangedColumnsOf(
-        ChangedPayload(ChangedDocument(stage, argument), target, context),
+        ChangedPayload(ChangedDocument(stage), target, context),
         stage,
       );
   return UpdateStatement(target, stage, changed, context);
@@ -366,7 +364,7 @@ export const UpdateWrite: WriteCompiler = (target, stage, context) => {
  */
 export const ReplaceWrite: WriteCompiler = (target, stage, context) => {
   RefuseCrossInstance(target, stage);
-  const document = ChangedDocument(stage, stage.args[FIRST_OPERAND]);
+  const document = ChangedDocument(stage);
   const split = ChangedPayload(document, target, context);
   const changed = ChangedFrom(
     ReplacedColumns(split, target.origin.model),

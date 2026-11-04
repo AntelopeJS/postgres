@@ -1,13 +1,13 @@
-# @antelopejs/postgres
+# `@antelopejs/postgres`
 
 <div align="center">
-<a href="https://www.npmjs.com/package/@antelopejs/postgres"><img alt="npm" src="https://img.shields.io/npm/v/@antelopejs/postgres?style=for-the-badge&labelColor=000000&color=000000"></a>
-<a href="./LICENSE"><img alt="License" src="https://img.shields.io/npm/l/@antelopejs/postgres?style=for-the-badge&labelColor=000000&color=000000"></a>
-<a href="https://discord.gg/g4pFt6eXqu"><img src="https://img.shields.io/badge/Discord-18181B?logo=discord&style=for-the-badge&color=000000" alt="Discord"></a>
-<a href="https://interfaces.antelopejs.com/docs/database"><img src="https://img.shields.io/badge/Docs-18181B?style=for-the-badge&color=000000" alt="Documentation"></a>
+<a href="https://www.npmjs.com/package/@antelopejs/postgres"><img data-illustration alt="npm" src="https://img.shields.io/npm/v/@antelopejs/postgres?style=for-the-badge&labelColor=000000&color=000000"></a>
+<a href="./LICENSE"><img data-illustration alt="License" src="https://img.shields.io/npm/l/@antelopejs/postgres?style=for-the-badge&labelColor=000000&color=000000"></a>
+<a href="https://discord.gg/g4pFt6eXqu"><img data-illustration src="https://img.shields.io/badge/Discord-18181B?logo=discord&style=for-the-badge&color=000000" alt="Discord"></a>
+<a href="https://interfaces.antelopejs.com/docs/database"><img data-illustration src="https://img.shields.io/badge/Docs-18181B?style=for-the-badge&color=000000" alt="Documentation"></a>
 </div>
 
-The PostgreSQL backend of AntelopeJS: it runs the database interface's queries on PostgreSQL with the [`pg`](https://github.com/brianc/node-postgres) driver, mapping schema definitions onto real relational tables with native column types and indexes. It can also serve tables that already exist in a database it does not own.
+The PostgreSQL backend of AntelopeJS. It runs the queries of the database interface on PostgreSQL with the [`pg`](https://github.com/brianc/node-postgres) driver, and maps schema definitions onto relational tables with native column types and indexes. It can also serve tables that already exist in a database it does not own.
 
 Part of [AntelopeJS](https://github.com/AntelopeJS/antelopejs). Used by [AntelopeJS DMS](https://github.com/AntelopeJS/dms), the open-source back office for your PostgreSQL, MongoDB or RethinkDB database.
 
@@ -17,7 +17,14 @@ Part of [AntelopeJS](https://github.com/AntelopeJS/antelopejs). Used by [Antelop
 | ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
 | [`@antelopejs/interface-database`](https://github.com/AntelopeJS/interface-database) | [Database](https://interfaces.antelopejs.com/docs/database) |
 
-Schemas, tables, queries, change feeds and atomic mutations are documented on the database interface pages.
+The database interface pages document schemas, tables, queries, change feeds and atomic mutations.
+
+## Requirements
+
+<!-- antelopejs-docs-node:start -->
+
+This package requires Node.js `>=22`.
+<!-- antelopejs-docs-node:end -->
 
 ## Install
 
@@ -25,11 +32,9 @@ Schemas, tables, queries, change feeds and atomic mutations are documented on th
 ajs project modules add @antelopejs/postgres
 ```
 
-The command writes the module's default configuration: `postgres://postgres@localhost:5432/antelopejs`, with `migrations: "safe"`.
+The command writes the module's default configuration, the URL `postgres://postgres@localhost:5432/antelopejs` with `migrations: "safe"`.
 
-**Requires PostgreSQL 16 or later.** The adapter uses `pg_input_is_valid` so that a text or jsonb
-value which is not a parseable date yields `null` instead of aborting the whole statement. It is
-the only construct used above PostgreSQL 9.5.
+The adapter calls PostgreSQL's `pg_input_is_valid` function, so that a text or jsonb value that is not a parseable date yields `null` and does not abort the whole statement. The server must provide that function. [`src/test/antelope.test.ts`](src/test/antelope.test.ts) names the PostgreSQL image that the tests run against.
 
 ## Configuration
 
@@ -58,15 +63,15 @@ export default defineConfig({
 });
 ```
 
-| Key            | Description                                                                                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`         | `"owned"` (default) creates and converges the tables; `"external"` serves existing tables without changing them.                                              |
-| `url`          | PostgreSQL connection string.                                                                                                                                 |
-| `migrations`   | `"safe"` (default) only adds columns and indexes; `"destructive"` also alters and drops them. See [Schema convergence](./docs/storage.md#schema-convergence). |
-| `schemaPrefix` | Prefix for generated PostgreSQL schema names, for several applications sharing one database.                                                                  |
-| `pool`         | Optional [`pg.Pool`](https://node-postgres.com/apis/pool) options, merged over the URL.                                                                       |
+| Key            | Description                                                                                                                                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mode`         | `"owned"` (default) creates and converges the tables. `"external"` serves existing tables without changing them.                                                                                                   |
+| `url`          | PostgreSQL connection string.                                                                                                                                                                                      |
+| `migrations`   | `"safe"` (default) adds columns and indexes, and also drops or swaps indexes that the adapter owns. `"destructive"` also alters and drops columns. See [Schema convergence](./docs/storage.md#schema-convergence). |
+| `schemaPrefix` | Prefix for generated PostgreSQL schema names, for several applications sharing one database.                                                                                                                       |
+| `pool`         | Optional [`pg.Pool`](https://node-postgres.com/apis/pool) options, merged over the URL.                                                                                                                            |
 
-Cursor, statement-timeout and change-feed tuning are in [docs/configuration.md](./docs/configuration.md).
+[docs/configuration.md](./docs/configuration.md) lists the options for cursors, the statement timeout and change feeds.
 
 ## Quick start
 
@@ -76,30 +81,22 @@ In the module that stores data, add the database interface:
 pnpm add @antelopejs/interface-database
 ```
 
-Then follow the [database interface guide](https://framework.antelopejs.com/docs/guides/database) to declare a schema and query it. The same code runs on [`@antelopejs/mongodb`](https://github.com/AntelopeJS/mongodb) and [`@antelopejs/rethinkdb`](https://github.com/AntelopeJS/rethinkdb); [Behaviour worth knowing](./docs/behaviour.md) records where the backends differ.
+Then follow the [database interface guide](https://framework.antelopejs.com/docs/guides/database) to declare a schema and query it. The same code runs on [`@antelopejs/mongodb`](https://github.com/AntelopeJS/mongodb) and [`@antelopejs/rethinkdb`](https://github.com/AntelopeJS/rethinkdb). [Behaviour worth knowing](./docs/behaviour.md) records where the backends differ.
 
 ## Storage layout
 
-Unlike the document-store backends, this module treats schema field declarations as real
-DDL: each AntelopeJS schema becomes a PostgreSQL schema, each table a real table, and each
-declared scalar field a natively typed, natively indexable column. Queries compile to a single
-SQL statement. Filters become `WHERE` clauses, joins become `JOIN`s, and a `filter` or `orderBy`
-over a declared field reaches its btree index.
+Unlike the document-store backends, this module turns schema field declarations into DDL. Each AntelopeJS schema becomes a PostgreSQL schema, each table a real table, and each declared scalar field a column with a native type and native indexes. A query compiles to a single SQL statement. Filters become `WHERE` clauses, joins become `JOIN`s, and a `filter` or `orderBy` over a declared field reaches its btree index.
 
-- One PostgreSQL schema per AntelopeJS schema id
-- Declared scalar fields become typed columns; objects, arrays and undeclared fields live in `jsonb`
-- Schema instances are isolated by an `_instance` discriminator column
-- Additive schema convergence, with destructive changes refused unless explicitly enabled
-- Change feeds, as a durable log plus a pull-based reader
-
-**Requires PostgreSQL 16 or later.** The adapter uses `pg_input_is_valid` so that a text or jsonb
-value which is not a parseable date yields `null` instead of aborting the whole statement. It is
-the only construct used above PostgreSQL 9.5.
+- One PostgreSQL schema per AntelopeJS schema id.
+- Declared scalar fields become typed columns. Objects, arrays and undeclared fields live in `jsonb`.
+- An `_instance` discriminator column keeps schema instances apart.
+- Schema convergence adds columns and indexes, drops or swaps the indexes the adapter owns, and refuses destructive column changes unless you turn them on.
+- Change feeds are a durable log plus a pull-based reader.
 
 ## Documentation
 
-- [Database](https://interfaces.antelopejs.com/docs/database): the `@antelopejs/interface-database` contract this module implements
-- [Configuration](https://framework.antelopejs.com/docs/concepts/configuration): module sources, `config` blocks and config variables in `antelope.config.ts`
+- [Database](https://interfaces.antelopejs.com/docs/database) is the `@antelopejs/interface-database` contract that this module implements.
+- [Configuration](https://framework.antelopejs.com/docs/concepts/configuration) covers module sources, `config` blocks and config variables in `antelope.config.ts`.
 
 This repository documents what is specific to the PostgreSQL backend:
 
@@ -119,24 +116,16 @@ This repository documents what is specific to the PostgreSQL backend:
 | Package                                  | Supported        | Tested with |
 | ---------------------------------------- | ---------------- | ----------- |
 | `@antelopejs/interface-core`             | `>=0.1.1 <1.0.0` | `0.2.0`     |
-| `@antelopejs/interface-database`         | `>=0.2.0 <0.3.0` | `0.2.0`     |
+| `@antelopejs/interface-database`         | `>=0.3.0 <0.4.0` | `0.3.0`     |
 | `@antelopejs/interface-database-catalog` | `>=0.0.3 <0.1.0` | `0.0.3`     |
 
 <!-- antelopejs-docs-compat:end -->
 
-| Package                                  | Supported range  |
-| ---------------------------------------- | ---------------- |
-| `@antelopejs/interface-database`         | `>=0.2.0 <0.3.0` |
-| `@antelopejs/interface-database-catalog` | `>=0.0.3 <0.1.0` |
-| `@antelopejs/interface-core`             | `>=0.1.1 <1.0.0` |
-
-The module is developed and tested against `@antelopejs/core` `^1.14.0` on Node.js 24 (the `.nvmrc` version CI runs), with the `pg` driver `^8.22.0` and PostgreSQL 18.
+CI tests every Node.js major listed under `node-versions` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), and [`.nvmrc`](.nvmrc) names the version for local work. The `dependencies` field of [`package.json`](package.json) sets the `pg` driver range, and [`src/test/antelope.test.ts`](src/test/antelope.test.ts) names the PostgreSQL image that the tests run against.
 
 ## Contributing
 
-**Node 22 or later is required to develop or test this module**, though the published module itself
-runs on any version its `pg` dependency supports. The floor comes from `testcontainers`, a
-devDependency whose bundled `undici` calls `worker_threads.markAsUncloneable`, absent from Node 20.
+The `engines` field of [`package.json`](package.json) sets the Node.js floor. The floor comes from Testcontainers, a dev dependency whose bundled `undici` calls `worker_threads.markAsUncloneable`, which older Node.js majors lack.
 
 ```bash
 pnpm install
@@ -147,12 +136,9 @@ pnpm test:unit      # fast loop: this repository's unit specs, no Docker
 pnpm test           # everything, against PostgreSQL: unit specs, conformance and external-mode suites
 ```
 
-`pnpm test` provisions PostgreSQL with Testcontainers, so it needs a Docker daemon. Besides this
-repository's own tests, it runs the shared conformance suite of `@antelopejs/interface-database`,
-discovered from `antelopeJs.implements`.
+`pnpm test` starts PostgreSQL with Testcontainers, so it needs a Docker daemon. Besides this repository's own tests, it runs the shared conformance suites of the interfaces listed in `antelopeJs.implements`.
 
-To test against an existing server instead of a container, set `PG_TEST_URL`. It must point to a
-disposable instance: the external suite drops and recreates a fixture database and may create a role.
+To test against an existing server instead of a container, set `PG_TEST_URL`. It must point to a disposable instance, because the external suite drops and recreates a fixture database and may create a role.
 
 ```bash
 PG_TEST_URL=postgres://postgres:postgres@localhost:5432/antelopejs_test pnpm test

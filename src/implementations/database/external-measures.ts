@@ -2,6 +2,7 @@ import type { Measure } from "@antelopejs/interface-database-catalog";
 import type { PoolClient, QueryResultRow } from "pg";
 
 import { AcquireClient } from "../../connection";
+import { IsDocument, IsString } from "./guards";
 
 const DEFAULT_STATEMENT_TIMEOUT_MS = 5000;
 const LOCK_TIMEOUT_MS = 1000;
@@ -28,12 +29,7 @@ export interface MeasureSession {
   ): Promise<Measure<T[]>>;
 }
 
-interface PostgresError {
-  code?: string;
-}
-
-function Failed<T>(error: unknown): Measure<T> {
-  const code = (error as PostgresError).code ?? "unknown";
+function Failed<T>(code: string): Measure<T> {
   return TIMEOUT_CODES.includes(code)
     ? { status: "timeout" }
     : { status: "error", code };
@@ -49,7 +45,9 @@ function SessionOver(client: PoolClient): MeasureSession {
         return { status: "ok", value: result.rows } satisfies Measure<T[]>;
       } catch (error) {
         await client.query(`ROLLBACK TO SAVEPOINT ${SAVEPOINT}`);
-        return Failed<T[]>(error);
+        return Failed<T[]>(
+          IsDocument(error) && IsString(error.code) ? error.code : "unknown",
+        );
       }
     },
   };

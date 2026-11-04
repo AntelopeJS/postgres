@@ -39,7 +39,7 @@ const users: TableModel = {
   },
 };
 
-type Builder = (doc: any) => any;
+type Builder = (doc: ValueProxy<any>) => ValueProxy<any>;
 
 function NewContext(): DecodingContext {
   const context = new DecodingContext({
@@ -52,6 +52,14 @@ function NewContext(): DecodingContext {
 
 function CompileIn(context: DecodingContext, build: Builder): Compiled {
   return CompileExpression(build(ValueProxy.arg(ROW_ID)).build(), context);
+}
+
+/** A value with a zone recorded on it, the stage `year(zone)` and its siblings record before the part. */
+function Zoned<T>(value: ValueProxy<T>): ValueProxy<T> {
+  return new ValueProxy<T>(
+    QueryStage("date_with_timezone", undefined, NEW_YORK_NAME),
+    value,
+  );
 }
 
 function Compile(build: Builder): Compiled {
@@ -210,9 +218,7 @@ describe("date parts", () => {
 
 describe("date_with_timezone", () => {
   it("records the zone without transforming the value", () => {
-    const stage = LastStage((doc) =>
-      doc.key("createdAt").withTimezone(NEW_YORK_NAME),
-    );
+    const stage = QueryStage("date_with_timezone", undefined, NEW_YORK_NAME);
     const out = STAGES[stage.stage](
       { current: { sql: CREATED, type: TIMESTAMP } },
       stage,
@@ -223,16 +229,14 @@ describe("date_with_timezone", () => {
   });
 
   it("leaves a row accumulator addressable, so a column keeps its index", () => {
-    const stage = LastStage((doc) => doc.withTimezone(NEW_YORK_NAME));
+    const stage = QueryStage("date_with_timezone", undefined, NEW_YORK_NAME);
     const source = new ColumnRowSource(AliasedColumns("t"), users);
     const out = STAGES[stage.stage]({ current: source }, stage, NewContext());
     expect(out.current).to.equal(source);
   });
 
   it("reaches a native column through a zone, not a materialized document", () => {
-    const out = Compile((doc) =>
-      doc.withTimezone(NEW_YORK_NAME).key("createdAt").day(),
-    );
+    const out = Compile((doc) => Zoned(doc).key("createdAt").day());
     expect(out.sql).to.equal(Part("DAY", CREATED));
     expect(out.sql).to.not.contain("jsonb_build_object");
   });
@@ -243,9 +247,7 @@ describe("date_with_timezone", () => {
   });
 
   it("lets a second zone override the first", () => {
-    const out = Compile((doc) =>
-      doc.key("createdAt").withTimezone(NEW_YORK_NAME).year(PARIS_NAME),
-    );
+    const out = Compile((doc) => Zoned(doc.key("createdAt")).year(PARIS_NAME));
     expect(out.sql).to.equal(Part("YEAR", CREATED, PARIS));
     expect(out.sql).to.not.contain(NEW_YORK);
   });
@@ -263,7 +265,7 @@ describe("date_with_timezone", () => {
   it("binds nothing when the zone is dropped unread", () => {
     const context = NewContext();
     const out = CompileIn(context, (doc) =>
-      doc.key("createdAt").withTimezone(NEW_YORK_NAME).epoch(),
+      Zoned(doc.key("createdAt")).epoch(),
     );
     expect(context.params.all()).to.deep.equal([]);
     expect(out.sql).to.not.contain("$");
@@ -283,6 +285,7 @@ describe("date_with_timezone", () => {
       CompileExpression(
         [
           QueryStage("arg", undefined, ROW_ID),
+          // @ts-expect-error no zone, which the date_with_timezone stage refuses by naming itself
           QueryStage("date_with_timezone"),
         ],
         NewContext(),
@@ -297,6 +300,7 @@ describe("date_with_timezone", () => {
         CompileExpression(
           [
             QueryStage("arg", undefined, ROW_ID),
+            // @ts-expect-error a number among the zones, which the date_with_timezone stage refuses by naming itself
             QueryStage("date_with_timezone", undefined, zone),
           ],
           NewContext(),
@@ -308,11 +312,7 @@ describe("date_with_timezone", () => {
   it("is cleared by an unrelated stage between the zone and the part", () => {
     const context = NewContext();
     const out = CompileIn(context, (doc) =>
-      doc
-        .key("createdAt")
-        .withTimezone(NEW_YORK_NAME)
-        .default(new Date(0))
-        .year(),
+      Zoned(doc.key("createdAt")).default(new Date(0)).year(),
     );
     expect(out.sql).to.contain(`AT TIME ZONE ${UTC}`);
     expect(out.sql).to.not.contain(`AT TIME ZONE ${NEW_YORK}`);
@@ -389,7 +389,9 @@ describe("date_during", () => {
   });
 
   it("reads both bounds as moments", () => {
-    const out = Compile((doc) => doc.key("createdAt").during(0, 1));
+    const out = CompileIn(NewContext(), (doc) =>
+      doc.key("createdAt").during(0, 1),
+    );
     expect(out.sql).to.equal(
       `((${CREATED} >= ${FromEpoch("($1::double precision)")}) AND (${CREATED} < ${FromEpoch("($2::double precision)")}))`,
     );
@@ -400,6 +402,7 @@ describe("date_during", () => {
       CompileExpression(
         [
           QueryStage("arg", undefined, ROW_ID),
+          // @ts-expect-error one bound, which the date_during stage refuses by naming itself
           QueryStage("date_during", undefined, new Date(0)),
         ],
         NewContext(),

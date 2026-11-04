@@ -2,7 +2,7 @@ import type { QueryStage } from "@antelopejs/interface-database/common";
 
 import { Cast } from "./coerce";
 import type { Compiled } from "./sql";
-import { DecodeFunction } from "./value";
+import { DecodeFunction, RecordedLambda } from "./value";
 import type { DecodingContext } from "./context";
 import { ArrayOf, BOOL, FLOAT, OPAQUE, type SqlType } from "./types";
 import {
@@ -171,10 +171,7 @@ function BindElement(
   stage: QueryStage,
   context: DecodingContext,
 ): Lambda {
-  const func = stage.args[FIRST_OPERAND];
-  if (!func || !Array.isArray(func.args?.[FIRST_OPERAND])) {
-    throw new Error(`Stage '${stage.stage}' requires a callback`);
-  }
+  const func = RecordedLambda(stage, FIRST_OPERAND);
   const alias = context.nextAlias();
   const element = Element(alias, ElementType(value.type));
   const body = DecodeFunction(func, context, [element]);

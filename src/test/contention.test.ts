@@ -72,8 +72,9 @@ function Compile(query: StagedObject) {
 async function Compete(query: StagedObject, winner?: StagedObject) {
   const first = await AcquireClient();
   const second = await AcquireClient();
-  const pid = (await second.query("SELECT pg_backend_pid() AS pid")).rows[0]
-    .pid;
+  const pid = (
+    await second.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+  ).rows[0].pid;
   try {
     await first.query("BEGIN");
     const a = Compile(

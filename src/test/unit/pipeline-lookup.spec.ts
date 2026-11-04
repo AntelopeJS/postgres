@@ -1,7 +1,9 @@
 import { expect } from "chai";
+import { QueryStage } from "@antelopejs/interface-database/common";
 
 import {
   Apply,
+  ApplyRaw,
   DOCUMENT,
   FROM_TABLE,
   NewProfiles,
@@ -165,28 +167,32 @@ function FilteredLookup() {
   return ScalarLookup().filter((doc) => doc.key("age").gt(MINIMUM_AGE));
 }
 
-/** A plucked read of the other table, passed where `lookup` types a table selection. */
-function AsOther(plucked: unknown): ReturnType<typeof Other> {
-  return plucked as ReturnType<typeof Other>;
-}
-
 /**
  * The shape a caller reaches for to carry fewer columns back, and the one `interface-data-api`
  * builds for every relation column that names the fields it wants.
  */
 function PluckedLookup() {
-  return Root().lookup(AsOther(Other().pluck("name", "price")), "name", "name");
+  return Root().lookup(Other().pluck("name", "price"), "name", "name");
 }
 
-/** The same, with the other key left out of the projection entirely. */
+/**
+ * The same, with the other key left out of the projection entirely: the typed builder refuses it,
+ * so it is the stage an untyped caller sends.
+ */
 function PluckedWithoutKeyLookup() {
-  return Root().lookup(AsOther(Other().pluck("price")), "name", "name");
+  return [
+    QueryStage(
+      "lookup",
+      { localKey: "name", otherKey: "name" },
+      Other().pluck("price"),
+    ),
+  ];
 }
 
 /** A plucked other query whose rows were already chosen, which the correlation may not pass. */
 function SlicedPluckedLookup() {
   return Root().lookup(
-    AsOther(Other().slice(SLICE_OFFSET, SLICE_COUNT).pluck("name")),
+    Other().slice(SLICE_OFFSET, SLICE_COUNT).pluck("name"),
     "name",
     "name",
   );
@@ -391,7 +397,7 @@ describe("a lookup whose other query only plucked its columns", () => {
   });
 
   it("still matches when the other key is not among the plucked fields", () => {
-    const from = Apply(PluckedWithoutKeyLookup()).relation.joins[0].from;
+    const from = ApplyRaw(PluckedWithoutKeyLookup()).relation.joins[0].from;
     expect(from).to.contain(MATCHING_NAME);
   });
 

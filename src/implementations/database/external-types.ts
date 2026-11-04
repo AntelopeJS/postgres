@@ -26,32 +26,32 @@ export type NativeFamily =
   | "json"
   | "array";
 
-const FAMILY_BY_TYPE: Record<string, NativeFamily> = {
-  text: "text",
-  varchar: "text",
-  name: "text",
-  citext: "citext",
-  bpchar: "bpchar",
-  uuid: "uuid",
-  inet: "rendered",
-  cidr: "rendered",
-  macaddr: "rendered",
-  macaddr8: "rendered",
-  time: "rendered",
-  timetz: "rendered",
-  int2: "int",
-  int4: "int",
-  int8: "int8",
-  numeric: "numeric",
-  float4: "float4",
-  float8: "float8",
-  bool: "bool",
-  timestamptz: "timestamptz",
-  timestamp: "timestamp",
-  date: "date",
-  jsonb: "jsonb",
-  json: "json",
-};
+const FAMILY_BY_TYPE = new Map<string, NativeFamily>([
+  ["text", "text"],
+  ["varchar", "text"],
+  ["name", "text"],
+  ["citext", "citext"],
+  ["bpchar", "bpchar"],
+  ["uuid", "uuid"],
+  ["inet", "rendered"],
+  ["cidr", "rendered"],
+  ["macaddr", "rendered"],
+  ["macaddr8", "rendered"],
+  ["time", "rendered"],
+  ["timetz", "rendered"],
+  ["int2", "int"],
+  ["int4", "int"],
+  ["int8", "int8"],
+  ["numeric", "numeric"],
+  ["float4", "float4"],
+  ["float8", "float8"],
+  ["bool", "bool"],
+  ["timestamptz", "timestamptz"],
+  ["timestamp", "timestamp"],
+  ["date", "date"],
+  ["jsonb", "jsonb"],
+  ["json", "json"],
+]);
 
 const ENUM_TYPTYPE = "e";
 const ARRAY_CATEGORY = "A";
@@ -212,14 +212,14 @@ export function FamilyOf(column: CatalogColumn): NativeFamily | undefined {
   if (column.category === ARRAY_CATEGORY) {
     return "array";
   }
-  return FAMILY_BY_TYPE[column.typname];
+  return FAMILY_BY_TYPE.get(column.typname);
 }
 
 export function ElementFamily(column: CatalogColumn): NativeFamily | undefined {
   if (!column.element) {
     return undefined;
   }
-  return FAMILY_BY_TYPE[column.element];
+  return FAMILY_BY_TYPE.get(column.element);
 }
 
 function ArrayReading(

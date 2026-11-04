@@ -3,7 +3,7 @@ import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 
 import { Logger } from "../../logger";
 import { ExternalFeedRefusal } from "./external-refusals";
-import { ReviveValue } from "./result";
+import { ReviveValue, type RowValue } from "./result";
 import type { SqlType } from "./types";
 import { QuoteIdentifier } from "./sql";
 import { EnsureTriggers } from "./migrate";
@@ -11,7 +11,7 @@ import { WaitForSchemaReady } from "./schema";
 import { RegisteredOrigin } from "./selection";
 import { SchemaName, TableName } from "./identifier";
 import { OUTPUT_COLUMN, type TableOrigin } from "./relation";
-import { DEFAULT_INSTANCE_ID, type QueryStage } from "./utils";
+import { DEFAULT_INSTANCE_ID, OptionsOf, type QueryStage } from "./utils";
 import { GetOptions, type ResolvedOptions } from "../../config";
 import { EnsureListening, SubscribeToChanges } from "./listener";
 import { Query, RegisterBeforeDisconnect } from "../../connection";
@@ -40,7 +40,7 @@ import { IsString } from "./guards";
 
 /** One side of an event as the laterals answered it: what it projects, and whether it matched. */
 interface LoggedSide {
-  [DOC_KEY]: unknown;
+  [DOC_KEY]: RowValue;
   [MATCHED_KEY]: boolean | null;
 }
 
@@ -64,7 +64,7 @@ interface FeedTarget {
   readonly tableId: string;
   readonly schemaName: string;
   readonly tableName: string;
-  readonly instance: string | typeof CROSS_INSTANCE;
+  readonly instance: unknown;
 }
 
 /**
@@ -424,7 +424,7 @@ async function Poll(
 const ROOT_LENGTH = 3;
 
 function RootId(stages: QueryStage[], index: number): string {
-  const id = stages[index]?.options?.id;
+  const id: unknown = OptionsOf(stages[index])?.id;
   return IsString(id) ? id : "";
 }
 
@@ -437,11 +437,11 @@ function Between(stages: QueryStage[]): QueryStage[] {
 function TargetOf(stages: QueryStage[]): FeedTarget {
   const schemaId = RootId(stages, 0);
   const tableId = RootId(stages, 2);
-  const supplied = stages[1]?.options?.id;
+  const supplied: unknown = OptionsOf(stages[1])?.id;
   const instance =
     supplied === CROSS_INSTANCE
       ? CROSS_INSTANCE
-      : ((supplied as string | undefined) ?? DEFAULT_INSTANCE_ID);
+      : (supplied ?? DEFAULT_INSTANCE_ID);
   return {
     schemaId,
     tableId,

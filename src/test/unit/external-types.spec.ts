@@ -6,6 +6,8 @@ import { AcceptedDeclarations } from "../../implementations/database/external-de
 import {
   Describe,
   DescribeKey,
+  ElementFamily,
+  FamilyOf,
 } from "../../implementations/database/external-types";
 
 const COLUMN = '"t"."c"';
@@ -282,4 +284,20 @@ describe("external key columns", () => {
   it("offers no _id over a float column, which is no identity", () => {
     expect(DescribeKey(Column({ typname: "float8" }))).to.equal(undefined);
   });
+});
+
+describe("a catalog type named after an Object.prototype member", () => {
+  for (const typname of ["constructor", "toString", "__proto__"]) {
+    it(`gives a ${typname} column no family, like any unknown type`, () => {
+      expect(FamilyOf(Column({ typname }))).to.equal(undefined);
+    });
+
+    it(`gives an array of ${typname} no element family`, () => {
+      expect(
+        ElementFamily(
+          Column({ typname: `_${typname}`, ...ARRAY, element: typname }),
+        ),
+      ).to.equal(undefined);
+    });
+  }
 });
