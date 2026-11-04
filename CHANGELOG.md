@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.2.4
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.3...v0.2.4)
+
+### 📖 Documentation
+
+- **readme:** Use one Discord invite ([#57](https://github.com/AntelopeJS/postgres/pull/57))
+- **readme:** Replace em dashes in the storage and docs sections ([#62](https://github.com/AntelopeJS/postgres/pull/62))
+- **github:** Send questions and ideas to Discord ([#65](https://github.com/AntelopeJS/postgres/pull/65))
+- **readme:** Link the package to AntelopeJS and AntelopeJS DMS ([36ff478](https://github.com/AntelopeJS/postgres/commit/36ff478))
+
+### 📦 Build
+
+- **deps:** Bump @antelopejs/tooling-configs to 0.2.17 ([#39](https://github.com/AntelopeJS/postgres/pull/39))
+
+### 🏡 Chore
+
+- **package:** Say that the module serves existing databases ([#58](https://github.com/AntelopeJS/postgres/pull/58))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.2.3
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.2...v0.2.3)
