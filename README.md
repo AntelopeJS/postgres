@@ -9,6 +9,8 @@
 
 The PostgreSQL backend of AntelopeJS. It runs the queries of the database interface on PostgreSQL with the [`pg`](https://github.com/brianc/node-postgres) driver, and maps schema definitions onto relational tables with native column types and indexes. It can also serve tables that already exist in a database it does not own.
 
+Part of [AntelopeJS](https://github.com/AntelopeJS/antelopejs). Used by [AntelopeJS DMS](https://github.com/AntelopeJS/dms), the open-source back office for your PostgreSQL, MongoDB or RethinkDB database.
+
 ## Interfaces
 
 | Interface                                                                            | Documentation                                               |
