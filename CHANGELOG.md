@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.5
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.4...v0.2.5)
+
+### 🏡 Chore
+
+- Land the cleanup campaign on main ([#75](https://github.com/AntelopeJS/postgres/pull/75))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.2.4
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.3...v0.2.4)
