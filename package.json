@@ -52,13 +52,13 @@
   },
   "dependencies": {
     "@antelopejs/interface-core": ">=0.1.1 <1.0.0",
-    "@antelopejs/interface-database": "file:.campaign/tgz/antelopejs-interface-database-724ff72.tgz",
+    "@antelopejs/interface-database": ">=0.3.0 <0.4.0",
     "@antelopejs/interface-database-catalog": ">=0.0.3 <0.1.0",
     "pg": "^8.22.0"
   },
   "devDependencies": {
     "@antelopejs/core": "^1.14.0",
-    "@antelopejs/tooling-configs": "file:.campaign/tgz/antelopejs-tooling-configs-a2779d6.tgz",
+    "@antelopejs/tooling-configs": "^0.2.18",
     "@testcontainers/postgresql": "^12.0.4",
     "@types/chai": "^4.3.20",
     "@types/mocha": "^10.0.10",
@@ -81,12 +81,6 @@
     "node": ">=22"
   },
   "packageManager": "pnpm@10.33.0",
-  "pnpm": {
-    "overrides": {
-      "@antelopejs/interface-database": "file:.campaign/tgz/antelopejs-interface-database-724ff72.tgz",
-      "@antelopejs/tooling-configs": "file:.campaign/tgz/antelopejs-tooling-configs-a2779d6.tgz"
-    }
-  },
   "antelopeJs": {
     "implements": [
       "@antelopejs/interface-database",

@@ -1,5 +1,2 @@
 packages:
   - "./"
-overrides:
-  "@antelopejs/interface-database": "file:.campaign/tgz/antelopejs-interface-database-724ff72.tgz"
-  "@antelopejs/tooling-configs": "file:.campaign/tgz/antelopejs-tooling-configs-a2779d6.tgz"
