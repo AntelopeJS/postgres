@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.2.6
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.5...v0.2.6)
+
+### 📦 Build
+
+- **deps:** Bump @antelopejs packages to the 2026-11-06 releases ([#79](https://github.com/AntelopeJS/postgres/pull/79))
+- **deps:** Bump @antelopejs packages to the 2026-11-06 releases ([#80](https://github.com/AntelopeJS/postgres/pull/80))
+
+### 🏡 Chore
+
+- **ci:** Remove the weekly mutation caller ([#77](https://github.com/AntelopeJS/postgres/pull/77))
+
+### 🤖 CI
+
+- Call ci-node.yml@v1 ([#78](https://github.com/AntelopeJS/postgres/pull/78))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.2.5
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.4...v0.2.5)
