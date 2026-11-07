@@ -18,7 +18,7 @@ The PostgreSQL implementation of `@antelopejs/interface-database` and `@antelope
 ## Tests
 
 - README "Contributing" owns the Node floor and the `PG_TEST_URL` safety rule; read it before running database tests. CI runs only the `.nvmrc` version.
-- `pnpm test` (and so `pnpm run checks`) builds `dist` once, then runs `ajs module test .` with the test project in `src/test/antelope.test.ts`: every suite in `dist/test` (unit specs included) plus the shared conformance suites of the implemented interfaces. It then runs the external-mode suites in `dist/test-external` with `PG_TEST_MODE=external`. Both runs need Docker: they start a `postgres:18-alpine` container through Testcontainers unless `PG_TEST_URL` is set.
+- `pnpm test` (and so `pnpm run checks`) builds `dist` once, then runs `ajs module test .` with the test project in `src/test/antelope.test.ts`: every suite in `dist/test` (unit specs included) plus the shared conformance suites of the implemented interfaces. `scripts/test.sh` runs the external-mode suites in `dist/test-external` with `PG_TEST_MODE=external` at the same time, each run in its own `postgres:18-alpine` container started through Testcontainers, and prints the external output after the first run ends. Both runs need Docker unless `PG_TEST_URL` is set. Then both use that server and run one after the other, because change feeds deliver only rows below the cluster-wide `pg_snapshot_xmin`, which a concurrent run's transactions hold back.
 - `pnpm test:unit` runs only the database-free unit specs with Mocha; `pnpm test:external` runs only the external-mode suites. Neither is needed after `checks`, which already runs both.
 
 <!-- antelopejs-guardrails:start -->
