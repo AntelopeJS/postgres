@@ -7,7 +7,7 @@ fi
 log=$(mktemp)
 groups=()
 stop() {
-  trap '' INT TERM
+  trap '' INT TERM HUP
   for group in "${groups[@]}"; do
     kill -TERM -- "-$group" 2>/dev/null
   done
@@ -18,6 +18,7 @@ stop() {
 trap 'rm -f "$log"' EXIT
 trap 'stop 130' INT
 trap 'stop 143' TERM
+trap 'stop 129' HUP
 set -m
 pnpm run test:external:run >"$log" 2>&1 &
 external=$!
@@ -30,6 +31,6 @@ wait "$owned"
 owned_status=$?
 wait "$external"
 external_status=$?
-trap - INT TERM
+trap - INT TERM HUP
 cat "$log"
 exit $((owned_status || external_status))
