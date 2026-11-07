@@ -12,8 +12,13 @@ external=$!
 ajs module test . &
 owned=$!
 set +m
-trap 'kill -TERM -- "-$owned" "-$external" 2>/dev/null; exit 130' INT
-trap 'kill -TERM -- "-$owned" "-$external" 2>/dev/null; exit 143' TERM
+stop() {
+  kill -TERM -- "-$owned" "-$external" 2>/dev/null
+  cat "$log"
+  exit "$1"
+}
+trap 'stop 130' INT
+trap 'stop 143' TERM
 wait "$owned"
 owned_status=$?
 wait "$external"
