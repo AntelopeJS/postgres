@@ -5,14 +5,13 @@ if [[ -n "${PG_TEST_URL:-}" ]]; then
   exit
 fi
 log=$(mktemp)
-groups=()
 stop() {
   trap '' INT TERM HUP
-  for group in "${groups[@]}"; do
-    kill -TERM -- "-$group" 2>/dev/null
+  for job in $(jobs -p); do
+    kill -TERM -- "-$job" 2>/dev/null
   done
   wait
-  cat "$log"
+  cat "$log" 2>/dev/null
   exit "$1"
 }
 trap 'rm -f "$log"' EXIT
@@ -22,10 +21,8 @@ trap 'stop 129' HUP
 set -m
 pnpm run test:external:run >"$log" 2>&1 &
 external=$!
-groups+=("$external")
 ajs module test . &
 owned=$!
-groups+=("$owned")
 set +m
 wait "$owned"
 owned_status=$?
