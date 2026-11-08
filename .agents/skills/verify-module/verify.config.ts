@@ -3,11 +3,11 @@ import type { VerifyConfig } from "@antelopejs/tooling-configs/verify";
 import { catalogDescribe, catalogRefused } from "./journeys-catalog.ts";
 import { externalReadWrite, externalRegistration } from "./journeys-external.ts";
 import { changeFeeds } from "./journeys-feeds.ts";
-import { configOptions, configRefused, moduleDev } from "./journeys-module.ts";
+import { configOptions, configRefused } from "./journeys-module.ts";
 import { readQueries } from "./journeys-reads.ts";
 import { migrations, storageLayout } from "./journeys-schemas.ts";
 import { insertValues, updateReplaceDelete } from "./journeys-writes.ts";
-import { DATABASE, guardedAll, ownedConfig, SERVICE } from "./session.ts";
+import { DATABASE, ownedConfig, SERVICE } from "./session.ts";
 
 const ADMIN = ["psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-qc"];
 
@@ -41,9 +41,10 @@ const config: VerifyConfig = {
         "src/implementations/database/value.ts",
         "src/implementations/database/coerce.ts",
         "src/implementations/database/utils.ts",
+        "src/implementations/database/changes.ts",
       ],
       funnels: [],
-      why: "the PostgreSQL schema per schema id, the column names and their 63-byte truncation, the field-type to column-type table, the _id, _instance and _extra columns, the `__antelope` bookkeeping schema and the index names and comments are the layout every stored table already has: an upgrade that changes them stops finding what the last release wrote",
+      why: "the `__antelope.changes` log and the triggers a watched table keeps, the PostgreSQL schema per schema id, the column names and their 63-byte truncation, the field-type to column-type table, the _id, _instance and _extra columns, the `__antelope` bookkeeping schema and the index names and comments are the layout every stored table already has: an upgrade that changes them stops finding what the last release wrote",
     },
     contract: {
       globs: ["package.json", "src/config.ts", "src/index.ts"],
@@ -81,8 +82,7 @@ const config: VerifyConfig = {
     const found = services.find((service) => service.name === SERVICE);
     return ownedConfig({ name: SERVICE, container: found?.container ?? "", host: found?.host ?? "127.0.0.1", port: found?.port ?? 5432 });
   },
-  journeys: guardedAll({
-    "module-dev": moduleDev,
+  journeys: {
     "config-refused": configRefused,
     "config-options": configOptions,
     "storage-layout": storageLayout,
@@ -95,7 +95,7 @@ const config: VerifyConfig = {
     "external-registration": externalRegistration,
     "catalog-describe": catalogDescribe,
     "catalog-refused": catalogRefused,
-  }),
+  },
 };
 
 export default config;

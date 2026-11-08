@@ -38,7 +38,7 @@ out.instances = await sales.listInstances().run();
 return out;`,
     );
     context.expect(result.folder, [answered(result)], { critical: true });
-    const error = (label: string): string => JSON.stringify(pick(result.value, label) ?? null);
+    const error = (label: string): string => text(pick(result.value, label, "message"));
     context.expect(result.folder, [
       sees("a row reads under its own column names, _id the key as text and a bigint declared string as its exact text", part(result, "first"), {
         _id: "1",
@@ -54,10 +54,8 @@ return out;`,
       sees("an update that changes the row answers 1", part(result, "updated"), 1),
       sees("an update that changes nothing answers 0", part(result, "unchanged"), 0),
       has("a payload key that is not a declared field is refused by name", error("undeclared"), /Payload key 'other' is not a field of 'sales\.accounts'/u),
-      has("a string too long for varchar(20) is refused naming the field", error("tooLong"), /name/u),
-      { name: "a string too long for varchar(20) is refused", pass: pick(result.value, "tooLong", "ok") !== true, detail: error("tooLong") },
-      has("an unknown enum label is refused naming the field", error("unknownEnum"), /status/u),
-      { name: "an unknown enum label is refused", pass: pick(result.value, "unknownEnum", "ok") !== true, detail: error("unknownEnum") },
+      has("a string too long for varchar(20) is refused before the write, naming the field", error("tooLong"), /sales\.accounts\.name/u),
+      has("an unknown enum label is refused before the write, naming the field", error("unknownEnum"), /sales\.accounts\.status/u),
       has("insert refuses a value for an identity column the database fills", error("identity"), /Field 'sales\.accounts\.id' cannot be given a value/u),
       same("a write to a table the account was not granted is an ExternalWriteError of kind forbidden", pick(result.value, "forbidden", "kind"), "forbidden"),
       has("changes() is refused", error("changes"), /changes\(\) needs the adapter's change log/u),

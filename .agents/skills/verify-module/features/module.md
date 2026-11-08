@@ -4,6 +4,7 @@ covers:
 docs:
   - README.md
   - docs/configuration.md
+  - docs/errors.md
 journeys:
   - module-dev
   - config-refused

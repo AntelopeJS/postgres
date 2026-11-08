@@ -17,12 +17,13 @@ const docs = schema.instance("a").table("docs");
 await docs.insert({ _id: "one", title: "First", n: 1.5, done: false, at: new Date("2024-03-01T10:00:00.000Z"), tags: ["x", "y"], meta: { deep: { level: 2 } }, loose: "kept" }).run();
 const many = await docs.insert([{ title: "Second" }, { title: "Third", n: null }]).run();
 const one = await docs.get("one").run();
-return { manyCount: many.length, generated: many.every((id) => typeof id === "string" && id.length > 0), one };`,
+return { manyCount: many.length, generated: many.every((id) => typeof id === "string" && id.length > 0), atIsDate: one.at instanceof Date, one };`,
     );
     context.expect(result.folder, [answered(result)], { critical: true });
     context.expect(result.folder, [
       sees("an array insert resolves to one id per document", part(result, "manyCount"), 2),
       sees("generated ids are non-empty text", part(result, "generated"), true),
+      sees("a date field reads back as a Date", part(result, "atIsDate"), true),
       sees("the document reads back whole, the undeclared field included", part(result, "one"), {
         _id: "one",
         _instance: "a",
@@ -91,7 +92,12 @@ try { await docs.insert({ _id: "u", title: "again" }).run(); out.duplicate = "st
 return out;`,
     );
     context.expect(result.folder, [answered(result)], { critical: true });
-    context.expect(result.folder, [sees("inserting a taken _id throws DuplicateKeyError", part(result, "duplicate"), "DuplicateKeyError")]);
+    context.expect(result.folder, [
+      sees("update answers the one row it changed", part(result, "updated"), 1),
+      sees("replace answers the one row it changed", part(result, "replaced"), 1),
+      sees("delete answers the one row it removed", part(result, "deleted"), 1),
+      sees("inserting a taken _id throws DuplicateKeyError", part(result, "duplicate"), "DuplicateKeyError"),
+    ]);
     const rows = await sql(
       context,
       "read the stored rows",

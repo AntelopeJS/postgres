@@ -1,7 +1,11 @@
 ---
 covers:
+  - src/connect-failure.ts
   - src/implementations/catalog/**
   - src/implementations/database/external-catalog.ts
+  - src/implementations/database/external-discovery.ts
+  - src/implementations/database/external-declarations.ts
+  - src/implementations/database/external-rows.ts
   - src/implementations/database/external-column-profile.ts
   - src/implementations/database/external-profile.ts
   - src/implementations/database/external-measures.ts
@@ -9,6 +13,7 @@ covers:
   - src/implementations/database/external-sample.ts
 docs:
   - docs/external-mode.md
+  - docs/errors.md
 journeys:
   - catalog-describe
   - catalog-refused
@@ -34,6 +39,9 @@ pnpm exec antelopejs-verify journey "$RUN" catalog
 ```
 
 ## Gotchas
+
+- `src/connect-failure.ts` words a failed first connection only where the catalog answers, so this feature covers it beside `module`, whose `src/*.ts` glob also matches it.
+- `external-catalog.ts` reads the columns and keys that external registration uses too, so `external` covers it as well.
 
 - `estimatedRows` comes from PostgreSQL's statistics and is not asserted.
 - The refusal under `ajs project start` without `catalog.enabled` is not driven, because `context.dev` runs only `ajs project dev`.

@@ -11,6 +11,7 @@ covers:
   - src/implementations/database/duplicate-key.ts
 docs:
   - docs/storage.md
+  - docs/errors.md
 journeys:
   - storage-layout
   - migrations

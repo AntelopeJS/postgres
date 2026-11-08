@@ -1,11 +1,4 @@
-import {
-  interrupted,
-  type App,
-  type Check,
-  type Journey,
-  type JourneyContext,
-  type ServiceEndpoint,
-} from "@antelopejs/tooling-configs/verify";
+import { interrupted, type App, type Check, type JourneyContext, type ServiceEndpoint } from "@antelopejs/tooling-configs/verify";
 
 import { APP_SOURCE } from "./app-source.ts";
 import { canonical, parseJson, pick, text, type Json } from "./json.ts";
@@ -55,9 +48,10 @@ interface NativeResult {
   stderr: string;
 }
 
-/** Runs one statement with `psql` inside the run's container, as the database's owner, and parses the JSON its last line prints. */
+/** Runs one statement with `psql` inside the run's container, as the database's owner, and parses the JSON its last line prints; a statement that fails ends the journey, since its read-back would compare nothing. */
 export async function sql(context: JourneyContext, name: string, statement: string, database = DATABASE): Promise<NativeResult> {
   const result = await context.native(name, SERVICE, [...psql(database), statement]);
+  context.expect(result.folder, [{ name: "the read-back statement ran", pass: result.exitCode === 0, detail: result.stderr.slice(-300) }], { critical: true });
   const lines = result.stdout.trim().split("\n");
   return { folder: result.folder, value: parseJson(lines.at(-1) ?? ""), exitCode: result.exitCode, stderr: result.stderr };
 }
@@ -81,7 +75,7 @@ export interface Answer {
 export interface Session {
   context: JourneyContext;
   app: App;
-  /** Runs a scenario body inside the consumer module, with `db`, `Schema`, `catalog` and `waitFor` in scope. */
+  /** Runs a scenario body inside the consumer module, with `db`, `Schema`, `catalog` and `waitFor` in scope; the request aborts after the harness's 5 s, so a body must answer within it. */
   run(name: string, body: string): Promise<Answer>;
 }
 
@@ -152,11 +146,12 @@ export async function open(context: JourneyContext, moduleConfig: ModuleConfig):
     async run(name, body) {
       const result = await context.http(name, base, { method: "POST", body });
       const error = pick(result.json, "error");
+      const unanswered = result.error === null ? null : { name: "HttpError", message: result.error, kind: "" };
       return {
         folder: result.folder,
         ok: pick(result.json, "ok") === true,
         value: pick(result.json, "value"),
-        error: error === undefined ? null : { name: text(pick(error, "name")), message: text(pick(error, "message")), kind: text(pick(error, "kind")) },
+        error: error === undefined ? unanswered : { name: text(pick(error, "name")), message: text(pick(error, "message")), kind: text(pick(error, "kind")) },
       };
     },
   };
@@ -166,56 +161,4 @@ export async function open(context: JourneyContext, moduleConfig: ModuleConfig):
 export async function close(session: Session): Promise<void> {
   const stopped = await session.context.stop("SIGINT", session.app);
   session.context.expect(stopped.folder, [interrupted(stopped)]);
-}
-
-/** Ends the journey as not verified when the run's PostgreSQL no longer answers. */
-async function requireServer(context: JourneyContext): Promise<void> {
-  const probe = await sql(context, "probe the run's PostgreSQL after a failure", "SELECT 1");
-  if (probe.exitCode !== 0) {
-    context.notVerified(`the run's PostgreSQL stopped answering during the journey: ${probe.stderr.trim().slice(-200)}`);
-  }
-}
-
-/** The journey, ended as not verified when a check fails or it throws while the run's PostgreSQL no longer answers: an outage says nothing about the product. */
-function guarded(journey: Journey): Journey {
-  return {
-    title: journey.title,
-    entryPoint: journey.entryPoint,
-    async run(context) {
-      let failed = false;
-      const watched: JourneyContext = {
-        repo: context.repo,
-        work: context.work,
-        home: context.home,
-        command: context.command.bind(context),
-        edit: context.edit.bind(context),
-        tree: context.tree.bind(context),
-        http: context.http.bind(context),
-        expect(folder, checks, options) {
-          if (checks.some((check) => !check.pass)) failed = true;
-          return context.expect(folder, checks, options);
-        },
-        notVerified: context.notVerified.bind(context),
-        service: context.service.bind(context),
-        native: context.native.bind(context),
-        fixture: context.fixture.bind(context),
-        dev: context.dev.bind(context),
-        call: context.call.bind(context),
-        stop: context.stop.bind(context),
-        scaffold: context.scaffold.bind(context),
-      };
-      try {
-        await journey.run(watched);
-      } catch (error) {
-        await requireServer(context);
-        throw error;
-      }
-      if (failed) await requireServer(context);
-    },
-  };
-}
-
-/** Every journey of `journeys`, {@link guarded}. */
-export function guardedAll(journeys: Record<string, Journey>): Record<string, Journey> {
-  return Object.fromEntries(Object.entries(journeys).map(([id, journey]) => [id, guarded(journey)]));
 }

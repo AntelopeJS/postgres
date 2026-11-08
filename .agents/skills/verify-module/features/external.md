@@ -1,16 +1,15 @@
 ---
 covers:
   - src/implementations/database/external-schema.ts
-  - src/implementations/database/external-discovery.ts
-  - src/implementations/database/external-declarations.ts
+  - src/implementations/database/external-catalog.ts
   - src/implementations/database/external-types.ts
   - src/implementations/database/external-payload.ts
   - src/implementations/database/external-writes.ts
   - src/implementations/database/external-errors.ts
   - src/implementations/database/external-refusals.ts
-  - src/implementations/database/external-rows.ts
 docs:
   - docs/external-mode.md
+  - docs/errors.md
 journeys:
   - external-read-write
   - external-registration
