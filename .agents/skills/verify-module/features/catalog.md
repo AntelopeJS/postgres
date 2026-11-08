@@ -42,7 +42,6 @@ pnpm exec antelopejs-verify journey "$RUN" catalog
 
 - `src/connect-failure.ts` words a failed first connection only where the catalog answers, so this feature covers it beside `module`, whose `src/*.ts` glob also matches it.
 - `external-catalog.ts` reads the columns and keys that external registration uses too, so `external` covers it as well.
-
 - `estimatedRows` comes from PostgreSQL's statistics and is not asserted.
 - The refusal under `ajs project start` without `catalog.enabled` is not driven, because `context.dev` runs only `ajs project dev`.
 - `CheckReference` and the inbound and reference parts of a profile are not driven.

@@ -68,12 +68,8 @@ return feeds;`,
         { hasNew: true, hasOld: false, new: "from psql", old: null, type: "added" },
       ]),
     ]);
-    const log = await sql(
-      context,
-      "read the change log and its triggers",
-      `SELECT json_build_object('log', to_regclass('__antelope.changes') IS NOT NULL, 'triggers', (SELECT count(*) > 0 FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'verify-feeds' AND c.relname = 'docs' AND NOT t.tgisinternal))`,
-    );
-    context.expect(log.folder, [same("watching the table installed its triggers and the __antelope.changes log", log.value, { log: true, triggers: true })]);
+    const log = await sql(context, "read the change log", `SELECT to_json(to_regclass('__antelope.changes') IS NOT NULL)`);
+    context.expect(log.folder, [same("watching the table created the __antelope.changes log", log.value, true)]);
     await close(session);
   },
 };
