@@ -428,6 +428,23 @@ describe("PlanTable", () => {
     expect(out.indexStatements).to.deep.equal([]);
   });
 
+  it("takes over a hand-made index only at a name the adapter derives", () => {
+    const actual = Existing(FULL_COLUMNS, [
+      ...OtherIndexes(VEHICLES_PLAN, "vehicles_price"),
+      { name: "vehicles_price", valid: true },
+      { name: "vehicles_tags__next", valid: true },
+      { name: "vehicles_price_by_hand", valid: true },
+    ]);
+    const out = PlanTable(SCHEMA, VEHICLES_PLAN, actual, SAFE);
+    expect(out.indexStatements).to.deep.equal([
+      `${CREATE_PRICE_REPLACEMENT} ON ${VEHICLES_TARGET} USING btree ("_instance", "price")`,
+      `COMMENT ON INDEX "shop"."vehicles_price__next" IS '${PRICE_SIGNATURE}'`,
+      DROP_PRICE,
+      RENAME_PRICE_REPLACEMENT,
+      `DROP INDEX CONCURRENTLY IF EXISTS "shop"."vehicles_tags__next"`,
+    ]);
+  });
+
   it("drops obsolete indexes inside the transaction before a column retype", () => {
     const actual = Existing(RETYPED_COLUMNS, [
       ...OtherIndexes(VEHICLES_PLAN, "vehicles_tags"),
