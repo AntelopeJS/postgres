@@ -70,17 +70,17 @@ Declaring a field is therefore the most useful thing you can do for query perfor
 
 Registration reconciles the declared schema with what the database holds.
 
-| Change                                 | `safe` (default)                       | `destructive`         |
-| -------------------------------------- | -------------------------------------- | --------------------- |
-| New declared field                     | `ADD COLUMN`                           | `ADD COLUMN`          |
-| Declared type differs from the column  | Error naming the field                 | `ALTER COLUMN … TYPE` |
-| Column exists, no longer declared      | Warning, column kept                   | `DROP COLUMN`         |
-| Index missing                          | `CREATE INDEX CONCURRENTLY`            | Same                  |
-| Index left `INVALID` by a failed build | `DROP` and `CREATE`, both concurrently | Same                  |
-| Index definition changed               | Build replacement, then swap           | Same                  |
-| `unique` added or removed              | Build replacement, then swap           | Same                  |
-| Adapter-owned index no longer declared | `DROP INDEX CONCURRENTLY`              | Same                  |
-| Index this adapter did not create      | Left alone                             | Left alone            |
+| Change                                 | `safe` (default)                                       | `destructive`         |
+| -------------------------------------- | ------------------------------------------------------ | --------------------- |
+| New declared field                     | `ADD COLUMN`                                           | `ADD COLUMN`          |
+| Declared type differs from the column  | Error naming the field                                 | `ALTER COLUMN … TYPE` |
+| Column exists, no longer declared      | Warning, column kept                                   | `DROP COLUMN`         |
+| Index missing                          | `CREATE INDEX CONCURRENTLY`                            | Same                  |
+| Index left `INVALID` by a failed build | `DROP` and `CREATE`, both concurrently                 | Same                  |
+| Index definition changed               | Build replacement, then swap                           | Same                  |
+| `unique` added or removed              | Build replacement, then swap                           | Same                  |
+| Adapter-owned index no longer declared | `DROP INDEX CONCURRENTLY`                              | Same                  |
+| Index this adapter did not create      | Left alone, unless it holds a name the adapter derives | Same                  |
 
 If you add `unique` to an index over rows that already share a key, the build of the replacement fails. The adapter logs the failure, the previous index keeps serving, and the index phase stops there. The next registration tries again. Remove the duplicates, then restart.
 
@@ -89,6 +89,8 @@ A type mismatch is fatal under `safe` because it would otherwise be a failure at
 **The adapter fills a new column from `_extra` in the same transaction.** When you add a field to a schema that already has rows, the existing values move from the overflow document into the new column. A row then never shows a value that `filter` can no longer find. The move loses nothing. A stored value that the new column cannot hold, such as the wrong JSON type for the declared one, stays in `_extra`, where it can still be read. It is not dropped or coerced.
 
 The adapter recognizes the indexes it owns by a signature stored as the index comment, not by parsing the index definition back.
+
+**The adapter owns every index name it derives.** A declared index `<index>` on table `<table>` is named `<table>_<index>`. A `crossInstance` index adds its twin `<table>_<index>__g`. A rebuild stages each of them under the same name plus `__next`. An index the adapter did not create is left alone under any other name. At one of these names it is treated as the adapter's own: replaced like a drifted index, or dropped when it sits at a `__next` name. The adapter cannot tell such an index from one of its own builds that stopped between `CREATE INDEX CONCURRENTLY` and the `COMMENT ON INDEX` that signs it, because the two cannot share a transaction. Give a hand-made index a name outside this pattern, such as `users_email_by_hand` next to a declared index `email` on `users`.
 
 **Schemas, tables and columns converge in one transaction. Indexes converge after it, in the background.** A schema is ready for queries as soon as that transaction commits. No query ever waits for a secondary index, and results never depend on whether one exists yet. The adapter then builds every secondary index with `CREATE INDEX CONCURRENTLY`, so a table keeps taking reads and writes while an index is added to it, however large the table is. The adapter logs a failed build, and the next registration repairs it:
 
