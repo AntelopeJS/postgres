@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.2.7
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.6...v0.2.7)
+
+### 🔥 Performance
+
+- **test:** Run the owned and external suites concurrently ([#81](https://github.com/AntelopeJS/postgres/pull/81))
+- **test:** Pull the PostgreSQL image while dist builds ([#82](https://github.com/AntelopeJS/postgres/pull/82))
+
+### 📖 Documentation
+
+- **storage:** Say convergence takes over an index at a name it derives ([#85](https://github.com/AntelopeJS/postgres/pull/85))
+
+### 📦 Build
+
+- **deps:** Bump @antelopejs/tooling-configs to 0.4.0 ([#84](https://github.com/AntelopeJS/postgres/pull/84))
+
+### ✅ Tests
+
+- **verify:** Add the postgres verify layer ([#83](https://github.com/AntelopeJS/postgres/pull/83))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.2.6
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.5...v0.2.6)
