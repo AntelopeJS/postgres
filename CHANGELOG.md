@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.2.8
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.7...v0.2.8)
+
+### 🔥 Performance
+
+- **reads:** Walk declared fields with Object.keys when decoding rows ([#88](https://github.com/AntelopeJS/postgres/pull/88))
+
+### 📦 Build
+
+- **deps:** Bump @antelopejs/tooling-configs to 0.5.0 ([#86](https://github.com/AntelopeJS/postgres/pull/86))
+- **deps:** Bump @antelopejs/tooling-configs to 0.5.1 ([#87](https://github.com/AntelopeJS/postgres/pull/87))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.2.7
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.6...v0.2.7)
