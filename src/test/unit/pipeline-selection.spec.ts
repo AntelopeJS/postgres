@@ -170,9 +170,7 @@ describe("the getAll stage", () => {
   it("rejects a compound key of the wrong arity, naming the index", () => {
     expect(() =>
       ApplyRaw([QueryStage("getAll", { index: COMPOUND_INDEX }, "Alice")]),
-    ).to.throw(
-      "The 'byNameAge' index takes a key of 2 values, received a string",
-    );
+    ).to.throw("The 'byNameAge' index takes a key of 2 values, received text");
     expect(() =>
       ApplyRaw([QueryStage("getAll", { index: COMPOUND_INDEX }, [["Alice"]])]),
     ).to.throw(

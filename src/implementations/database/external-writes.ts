@@ -170,10 +170,10 @@ function TargetedRows(target: WriteTarget, key: ColumnDescriptor[]): string {
 
 function DocumentOf(stage: QueryStage): DocumentView {
   const argument: unknown = stage.args[FIRST_OPERAND];
-  const { document } = ClassifyMember(argument);
+  const { document, kind } = ClassifyMember(argument);
   assert(
     document,
-    `The '${stage.stage}' stage on an external relation takes a document, received ${Array.isArray(argument) ? "an array" : `a ${typeof argument}`}; an expression mapper is not supported on external relations in this version`,
+    `The '${stage.stage}' stage on an external relation takes a document, received ${kind}; an expression mapper is not supported on external relations in this version`,
   );
   return document;
 }

@@ -330,7 +330,7 @@ describe("the ids an insert answers", () => {
       // @ts-expect-error a string document; insert refuses it, naming the stage, the position and the kind received
       Insert("a"),
     ).to.throw(
-      "The 'insert' stage takes documents, and the one at position 0 is a string",
+      "The 'insert' stage takes documents, received text at position 0",
     );
   });
 
@@ -339,7 +339,7 @@ describe("the ids an insert answers", () => {
       // @ts-expect-error an array as a batch entry; insert refuses it, naming the stage, the position and the kind received
       Insert([[]]),
     ).to.throw(
-      "The 'insert' stage takes documents, and the one at position 0 is an array",
+      "The 'insert' stage takes documents, received list at position 0",
     );
   });
 });

@@ -163,10 +163,10 @@ export function InsertedDocuments(stage: QueryStage): DocumentView[] {
   const argument: unknown = stage.args[FIRST_OPERAND];
   const list: unknown[] = Array.isArray(argument) ? argument : [argument];
   return list.map((entry, position) => {
-    const { document } = ClassifyMember(entry);
+    const { document, kind } = ClassifyMember(entry);
     assert(
       document,
-      `The '${stage.stage}' stage takes documents, and the one at position ${position} is ${Array.isArray(entry) ? "an array" : `a ${typeof entry}`}`,
+      `The '${stage.stage}' stage takes documents, received ${kind} at position ${position}`,
     );
     return document;
   });

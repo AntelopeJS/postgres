@@ -4,7 +4,7 @@ description: Every input the PostgreSQL module refuses, with the exact message i
 mode: reference
 ---
 
-Everything this module refuses, with the message it refuses with. The module fills each placeholder in `{braces}` from what you passed.
+Everything this module refuses, with the message it refuses with. The module fills each placeholder in `{braces}` from what you passed. `{kind}` names what the module read a value as: `absent`, `null`, `text`, `number`, `boolean`, `date`, `list`, `record`, `proxy`, `query`, `staged`, or `opaque` for anything else, such as a bigint, a function or a `Buffer`.
 
 ## Change feeds
 
@@ -71,7 +71,7 @@ A cursor holds a pooled connection for as long as it is open, so the module recl
 | `insert` or `replace` under `CROSS_INSTANCE`                     | `The '{stage}' stage cannot write under CROSS_INSTANCE: name the instance the rows belong to, or omit the instance id for the default one`                   |
 | A write nested inside another query                              | `The '{stage}' stage writes, so it cannot be nested inside another query`                                                                                    |
 | A write read through a cursor                                    | `The '{stage}' stage writes, so it cannot be read through a cursor`                                                                                          |
-| An inserted document whose `_id` is not a string                 | `An inserted document's '_id' must be a string, received {type}`                                                                                             |
+| An inserted document whose `_id` is not a string                 | `An inserted document's '_id' must be a string, received {kind}`                                                                                             |
 
 ### Duplicate keys
 
@@ -102,7 +102,7 @@ A group's callback accepts `map`, `distinct`, `count`, `sum`, `avg`, `min` and `
 | What you did                                                                                                                                     | Message                                                                                            |
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
 | Passed `CROSS_INSTANCE` to `createInstance` or `destroyInstance`                                                                                 | `{operation} does not accept CROSS_INSTANCE: pass a string id or omit it for the default instance` |
-| Passed a non-string instance id                                                                                                                  | `{operation} expects a string instance id, received {type}`                                        |
+| Passed a non-string instance id                                                                                                                  | `{operation} expects a string instance id, received {kind}`                                        |
 | A `cursorBatchSize`, `cursorIdleTimeoutMs`, `changeRetentionMs`, `changeBatchSize` or `changePollIntervalMs` that is not a positive safe integer | `{option} must be a positive safe integer, received {value}`                                       |
 | A `mode` other than `"owned"` or `"external"`                                                                                                    | `mode must be one of owned, external, received {mode}`                                             |
 | `mode: "external"` with no `url`, or an empty one                                                                                                | `mode "external" needs a non-empty config.url; set it through the project's envOverrides`          |

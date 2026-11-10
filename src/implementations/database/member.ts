@@ -1,11 +1,8 @@
-import assert from "node:assert";
-
 import { Query, ValueProxy } from "@antelopejs/interface-database";
 import { StagedObject } from "@antelopejs/interface-database/common";
 
 import { IsBoolean, IsDocument, IsNumber, IsObject, IsString } from "./guards";
 import type { ConstantJson } from "./sql";
-import { ID_COLUMN } from "./utils";
 
 /**
  * A non-array object read as a document: its own members, classified when they are asked for.
@@ -26,10 +23,8 @@ interface MemberFacts {
   json(): string;
   /** The value read as a document, for a non-array object. */
   document: DocumentView | undefined;
-  /** Refuses the value as one a query cannot decode, naming what `typeof` answers for it. */
+  /** Refuses the value as one a query cannot decode, naming its kind. */
   refuseInQuery(): never;
-  /** Refuses the value as an inserted document's key, naming what `typeof` answers for it. */
-  refuseAsId(): never;
 }
 
 interface Scalar<Kind extends string, Value> extends MemberFacts {
@@ -140,58 +135,54 @@ export function ClassifyMember(value: unknown): Member {
         ownNames: () => Object.getOwnPropertyNames(value),
       }
     : undefined;
-  const facts: MemberFacts = {
+  const of = <Kind extends Member["kind"]>(
+    kind: Kind,
+  ): MemberFacts & { kind: Kind } => ({
+    kind,
     json: () => JSON.stringify(value),
     document,
     refuseInQuery: () => {
-      throw new Error(`Unsupported value of type '${typeof value}' in query`);
+      throw new Error(`Unsupported value of kind '${kind}' in query`);
     },
-    refuseAsId: () => {
-      assert(
-        false,
-        `An inserted document's '${ID_COLUMN}' must be a string, received ${typeof value}`,
-      );
-    },
-  };
+  });
   if (value === undefined) {
-    return { ...facts, kind: "absent" };
+    return of("absent");
   }
   if (value === null) {
-    return { ...facts, kind: "null" };
+    return of("null");
   }
   if (value instanceof ValueProxy) {
-    return { ...facts, kind: "proxy", value, identity: value };
+    return { ...of("proxy"), value, identity: value };
   }
   if (value instanceof Query) {
-    return { ...facts, kind: "query", value, identity: value };
+    return { ...of("query"), value, identity: value };
   }
   if (value instanceof StagedObject) {
-    return { ...facts, kind: "staged", value, identity: value };
+    return { ...of("staged"), value, identity: value };
   }
   if (value instanceof Date) {
-    return { ...facts, kind: "date", value };
+    return { ...of("date"), value };
   }
   if (Array.isArray(value)) {
     const list: unknown[] = value;
     return {
-      ...facts,
-      kind: "list",
+      ...of("list"),
       identity: list,
       items: () => list.map((item) => ClassifyMember(item)),
       constant: () => (list.every(IsConstantJson) ? list : undefined),
     };
   }
   if (IsPlainObject(value) && document) {
-    return { ...facts, kind: "record", identity: value, document };
+    return { ...of("record"), identity: value, document };
   }
   if (IsString(value)) {
-    return { ...facts, kind: "text", value };
+    return { ...of("text"), value };
   }
   if (IsNumber(value)) {
-    return { ...facts, kind: "number", value };
+    return { ...of("number"), value };
   }
   if (IsBoolean(value)) {
-    return { ...facts, kind: "boolean", value };
+    return { ...of("boolean"), value };
   }
-  return { ...facts, kind: "opaque" };
+  return of("opaque");
 }

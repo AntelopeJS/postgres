@@ -107,14 +107,14 @@ describe("the update statement", () => {
     expect(() =>
       // @ts-expect-error a string payload; update refuses it, naming the stage and the kind received
       Update("a"),
-    ).to.throw("The 'update' stage takes a document, received a string");
+    ).to.throw("The 'update' stage takes a document, received text");
   });
 
   it("refuses an array rather than writing its indices as keys", () => {
     expect(() =>
       // @ts-expect-error an array payload; update refuses it, naming the stage and the kind received
       Update([]),
-    ).to.throw("The 'update' stage takes a document, received an array");
+    ).to.throw("The 'update' stage takes a document, received list");
   });
 });
 

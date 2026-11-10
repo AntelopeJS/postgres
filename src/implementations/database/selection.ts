@@ -115,7 +115,7 @@ function RootInstanceScope(
   }
   assert(
     id === undefined || id === null || IsString(id),
-    `An instance id must be a string or CROSS_INSTANCE, received ${typeof id}`,
+    `An instance id must be a string or CROSS_INSTANCE, received ${ClassifyMember(id).kind}`,
   );
   return Param(context.params, id ?? DEFAULT_INSTANCE_ID, TEXT);
 }

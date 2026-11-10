@@ -101,7 +101,7 @@ function IndexOption(stage: QueryStage): string | undefined {
   }
   assert(
     IsString(name),
-    `The '${stage.stage}' stage names its index with a string, received ${typeof name}`,
+    `The '${stage.stage}' stage names its index with a string, received ${ClassifyMember(name).kind}`,
   );
   return name;
 }
@@ -142,7 +142,7 @@ function KeyTuple(selection: KeySelection, key: RecordedKey): string {
   }
   assert(
     Array.isArray(key) && key.length === columns.length,
-    `The '${selection.indexId}' index takes a key of ${columns.length} values, received ${Array.isArray(key) ? `${key.length} values` : `a ${typeof key}`}`,
+    `The '${selection.indexId}' index takes a key of ${columns.length} values, received ${Array.isArray(key) ? `${key.length} values` : ClassifyMember(key).kind}`,
   );
   const parts = key.map((part, position) => {
     assert(

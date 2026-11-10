@@ -1,5 +1,6 @@
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 import { IsString } from "./guards";
+import { ClassifyMember } from "./member";
 
 import type { QueryStage } from "@antelopejs/interface-database/common";
 
@@ -105,7 +106,7 @@ export function NormalizeInstanceId(
   }
   if (!IsString(id)) {
     throw new Error(
-      `${operation} expects a string instance id, received ${typeof id}`,
+      `${operation} expects a string instance id, received ${ClassifyMember(id).kind}`,
     );
   }
   return id;
