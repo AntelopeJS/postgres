@@ -1,6 +1,9 @@
 import { expect } from "chai";
 
-import type { TableModel } from "../../implementations/database/fields";
+import {
+  ParseTable,
+  type TableModel,
+} from "../../implementations/database/fields";
 import { DecodeRow, ReviveValue } from "../../implementations/database/result";
 import {
   ArrayOf,
@@ -159,5 +162,17 @@ describe("DecodeRow", () => {
     expect(out.car).to.equal("Renault");
     expect(out.manufactured).to.be.a("date");
     expect(out.manufactured).to.deep.equal(new Date("1998-04-05T00:00:00Z"));
+  });
+
+  it("reads only the fields a schema owns, even one named __proto__", () => {
+    const fields = Object.fromEntries([
+      ["__proto__", "string"],
+      ["name", "string"],
+    ]);
+    const model = ParseTable({ fields, indexes: {} }, "s.t");
+    expect(DecodeRow({ _id: "a", name: "ada" }, model)).to.deep.equal({
+      _id: "a",
+      name: "ada",
+    });
   });
 });
