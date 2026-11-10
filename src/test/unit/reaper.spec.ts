@@ -1,8 +1,12 @@
 import { expect } from "chai";
-import { Client, type QueryResult } from "pg";
 
 import { EnsureTriggers } from "../../implementations/database/migrate";
-import { ReapInterval, ReapOnce } from "../../implementations/database/reaper";
+import type { ResultRow } from "../../implementations/database/query";
+import {
+  type ReapClient,
+  ReapInterval,
+  ReapOnce,
+} from "../../implementations/database/reaper";
 
 const RETENTION_MS = 300_000;
 
@@ -21,26 +25,20 @@ interface Statement {
   readonly params: unknown[];
 }
 
-type Answer = (sql: string) => unknown[];
-
-const NOTHING: unknown[] = [];
-
-function Rows(rows: unknown[]): QueryResult {
-  return { rows, command: "SELECT", rowCount: rows.length, oid: 0, fields: [] };
-}
+type Answer = (sql: string) => ResultRow[];
 
 /** A client that records what it was asked and answers from a per-statement table. */
 function Recording(answer: Answer, fail?: (sql: string) => boolean) {
   const statements: Statement[] = [];
-  const client = Object.assign(new Client(), {
-    query: (sql: string, params: unknown[] = NOTHING) => {
+  const client: ReapClient = {
+    query: (sql: string, params: unknown[]) => {
       statements.push({ sql, params });
       if (fail?.(sql)) {
         return Promise.reject(new Error("the pass failed here"));
       }
-      return Promise.resolve(Rows(answer(sql)));
+      return Promise.resolve({ rows: answer(sql) });
     },
-  });
+  };
   return { client, statements };
 }
 
@@ -52,7 +50,7 @@ function Answering(present: boolean, took: boolean): Answer {
     if (sql.includes("pg_try_advisory_lock")) {
       return [{ took }];
     }
-    return NOTHING;
+    return [];
   };
 }
 

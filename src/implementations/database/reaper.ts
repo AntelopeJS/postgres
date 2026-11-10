@@ -1,7 +1,6 @@
-import type { ClientBase } from "pg";
-
 import { Logger } from "../../logger";
 import { GetOptions } from "../../config";
+import type { ResultRow } from "./query";
 import { CHANGE_LOG_TABLE, REGISTRY_SCHEMA } from "./utils";
 import { AcquireClient, RegisterBeforeDisconnect } from "../../connection";
 import {
@@ -59,12 +58,9 @@ const REAP_FAILED =
 
 const REAP_RECOVERED = "the PostgreSQL change log is being reaped again";
 
-interface PresentRow {
-  present: boolean;
-}
-
-interface LockRow {
-  took: boolean;
+/** What a reaping pass calls on its client: one statement at a time, its rows back. */
+export interface ReapClient {
+  query(text: string, values: unknown[]): Promise<{ rows: ResultRow[] }>;
 }
 
 let timer: NodeJS.Timeout | undefined;
@@ -89,14 +85,14 @@ let isFailing = false;
  * of more than one, and reading it as a reap would let it stand in for one that failed.
  */
 export async function ReapOnce(
-  client: ClientBase,
+  client: ReapClient,
   retentionMs: number,
 ): Promise<boolean> {
-  const present = await client.query<PresentRow>(PRESENT, [LOG_REGCLASS]);
+  const present = await client.query(PRESENT, [LOG_REGCLASS]);
   if (!present.rows[0]?.present) {
     return false;
   }
-  const lock = await client.query<LockRow>(TAKE_LOCK, [REAP_LOCK_KEY]);
+  const lock = await client.query(TAKE_LOCK, [REAP_LOCK_KEY]);
   if (!lock.rows[0]?.took) {
     return false;
   }
