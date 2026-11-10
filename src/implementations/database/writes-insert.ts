@@ -90,7 +90,11 @@ function SuppliedId(document: DocumentView): string | undefined {
   if (supplied === undefined || NoIdSupplied(supplied)) {
     return undefined;
   }
-  return supplied.kind === "text" ? supplied.value : supplied.refuseAsId();
+  assert(
+    supplied.kind === "text",
+    `An inserted document's '${ID_COLUMN}' must be a string, received ${supplied.kind}`,
+  );
+  return supplied.value;
 }
 
 /**

@@ -1,5 +1,3 @@
-import { AssertionError } from "node:assert";
-
 import { expect } from "chai";
 import { Query, ValueProxy } from "@antelopejs/interface-database";
 import {
@@ -20,48 +18,43 @@ import { DecodeValue } from "../../implementations/database/value";
 import { RefusingCompilers } from "./spec-fixture";
 
 const NAMED_KINDS = [
-  { label: "undefined", value: undefined, kind: "absent", type: "undefined" },
-  { label: "null", value: null, kind: "null", type: "object" },
-  { label: "a string", value: "x", kind: "text", type: "string" },
-  { label: "a number", value: 1, kind: "number", type: "number" },
-  { label: "NaN", value: NaN, kind: "number", type: "number" },
-  { label: "a boolean", value: false, kind: "boolean", type: "boolean" },
-  { label: "a date", value: new Date(0), kind: "date", type: "object" },
+  { label: "undefined", value: undefined, kind: "absent" },
+  { label: "null", value: null, kind: "null" },
+  { label: "a string", value: "x", kind: "text" },
+  { label: "a number", value: 1, kind: "number" },
+  { label: "NaN", value: NaN, kind: "number" },
+  { label: "a boolean", value: false, kind: "boolean" },
+  { label: "a date", value: new Date(0), kind: "date" },
   {
     label: "a proxy",
     value: ValueProxy.constant(1),
     kind: "proxy",
-    type: "object",
   },
   {
     label: "a query",
     value: new Query(QueryStage("table", { id: "t" })),
     kind: "query",
-    type: "object",
   },
   {
     label: "a staged object",
     value: new StagedObject(QueryStage("table", { id: "t" })),
     kind: "staged",
-    type: "object",
   },
-  { label: "a list", value: [1], kind: "list", type: "object" },
+  { label: "a list", value: [1], kind: "list" },
   {
     label: "an object literal",
     value: { a: 1 },
     kind: "record",
-    type: "object",
   },
   {
     label: "a Buffer",
     value: Buffer.from("a"),
     kind: "opaque",
-    type: "object",
   },
-  { label: "a Map", value: new Map(), kind: "opaque", type: "object" },
-  { label: "a bigint", value: 1n, kind: "opaque", type: "bigint" },
-  { label: "a symbol", value: Symbol("s"), kind: "opaque", type: "symbol" },
-  { label: "a function", value: () => 1, kind: "opaque", type: "function" },
+  { label: "a Map", value: new Map(), kind: "opaque" },
+  { label: "a bigint", value: 1n, kind: "opaque" },
+  { label: "a symbol", value: Symbol("s"), kind: "opaque" },
+  { label: "a function", value: () => 1, kind: "opaque" },
 ];
 
 const STAMP: ColumnDescriptor = {
@@ -104,17 +97,13 @@ interface Cyclic {
 }
 
 describe("ClassifyMember", () => {
-  for (const { label, value, kind, type } of NAMED_KINDS) {
-    it(`reads ${label} as ${kind}, refusing it with what typeof answers`, () => {
+  for (const { label, value, kind } of NAMED_KINDS) {
+    it(`reads ${label} as ${kind}, refusing it in a query by that kind`, () => {
       const member = ClassifyMember(value);
       expect(member.kind).to.equal(kind);
       expect(() => member.refuseInQuery()).to.throw(
         Error,
-        `Unsupported value of type '${type}' in query`,
-      );
-      expect(() => member.refuseAsId()).to.throw(
-        AssertionError,
-        `An inserted document's '_id' must be a string, received ${type}`,
+        `Unsupported value of kind '${kind}' in query`,
       );
     });
   }
@@ -268,9 +257,9 @@ describe("what a write keeps to validate before it runs", () => {
 });
 
 describe("a value no walk can decode", () => {
-  const UNDECODABLE: [string, bigint | Buffer, RegExp][] = [
-    ["Buffer", Buffer.from("a"), /'object'/],
-    ["bigint", 1n, /'bigint'/],
+  const UNDECODABLE: [string, bigint | Buffer][] = [
+    ["Buffer", Buffer.from("a")],
+    ["bigint", 1n],
   ];
 
   it("refuses a staged object that is neither a proxy nor a query", () => {
@@ -279,10 +268,10 @@ describe("a value no walk can decode", () => {
         ClassifyMember(new StagedObject(QueryStage("table", { id: "t" }))),
         new DecodingContext(RefusingCompilers()),
       ),
-    ).to.throw(/'object'/);
+    ).to.throw(/'staged'/);
   });
 
-  for (const [label, value, refusal] of UNDECODABLE) {
+  for (const [label, value] of UNDECODABLE) {
     const document = new Map([["stamp", value]]);
 
     it(`writes nothing for a ${label} on a generated column of an update`, () => {
@@ -303,7 +292,7 @@ describe("a value no walk can decode", () => {
           ClassifyMember(value),
           new DecodingContext(RefusingCompilers()),
         ),
-      ).to.throw(refusal);
+      ).to.throw(/'opaque'/);
     });
   }
 });

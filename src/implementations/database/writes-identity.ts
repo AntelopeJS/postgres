@@ -165,10 +165,10 @@ function UpdateStatement(
 
 function ChangedDocument(stage: QueryStage): DocumentView {
   const argument: unknown = stage.args[FIRST_OPERAND];
-  const { document } = ClassifyMember(argument);
+  const { document, kind } = ClassifyMember(argument);
   assert(
     document,
-    `The '${stage.stage}' stage takes a document, received ${Array.isArray(argument) ? "an array" : `a ${typeof argument}`}`,
+    `The '${stage.stage}' stage takes a document, received ${kind}`,
   );
   return document;
 }

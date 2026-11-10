@@ -101,7 +101,7 @@ describe("DecodeValue", () => {
   it("rejects a value it cannot represent", () => {
     const context = NewContext(NewRecorded());
     const refused = Parsed(() => 1);
-    expect(() => DecodeValue(refused, context)).to.throw(/function/);
+    expect(() => DecodeValue(refused, context)).to.throw(/'opaque'/);
   });
 
   it("dispatches a ValueProxy to the expression compiler", () => {

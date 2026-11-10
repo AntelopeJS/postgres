@@ -180,7 +180,7 @@ describe("the replace statement's refusals", () => {
     expect(() =>
       // @ts-expect-error a string payload; replace refuses it, naming the stage and the kind received
       Replace(NAME),
-    ).to.throw("The 'replace' stage takes a document, received a string");
+    ).to.throw("The 'replace' stage takes a document, received text");
   });
 });
 
