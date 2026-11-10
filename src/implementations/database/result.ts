@@ -60,9 +60,9 @@ export function ReviveValue(value: RowValue, type: SqlType): RowValue {
         return value;
       }
       const result = { ...value };
-      for (const [name, keyType] of Object.entries(type.keys)) {
+      for (const name of Object.keys(type.keys)) {
         if (Object.hasOwn(result, name)) {
-          result[name] = ReviveValue(result[name], keyType);
+          result[name] = ReviveValue(result[name], type.keys[name]);
         }
       }
       return result;
@@ -92,7 +92,8 @@ export function DecodeRow(row: RowObject, table: TableModel): RowObject {
   ) {
     document[INSTANCE_COLUMN] = instance;
   }
-  for (const [name, spec] of Object.entries(table.fields)) {
+  for (const name of Object.keys(table.fields)) {
+    const spec = table.fields[name];
     const value = OwnCell(row, spec.column);
     if (value === null || value === undefined) {
       continue;
