@@ -1,5 +1,4 @@
 import { expect } from "chai";
-import { Client, type PoolClient } from "pg";
 
 import type { Options } from "../../config";
 import { WithOptions } from "./spec-fixture";
@@ -7,6 +6,7 @@ import type { ResultRow } from "../../implementations/database/query";
 import {
   CloseOneCursor,
   CountOpenCursors,
+  type CursorClient,
   type CursorOpener,
   ReadCursorRow,
 } from "../../implementations/database/cursors";
@@ -105,7 +105,7 @@ export function Recorder(): Recording {
 }
 
 /**
- * A `PoolClient` that answers `FETCH` from a queue of batches and records everything else.
+ * A cursor client that answers `FETCH` from a queue of batches and records everything else.
  *
  * The batches are the only script it needs: every other statement a cursor issues answers no rows,
  * and `failing` is the one whose text it refuses, which is how the open and fetch failure paths are
@@ -124,9 +124,9 @@ export function StubClient(
   log: Recording,
   batches: ResultRow[][],
   failing?: string,
-): PoolClient {
+): CursorClient {
   let isReleased = false;
-  return Object.assign(new Client(), {
+  return {
     query: (sql: string, values?: unknown[]) => {
       log.statements.push(sql);
       log.bound.push(values ?? NO_VALUES);
@@ -161,7 +161,7 @@ export function StubClient(
       isReleased = true;
       log.whenReleased?.();
     },
-  });
+  };
 }
 
 export function Decode(rows: ResultRow[]): unknown[] {

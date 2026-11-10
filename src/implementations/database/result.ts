@@ -72,13 +72,16 @@ export function ReviveValue(value: RowValue, type: SqlType): RowValue {
   }
 }
 
+/** The cell a row holds under `column` itself, never one inherited from `Object.prototype`. */
+function OwnCell(row: RowObject, column: string): RowValue {
+  return Object.hasOwn(row, column) ? row[column] : undefined;
+}
+
 export function DecodeRow(row: RowObject, table: TableModel): RowObject {
   const document: RowObject = {};
-  const {
-    [ID_COLUMN]: id,
-    [INSTANCE_COLUMN]: instance,
-    [EXTRA_COLUMN]: overflow,
-  } = row;
+  const id = OwnCell(row, ID_COLUMN);
+  const instance = OwnCell(row, INSTANCE_COLUMN);
+  const overflow = OwnCell(row, EXTRA_COLUMN);
   if (id !== null && id !== undefined) {
     document[ID_COLUMN] = id;
   }
@@ -90,9 +93,7 @@ export function DecodeRow(row: RowObject, table: TableModel): RowObject {
     document[INSTANCE_COLUMN] = instance;
   }
   for (const [name, spec] of Object.entries(table.fields)) {
-    const value = Object.hasOwn(row, spec.column)
-      ? row[spec.column]
-      : undefined;
+    const value = OwnCell(row, spec.column);
     if (value === null || value === undefined) {
       continue;
     }

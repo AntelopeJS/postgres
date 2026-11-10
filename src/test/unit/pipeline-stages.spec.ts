@@ -106,11 +106,15 @@ function ProbeArguments(method: string): unknown[] {
   return Array.from({ length: MAX_STAGE_ARITY }, () => Identity);
 }
 
+function IsMethod(value: unknown): value is Function {
+  return value instanceof Function;
+}
+
 function OwnStageMethods(members: PropertyDescriptorMap): [string, Function][] {
   const methods: [string, Function][] = [];
   for (const [name, descriptor] of Object.entries(members)) {
     const value: unknown = descriptor.value;
-    if (value instanceof Function && !NON_STAGE_METHODS.includes(name)) {
+    if (IsMethod(value) && !NON_STAGE_METHODS.includes(name)) {
       methods.push([name, value]);
     }
   }

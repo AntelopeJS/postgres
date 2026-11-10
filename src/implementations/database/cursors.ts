@@ -1,5 +1,3 @@
-import type { PoolClient } from "pg";
-
 import { QuoteIdentifier } from "./sql";
 import type { ResultRow } from "./query";
 import { GetOptions, type ResolvedOptions } from "../../config";
@@ -26,7 +24,13 @@ const REMEMBERED_ENDINGS = 1024;
 type RowDecoder = (rows: ResultRow[]) => unknown[];
 
 /** Where a cursor's dedicated client comes from; production never supplies one. */
-type ClientSource = () => Promise<PoolClient>;
+type ClientSource = () => Promise<CursorClient>;
+
+/** What a cursor calls on its dedicated client: statements in order, then one release. */
+export interface CursorClient {
+  query(text: string, values?: unknown[]): Promise<{ rows: ResultRow[] }>;
+  release(): void;
+}
 
 /**
  * Everything a cursor needs to open, as the caller that compiled it already holds it.
@@ -76,7 +80,7 @@ const FAILED: EndReason = "failed";
 const FORGOTTEN: EndReason = "forgotten";
 
 interface OpenCursor {
-  readonly client: PoolClient;
+  readonly client: CursorClient;
   readonly decode: RowDecoder;
   readonly buffer: unknown[];
   isDrained: boolean;
@@ -240,7 +244,7 @@ function FetchStatement(batchSize: number): string {
 }
 
 /** Rolls the cursor's transaction off the client before the pool takes it back. */
-async function Discard(client: PoolClient): Promise<void> {
+async function Discard(client: CursorClient): Promise<void> {
   await Quietly(() => client.query(ROLLBACK));
   await Quietly(() => client.release());
 }
@@ -330,9 +334,7 @@ async function FetchBatch(
   cursor: OpenCursor,
   batchSize: number,
 ): Promise<void> {
-  const fetched = await cursor.client.query<ResultRow>(
-    FetchStatement(batchSize),
-  );
+  const fetched = await cursor.client.query(FetchStatement(batchSize));
   cursor.isDrained = fetched.rows.length < batchSize;
   for (const value of cursor.decode(fetched.rows)) {
     cursor.buffer.push(value);
