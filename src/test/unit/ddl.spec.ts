@@ -138,6 +138,11 @@ describe("BuildTablePlan", () => {
       indexes: { dotted: { fields: ["dot.ted"] } },
     });
     expect(index.keys).to.deep.equal([`"_instance"`, `"dot.ted"`]);
+    const reservedHead = BuildOne({
+      fields: { "_id.x": "string" },
+      indexes: { idx: { fields: ["_id.x"] } },
+    });
+    expect(reservedHead.keys).to.deep.equal([`"_instance"`, `"_id.x"`]);
   });
 
   it("falls back to the index id when fields is explicitly empty", () => {

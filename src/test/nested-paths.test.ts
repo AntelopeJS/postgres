@@ -43,7 +43,7 @@ interface Review {
 
 interface Event {
   _id: string;
-  meta: { at: Date };
+  meta: { at: Date | null };
   "meta.at"?: Date;
 }
 
@@ -260,6 +260,17 @@ describe("dotted names read nested paths", () => {
       refused = error;
     }
     expect(IsDuplicateKeyError(refused) && refused.index).to.equal("metaAt");
+  });
+
+  it("an index over a date below a declared field holds a stored null as absent", async () => {
+    const unset = ["event-null-0", "event-null-1"].map((_id) => ({
+      _id,
+      meta: { at: null },
+    }));
+    await Table("events").insert(unset);
+    expect(
+      await Table("events").getAll(["event-null-0", "event-null-1"]).count(),
+    ).to.equal(2);
   });
 
   it("the index over a path serves a sort and a match by that path", async () => {

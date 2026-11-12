@@ -4,7 +4,7 @@ import type {
   TableDefinition,
 } from "@antelopejs/interface-database/schema";
 
-import { JsonKey, QuoteIdentifier, QuoteLiteral } from "./sql";
+import { JSON_NULL, JsonKey, QuoteIdentifier, QuoteLiteral } from "./sql";
 import {
   type ColumnAddress,
   ColumnRowSource,
@@ -158,12 +158,8 @@ function AssertPathHasMembers(
   field: string,
   row: ColumnRowSource,
 ): void {
-  const declared = row.keyTypes();
-  if (Object.hasOwn(declared, field)) {
-    return;
-  }
   const segments = field.split(PATH_SEPARATOR);
-  let keys: KeyTypes | undefined = declared;
+  let keys: KeyTypes | undefined = row.keyTypes();
   for (const [depth, segment] of segments.slice(0, -1).entries()) {
     if (!keys || !Object.hasOwn(keys, segment)) {
       return;
@@ -185,14 +181,18 @@ function AssertPathHasMembers(
  *
  * A date member below a declared field is the exception. Its read parses text into `timestamptz`,
  * which PostgreSQL refuses in an index expression, and a failed build stops the schema's index
- * phase. Its key is the stored JSON member instead: the index builds and keeps `unique`, and serves
- * no read.
+ * phase. Its key is the stored JSON member instead, a JSON null read as absent as the typed read
+ * does: the index builds and keeps `unique`, and serves no read.
  */
 function IndexKey(
   indexId: string,
   field: string,
   row: ColumnRowSource,
+  isDeclared: boolean,
 ): string {
+  if (isDeclared) {
+    return NamedField(row, field).sql;
+  }
   const [head] = field.split(PATH_SEPARATOR);
   if (field !== ID_COLUMN && RESERVED_COLUMNS.includes(head)) {
     throw new Error(
@@ -202,15 +202,11 @@ function IndexKey(
   AssertPathHasMembers(indexId, field, row);
   const read = NamedField(row, field);
   const cut = field.lastIndexOf(PATH_SEPARATOR);
-  if (
-    read.type.kind !== TIMESTAMP.kind ||
-    cut < 0 ||
-    Object.hasOwn(row.keyTypes(), field)
-  ) {
+  if (read.type.kind !== TIMESTAMP.kind || cut < 0) {
     return read.sql;
   }
   const parent = NamedField(row, field.slice(0, cut));
-  return JsonKey(parent.sql, field.slice(cut + 1));
+  return `NULLIF(${JsonKey(parent.sql, field.slice(cut + 1))}, ${JSON_NULL})`;
 }
 
 /**
@@ -271,7 +267,9 @@ function BuildIndexPlans(
   const fields = IndexFields(indexId, index);
   const specs = IndexSpecs(fields, model);
   const row = new ColumnRowSource(IndexedColumns, model);
-  const keys = fields.map((field) => IndexKey(indexId, field, row));
+  const keys = fields.map((field, position) =>
+    IndexKey(indexId, field, row, specs[position] !== undefined),
+  );
   const name = IndexName(tableId, indexId);
   const isUnique = index.unique === true;
   if (IsElementWise(index, specs)) {
