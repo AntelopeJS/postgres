@@ -104,6 +104,26 @@ export function BuildDocument(
   };
 }
 
+/** What separates the segments of a dotted name, `title.fr`, that {@link NamedField} reads. */
+export const PATH_SEPARATOR = ".";
+
+/**
+ * Reads a field by the name an index, a sort, a scan or a lookup's other key takes: a member by
+ * its exact name where the row declares one, and otherwise a dotted name as a path below its first
+ * segment. So `title.fr` reads the `fr` member of `title`, and the index over it holds that value.
+ */
+export function NamedField(source: RowSource, name: string): Compiled {
+  const [head, ...rest] = name.split(PATH_SEPARATOR);
+  const declared = source.keyTypes();
+  if (rest.length === 0 || (declared && Object.hasOwn(declared, name))) {
+    return source.field(name);
+  }
+  return rest.reduce(
+    (value, segment) => new JsonRowSource(value).field(segment),
+    source.field(head),
+  );
+}
+
 /** Names a key in the message {@link Defaulted} raises for a default the column cannot hold. */
 function KeySubject(name: string): string {
   return `The default for key '${name}'`;

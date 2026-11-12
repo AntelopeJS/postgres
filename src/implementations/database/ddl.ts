@@ -6,11 +6,18 @@ import type {
 
 import { JsonKey, QuoteIdentifier, QuoteLiteral } from "./sql";
 import {
+  type ColumnAddress,
+  ColumnRowSource,
+  NamedField,
+  PATH_SEPARATOR,
+} from "./row-source";
+import {
   IsJsonBacked,
   OPAQUE,
   PhysicalType,
   type SqlType,
   TEXT,
+  TIMESTAMP,
 } from "./types";
 import {
   EXTRA_COLUMN,
@@ -133,22 +140,43 @@ export function ColumnDdl(column: ColumnPlan): string {
   return parts.join(" ");
 }
 
-const RESERVED_INDEX_KEYS = new Map([[ID_COLUMN, QuoteIdentifier(ID_COLUMN)]]);
+/** The table's own columns, unqualified, as an index expression names them. */
+const IndexedColumns: ColumnAddress = (column, type) => ({
+  sql: QuoteIdentifier(column),
+  type,
+});
 
-function IndexKey(indexId: string, field: string, spec?: FieldSpec): string {
-  if (spec) {
-    return QuoteIdentifier(spec.column);
-  }
-  const reserved = RESERVED_INDEX_KEYS.get(field);
-  if (reserved !== undefined) {
-    return reserved;
-  }
-  if (RESERVED_COLUMNS.includes(field)) {
+/**
+ * An index key, spelled as the reads it serves spell the field: the same {@link NamedField} over
+ * the table's columns, so `orderBy`, `getAll`, `between` and `lookup` compile to its expression.
+ *
+ * A date member below a declared field is the exception. Its read parses text into `timestamptz`,
+ * which PostgreSQL refuses in an index expression, and a failed build stops the schema's index
+ * phase. Its key is the stored JSON member instead: the index builds and keeps `unique`, and serves
+ * no read.
+ */
+function IndexKey(
+  indexId: string,
+  field: string,
+  row: ColumnRowSource,
+): string {
+  const [head] = field.split(PATH_SEPARATOR);
+  if (field !== ID_COLUMN && RESERVED_COLUMNS.includes(head)) {
     throw new Error(
-      `Index '${indexId}' keys on '${field}', which is a reserved column the adapter owns; index a declared field instead`,
+      `Index '${indexId}' keys on '${field}', which reads the reserved column '${head}' the adapter owns; index a declared field instead`,
     );
   }
-  return JsonKey(QuoteIdentifier(EXTRA_COLUMN), field);
+  const read = NamedField(row, field);
+  const cut = field.lastIndexOf(PATH_SEPARATOR);
+  if (
+    read.type.kind !== TIMESTAMP.kind ||
+    cut < 0 ||
+    Object.hasOwn(row.keyTypes(), field)
+  ) {
+    return read.sql;
+  }
+  const parent = NamedField(row, field.slice(0, cut));
+  return JsonKey(parent.sql, field.slice(cut + 1));
 }
 
 /**
@@ -208,9 +236,8 @@ function BuildIndexPlans(
 ): IndexPlan[] {
   const fields = IndexFields(indexId, index);
   const specs = IndexSpecs(fields, model);
-  const keys = fields.map((field, position) =>
-    IndexKey(indexId, field, specs[position]),
-  );
+  const row = new ColumnRowSource(IndexedColumns, model);
+  const keys = fields.map((field) => IndexKey(indexId, field, row));
   const name = IndexName(tableId, indexId);
   const isUnique = index.unique === true;
   if (IsElementWise(index, specs)) {
