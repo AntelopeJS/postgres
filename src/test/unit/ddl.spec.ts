@@ -132,7 +132,7 @@ describe("BuildTablePlan", () => {
     }
   });
 
-  it("keys a declared field whose name has a dot on its own column, not as a path", () => {
+  it("keys a declared dotted field on its own column, even when its first segment is reserved", () => {
     const index = BuildOne({
       fields: { "dot.ted": "string", dot: { ted: "string" } },
       indexes: { dotted: { fields: ["dot.ted"] } },
