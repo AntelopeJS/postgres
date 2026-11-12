@@ -13,6 +13,8 @@ import {
 } from "./row-source";
 import {
   IsJsonBacked,
+  type KeyTypes,
+  KeyTypesOf,
   OPAQUE,
   PhysicalType,
   type SqlType,
@@ -147,6 +149,37 @@ const IndexedColumns: ColumnAddress = (column, type) => ({
 });
 
 /**
+ * Refuses a path through a declared value that has no members, such as `name.fr` over a `string`.
+ * Its read is always NULL, and it reads through `to_jsonb`, which PostgreSQL refuses in an index
+ * expression, so the build would fail and stop the schema's index phase.
+ */
+function AssertPathHasMembers(
+  indexId: string,
+  field: string,
+  row: ColumnRowSource,
+): void {
+  const declared = row.keyTypes();
+  if (Object.hasOwn(declared, field)) {
+    return;
+  }
+  const segments = field.split(PATH_SEPARATOR);
+  let keys: KeyTypes | undefined = declared;
+  for (const [depth, segment] of segments.slice(0, -1).entries()) {
+    if (!keys || !Object.hasOwn(keys, segment)) {
+      return;
+    }
+    const type = keys[segment];
+    if (!IsJsonBacked(type)) {
+      const owner = segments.slice(0, depth + 1).join(PATH_SEPARATOR);
+      throw new Error(
+        `Index '${indexId}' keys on '${field}', but '${owner}' is declared as a ${PhysicalType(type)} with no members; index a declared field instead`,
+      );
+    }
+    keys = KeyTypesOf(type);
+  }
+}
+
+/**
  * An index key, spelled as the reads it serves spell the field: the same {@link NamedField} over
  * the table's columns, so `orderBy`, `getAll`, `between` and `lookup` compile to its expression.
  *
@@ -166,6 +199,7 @@ function IndexKey(
       `Index '${indexId}' keys on '${field}', which reads the reserved column '${head}' the adapter owns; index a declared field instead`,
     );
   }
+  AssertPathHasMembers(indexId, field, row);
   const read = NamedField(row, field);
   const cut = field.lastIndexOf(PATH_SEPARATOR);
   if (

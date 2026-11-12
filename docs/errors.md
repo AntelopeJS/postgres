@@ -40,7 +40,8 @@ A cursor holds a pooled connection for as long as it is open, so the module recl
 | Two fields that truncate to the same column name              | `Fields '{a}' and '{b}' on '{table}' both map to column '{column}'; rename one`                                                                                         |
 | Two tables or indexes that truncate to the same name          | `The physical name '{name}' is claimed by both {a} and {b}; rename one`                                                                                                 |
 | Declared a `unique` `multi` index over an array field         | `Index '{indexId}' on table '{table}' is unique and multi over an array field, whose elements PostgreSQL cannot hold unique; drop one of the two flags`                 |
-| Indexed a reserved column                                     | `Index '{indexId}' keys on '{field}', which is a reserved column the adapter owns; index a declared field instead`                                                      |
+| Indexed a reserved column                                     | `Index '{indexId}' keys on '{field}', which reads the reserved column '{column}' the adapter owns; index a declared field instead`                                      |
+| Indexed a path below a declared value with no members         | `Index '{indexId}' keys on '{field}', but '{owner}' is declared as a {type} with no members; index a declared field instead`                                            |
 | Changed a declared type under `migrations: "safe"`            | `Column '{name}' on {table} is {actual} but the schema declares {declared}; set migrations: "destructive" to alter it`                                                  |
 | Pointed the adapter at a pre-existing table it did not create | `Table {target} has no '{column}' column and one cannot be added without a default, so the table was not created by this adapter; rename it or drop it`                 |
 
