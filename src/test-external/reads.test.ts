@@ -43,7 +43,8 @@ describe("listing an external relation as a TableView does", () => {
       .filter((row) => row.key("status").eq("active"))
       .filter((row) => row.key("name").match("(?i)acct 1"))
       .slice(0, 5)
-      .pluck("_internal", "_id", "name", "status");
+      .pluck("_internal", "_id", "name", "status")
+      .run();
     const expected = await Native<Row>(
       `SELECT id::text AS "_id", name, status::text AS status FROM sales.accounts
        WHERE status = 'active' AND name ~* 'acct 1' ORDER BY name DESC LIMIT 5`,
@@ -55,7 +56,8 @@ describe("listing an external relation as a TableView does", () => {
     const total = await Accounts()
       .filter((row) => row.key("status").eq("active"))
       .filter((row) => row.key("name").match("(?i)acct 1"))
-      .count();
+      .count()
+      .run();
     expect(total).to.equal(
       await NativeCount(
         "SELECT count(*) FROM sales.accounts WHERE status = 'active' AND name ~* 'acct 1'",
@@ -67,7 +69,8 @@ describe("listing an external relation as a TableView does", () => {
     const total = await Accounts()
       .filter((row) => row.key("score").gt(97))
       .filter((row) => row.key("revenue").ge(267000))
-      .count();
+      .count()
+      .run();
     expect(total).to.equal(
       await NativeCount(
         "SELECT count(*) FROM sales.accounts WHERE score > 97 AND revenue >= 267000",
@@ -91,7 +94,8 @@ describe("listing an external relation as a TableView does", () => {
             .ge(Day(day))
             .and(row.key(column).lt(NextDay(day))),
         )
-        .count();
+        .count()
+        .run();
       expect(total).to.equal(
         await NativeCount(
           `SELECT count(*) FROM sales.${table}
@@ -106,7 +110,8 @@ describe("listing an external relation as a TableView does", () => {
   it("searches a date column through its ISO rendering, as a TableView search does", async () => {
     const total = await Accounts()
       .filter((row) => row.key("created_at").match("(?i)2026-01-02T0"))
-      .count();
+      .count()
+      .run();
     expect(total).to.equal(10);
   });
 
@@ -118,7 +123,8 @@ describe("listing an external relation as a TableView does", () => {
           .match("(?i)CHURN")
           .or(row.key("external_ref").match("(?i)^0")),
       )
-      .count();
+      .count()
+      .run();
     expect(total).to.equal(
       await NativeCount(
         "SELECT count(*) FROM sales.accounts WHERE status::text ~* 'churn' OR external_ref::text ~* '^0'",
@@ -135,7 +141,8 @@ describe("reading an external row by key", () => {
   it("gets a row by its bigint key as a string _id, with exact bigints and true instants", async () => {
     const row = await Accounts()
       .get("42")
-      .pluck("_id", "id", "big_counter", "signed_on", "last_seen");
+      .pluck("_id", "id", "big_counter", "signed_on", "last_seen")
+      .run();
     expect(row).to.deep.equal({
       _id: "42",
       id: "42",
@@ -149,7 +156,10 @@ describe("reading an external row by key", () => {
     const original = process.env.TZ;
     process.env.TZ = "America/New_York";
     try {
-      const row = await Accounts().get("42").pluck("signed_on", "last_seen");
+      const row = await Accounts()
+        .get("42")
+        .pluck("signed_on", "last_seen")
+        .run();
       expect(row).to.deep.equal({
         signed_on: new Date("2026-02-12T00:00:00.000Z"),
         last_seen: new Date("2026-01-01T00:42:00.000Z"),
@@ -160,7 +170,7 @@ describe("reading an external row by key", () => {
   });
 
   it("reads a whole row in row mode with _id first and every declared field", async () => {
-    const row = await Accounts().get("7");
+    const row = await Accounts().get("7").run();
     expect(Object.keys(row)[0]).to.equal("_id");
     expect(row).to.include({
       _id: "7",
@@ -176,7 +186,7 @@ describe("reading an external row by key", () => {
     const [known] = await Native<{ id: string }>(
       "SELECT contact_id::text AS id FROM sales.contacts ORDER BY first_name LIMIT 1",
     );
-    const rows = await Contacts().getAll([known.id, "not-a-uuid"], "_id");
+    const rows = await Contacts().getAll([known.id, "not-a-uuid"], "_id").run();
     expect(rows.map((row) => row._id)).to.deep.equal([known.id]);
   });
 });
@@ -191,7 +201,8 @@ describe("reading across external relations", () => {
       .orderBy("first_name", "asc")
       .slice(0, 3)
       .lookup(Accounts().pluck("_internal", "_id", "name"), "account_id", "_id")
-      .pluck("first_name", "account_id");
+      .pluck("first_name", "account_id")
+      .run();
     const expected = await Native<Row>(
       `SELECT c.first_name, jsonb_build_object('_id', a.id::text, 'name', a.name) AS account_id
        FROM sales.contacts c JOIN sales.accounts a ON a.id = c.account_id
@@ -216,7 +227,8 @@ describe("reading across external relations", () => {
       }))
       .group("bucket", (rows, group) => ({ x: group, y: rows.count() }))
       .orderBy("x", "asc")
-      .slice(0, 3);
+      .slice(0, 3)
+      .run();
     const expected = await Native<{ x: string; y: string }>(
       `SELECT to_char(created_at AT TIME ZONE 'UTC' AT TIME ZONE '${PARIS}', 'YYYYMMDD') AS x, count(*) AS y
        FROM sales.contacts GROUP BY 1 ORDER BY 1 LIMIT 3`,
@@ -227,11 +239,12 @@ describe("reading across external relations", () => {
   });
 
   it("reads an undeclared key, such as the _internal data-api plucks, as absent", async () => {
-    const row = await Accounts().get("1").pluck("_internal", "name");
+    const row = await Accounts().get("1").pluck("_internal", "name").run();
     expect(row).to.deep.equal({ name: "Acct 1" });
     const total = await Accounts()
       .filter((row) => row.key("nickname").eq("x"))
-      .count();
+      .count()
+      .run();
     expect(total).to.equal(0);
   });
 });
@@ -246,17 +259,24 @@ describe("the _id of relations without a single-column primary key", () => {
       .instance()
       .table("order_lines")
       .orderBy("_id")
-      .slice(0, 1);
+      .slice(0, 1)
+      .run();
     expect(first._id).to.equal('["0", "1"]');
     const again = await sales
       .instance()
       .table("order_lines")
-      .get(String(first._id));
+      .get(String(first._id))
+      .run();
     expect(again).to.deep.equal(first);
   });
 
   it("answers _id from the unique index of a table without a primary key", async () => {
-    const row = await sales.instance().table("events").orderBy("at").nth(0);
+    const row = await sales
+      .instance()
+      .table("events")
+      .orderBy("at")
+      .nth(0)
+      .run();
     if (row === null) throw new Error("the relation answered no row");
     expect(row._id).to.equal(row.event_ref);
   });
@@ -264,10 +284,10 @@ describe("the _id of relations without a single-column primary key", () => {
   for (const relation of ["raw_log", "big_accounts", "daily_signups"]) {
     it(`counts ${relation}, which has no key, and its rows answer no _id`, async () => {
       const table = sales.instance().table(relation);
-      expect(await table.count()).to.equal(
+      expect(await table.count().run()).to.equal(
         await NativeCount(`SELECT count(*) FROM sales.${relation}`),
       );
-      const [row] = await table.slice(0, 1);
+      const [row] = await table.slice(0, 1).run();
       expect(row).to.not.have.property("_id");
     });
   }
@@ -280,14 +300,14 @@ describe("instances over an external relation", () => {
 
   it("reads every row through CROSS_INSTANCE, since an external relation has no instances", async () => {
     expect(
-      await sales.instance(CROSS_INSTANCE).table("accounts").count(),
+      await sales.instance(CROSS_INSTANCE).table("accounts").count().run(),
     ).to.equal(20000);
   });
 
   it("refuses a named instance rather than answer rows nobody scoped to it", async () => {
     let refusal: Error | undefined;
     try {
-      await sales.instance("tenant-1").table("accounts").count();
+      await sales.instance("tenant-1").table("accounts").count().run();
     } catch (err) {
       if (!(err instanceof Error)) throw err;
       refusal = err;
