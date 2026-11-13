@@ -23,7 +23,7 @@ jobs:
       setup-commands: |
         if [[ "$RUNNER_OS" == Windows ]]; then
           pg_bin=$(cygpath -u "$PGBIN")
-          "$pg_bin/pg_ctl" start -D "$PGDATA" -w -s -l "$RUNNER_TEMP/postgres.log"
+          "$pg_bin/pg_ctl" start -D "$PGDATA" -w -s -l "$RUNNER_TEMP/postgres.log" -o "-c fsync=off"
           PGPASSWORD=root "$pg_bin/createdb" -U postgres antelopejs_test
           echo "PG_TEST_URL=postgres://postgres:root@localhost:5432/antelopejs_test" >> "$GITHUB_ENV"
         fi
