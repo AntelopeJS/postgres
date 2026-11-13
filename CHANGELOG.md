@@ -4,6 +4,11 @@
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.3.0...v0.4.0)
 
+### Upgrade notes
+
+- Implements `@antelopejs/interface-database` `>=0.4.0 <0.5.0` ([#94](https://github.com/AntelopeJS/postgres/pull/94)). A project on interface-database 0.4.0 needs this release. A project still on interface-database 0.3.x keeps postgres 0.3.x, since this release refuses to start with it.
+- Nothing changes in the module config or in stored data.
+
 ### 💅 Refactors
 
 - **result:** Read _extra through IsPlainObject instead of a cast ([#92](https://github.com/AntelopeJS/postgres/pull/92))
