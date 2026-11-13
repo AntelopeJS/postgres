@@ -116,6 +116,35 @@ describe("BuildTablePlan", () => {
     }
   });
 
+  it("refuses an index over a path below a declared value with no members", () => {
+    const cases: [TableDefinition["fields"], string, string][] = [
+      [{ name: "string" }, "name.fr", "'name' is declared as a text"],
+      [
+        { meta: { at: "date" } },
+        "meta.at.x",
+        "'meta.at' is declared as a timestamptz",
+      ],
+    ];
+    for (const [fields, field, owner] of cases) {
+      const build = () =>
+        BuildOne({ fields, indexes: { path: { fields: [field] } } });
+      expect(build).to.throw(owner);
+    }
+  });
+
+  it("keys a declared dotted field on its own column, even when its first segment is reserved", () => {
+    const index = BuildOne({
+      fields: { "dot.ted": "string", dot: { ted: "string" } },
+      indexes: { dotted: { fields: ["dot.ted"] } },
+    });
+    expect(index.keys).to.deep.equal([`"_instance"`, `"dot.ted"`]);
+    const reservedHead = BuildOne({
+      fields: { "_id.x": "string" },
+      indexes: { idx: { fields: ["_id.x"] } },
+    });
+    expect(reservedHead.keys).to.deep.equal([`"_instance"`, `"_id.x"`]);
+  });
+
   it("falls back to the index id when fields is explicitly empty", () => {
     const index = BuildOne({
       fields: { car: "string" },

@@ -4,13 +4,22 @@ import type {
   TableDefinition,
 } from "@antelopejs/interface-database/schema";
 
-import { JsonKey, QuoteIdentifier, QuoteLiteral } from "./sql";
+import { JSON_NULL, JsonKey, QuoteIdentifier, QuoteLiteral } from "./sql";
+import {
+  type ColumnAddress,
+  ColumnRowSource,
+  NamedField,
+  PATH_SEPARATOR,
+} from "./row-source";
 import {
   IsJsonBacked,
+  type KeyTypes,
+  KeyTypesOf,
   OPAQUE,
   PhysicalType,
   type SqlType,
   TEXT,
+  TIMESTAMP,
 } from "./types";
 import {
   EXTRA_COLUMN,
@@ -133,22 +142,71 @@ export function ColumnDdl(column: ColumnPlan): string {
   return parts.join(" ");
 }
 
-const RESERVED_INDEX_KEYS = new Map([[ID_COLUMN, QuoteIdentifier(ID_COLUMN)]]);
+/** The table's own columns, unqualified, as an index expression names them. */
+const IndexedColumns: ColumnAddress = (column, type) => ({
+  sql: QuoteIdentifier(column),
+  type,
+});
 
-function IndexKey(indexId: string, field: string, spec?: FieldSpec): string {
-  if (spec) {
-    return QuoteIdentifier(spec.column);
+/**
+ * Refuses a path through a declared value that has no members, such as `name.fr` over a `string`.
+ * Its read is always NULL, and it reads through `to_jsonb`, which PostgreSQL refuses in an index
+ * expression, so the build would fail and stop the schema's index phase.
+ */
+function AssertPathHasMembers(
+  indexId: string,
+  field: string,
+  row: ColumnRowSource,
+): void {
+  const segments = field.split(PATH_SEPARATOR);
+  let keys: KeyTypes | undefined = row.keyTypes();
+  for (const [depth, segment] of segments.slice(0, -1).entries()) {
+    if (!keys || !Object.hasOwn(keys, segment)) {
+      return;
+    }
+    const type = keys[segment];
+    if (!IsJsonBacked(type)) {
+      const owner = segments.slice(0, depth + 1).join(PATH_SEPARATOR);
+      throw new Error(
+        `Index '${indexId}' keys on '${field}', but '${owner}' is declared as a ${PhysicalType(type)} with no members; index a declared field instead`,
+      );
+    }
+    keys = KeyTypesOf(type);
   }
-  const reserved = RESERVED_INDEX_KEYS.get(field);
-  if (reserved !== undefined) {
-    return reserved;
+}
+
+/**
+ * An index key, spelled as the reads it serves spell the field: the same {@link NamedField} over
+ * the table's columns, so `orderBy`, `getAll`, `between` and `lookup` compile to its expression.
+ *
+ * A date member below a declared field is the exception. Its read parses text into `timestamptz`,
+ * which PostgreSQL refuses in an index expression, and a failed build stops the schema's index
+ * phase. Its key is the stored JSON member instead, a JSON null read as absent as the typed read
+ * does: the index builds and keeps `unique`, and serves no read.
+ */
+function IndexKey(
+  indexId: string,
+  field: string,
+  row: ColumnRowSource,
+  isDeclared: boolean,
+): string {
+  if (isDeclared) {
+    return NamedField(row, field).sql;
   }
-  if (RESERVED_COLUMNS.includes(field)) {
+  const [head] = field.split(PATH_SEPARATOR);
+  if (field !== ID_COLUMN && RESERVED_COLUMNS.includes(head)) {
     throw new Error(
-      `Index '${indexId}' keys on '${field}', which is a reserved column the adapter owns; index a declared field instead`,
+      `Index '${indexId}' keys on '${field}', which reads the reserved column '${head}' the adapter owns; index a declared field instead`,
     );
   }
-  return JsonKey(QuoteIdentifier(EXTRA_COLUMN), field);
+  AssertPathHasMembers(indexId, field, row);
+  const read = NamedField(row, field);
+  const cut = field.lastIndexOf(PATH_SEPARATOR);
+  if (read.type.kind !== TIMESTAMP.kind || cut < 0) {
+    return read.sql;
+  }
+  const parent = NamedField(row, field.slice(0, cut));
+  return `NULLIF(${JsonKey(parent.sql, field.slice(cut + 1))}, ${JSON_NULL})`;
 }
 
 /**
@@ -208,8 +266,9 @@ function BuildIndexPlans(
 ): IndexPlan[] {
   const fields = IndexFields(indexId, index);
   const specs = IndexSpecs(fields, model);
+  const row = new ColumnRowSource(IndexedColumns, model);
   const keys = fields.map((field, position) =>
-    IndexKey(indexId, field, specs[position]),
+    IndexKey(indexId, field, row, specs[position] !== undefined),
   );
   const name = IndexName(tableId, indexId);
   const isUnique = index.unique === true;

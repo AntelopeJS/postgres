@@ -8,7 +8,7 @@ import { UnifyOperands } from "./coerce";
 import { DecodeFunction, RecordedLambda } from "./value";
 import { AsJson, Predicate } from "./readings";
 import type { DecodingContext } from "./context";
-import { NullableRowSource, type RowSource } from "./row-source";
+import { NamedField, NullableRowSource, type RowSource } from "./row-source";
 import type { PipelineStage, PipelineStageMap } from "./pipeline";
 import { FIRST_OPERAND, RequireOperand, SECOND_OPERAND } from "./stage";
 import {
@@ -255,6 +255,7 @@ const PUSHDOWN_BLOCKERS: readonly RelationFlag[] = WHERE_BLOCKERS.filter(
 /**
  * Pushes the correlation onto the looked-up relation, comparing two declared columns.
  * Two columns of one kind take no cast; a scalar key against an array column takes containment.
+ * The other key is a {@link NamedField}, so `title.fr` matches the nested value and its index.
  */
 function Correlate(
   right: Relation,
@@ -263,7 +264,7 @@ function Correlate(
   local: Compiled,
   form: LookupForm,
 ): void {
-  const other = source.field(otherKey);
+  const other = NamedField(source, otherKey);
   if (IsArray(other.type) && !IsArray(local.type)) {
     right.where.push(`(${other.sql} ${CONTAINS} ${AsJson(local).sql})`);
     return;

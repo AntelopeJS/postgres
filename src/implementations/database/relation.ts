@@ -11,6 +11,7 @@ import {
   ExternalRowSource,
   JsonRowSource,
   LoggedColumns,
+  NamedField,
   type RowSource,
 } from "./row-source";
 
@@ -160,6 +161,8 @@ export function RequireOrigin(relation: Relation): TableOrigin {
  * same way: a second expansion would sort by one field list and match against another, and the
  * btree scan would quietly stop being served with nothing failing. A relation that no longer knows
  * its table can only read the name as a field, which is what keeps `map(…).orderBy("age")` working.
+ * Each field is a {@link NamedField}, the reading the index DDL keys on, so `title.fr` sorts by the
+ * nested value and its index serves that sort.
  *
  * Each column keeps the field it was expanded from, because a compound index is also a *document*
  * to a `group`'s mapper and its member names are the index's own. Reading them beside the columns
@@ -172,7 +175,7 @@ export function IndexColumns(
   const fields = relation.origin ? relation.origin.index(name) : [name];
   return fields.map((field) => ({
     name: field,
-    ...relation.source.field(field),
+    ...NamedField(relation.source, field),
   }));
 }
 
