@@ -7,6 +7,7 @@ import {
   INSTANCE_COLUMN,
 } from "./utils";
 import { IsDocument, IsNumber, IsString } from "./guards";
+import { IsPlainObject } from "./member";
 
 /**
  * What `pg`'s default type parsers answer for one column: text, a number, a boolean, a `Date`, a
@@ -100,10 +101,7 @@ export function DecodeRow(row: RowObject, table: TableModel): RowObject {
     }
     document[name] = ReviveValue(value, spec.type);
   }
-  // SAFETY: `_extra` is declared `jsonb NOT NULL DEFAULT '{}'` and the adapter writes it only as a jsonb object (EMPTY_EXTRA, MergeExtra), which pg parses to an object; it reads null only for a copy of a row that lacks the key (the column is NOT NULL), and undefined, which the spread drops, when the select list leaves it out.
-  const extra = {
-    ...(overflow as RowObject | null),
-  };
+  const extra = IsPlainObject(overflow) ? { ...overflow } : {};
   delete extra[ID_COLUMN];
   delete extra[INSTANCE_COLUMN];
   return { ...document, ...extra };
