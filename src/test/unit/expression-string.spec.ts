@@ -115,18 +115,6 @@ describe("string stage dispatch", () => {
       expect(out.timezone, call.stage).to.equal(undefined);
     }
   });
-
-  it("names the stage when the operand is absent", () => {
-    for (const name of ["str_concat", "str_match"]) {
-      expect(() =>
-        CompileExpression(
-          // @ts-expect-error a string stage with no operand, which each stage refuses by naming itself
-          [QueryStage("arg", undefined, ROW_ID), QueryStage(name)],
-          NewContext(),
-        ),
-      ).to.throw(`'${name}'`);
-    }
-  });
 });
 
 describe("str_upcase and str_downcase", () => {

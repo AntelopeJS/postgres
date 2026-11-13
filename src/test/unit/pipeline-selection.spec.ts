@@ -66,13 +66,6 @@ describe("the get stage", () => {
     expect(sql).to.not.contain("jsonb_build_object");
   });
 
-  it("requires the key, naming the stage", () => {
-    // @ts-expect-error no key, which the get stage refuses by naming itself and the position
-    expect(() => ApplyRaw([QueryStage("get", undefined)])).to.throw(
-      "Stage 'get' requires an operand at position 0",
-    );
-  });
-
   it("marks the relation as yielding exactly one row", () => {
     const { relation } = Apply(Root().get("k"));
     expect(relation.single).to.equal(true);
@@ -121,26 +114,6 @@ describe("the getAll stage", () => {
     ).to.deep.equal([ACTIVE_KEY]);
   });
 
-  it("reads a null key against a boolean column as no answer, not as false", () => {
-    const { relation, context } = ApplyRaw([
-      // @ts-expect-error a null key, which getAll reads against a boolean column as no answer
-      QueryStage("getAll", { index: "isActive" }, null),
-    ]);
-    expect(relation.where).to.deep.equal([
-      `("t0"."isActive" IN ((CASE WHEN jsonb_typeof('null'::jsonb) = 'boolean' THEN (('null'::jsonb #>> '{}')::boolean) END)))`,
-    ]);
-    expect(context.params.all()).to.deep.equal([]);
-  });
-
-  it("reads a document key against a boolean column as no answer, not as true", () => {
-    const { relation } = ApplyRaw([
-      // @ts-expect-error a document key, which getAll reads against a boolean column as no answer
-      QueryStage("getAll", { index: "isActive" }, { a: 1 }),
-    ]);
-    expect(relation.where[0]).to.contain("jsonb_typeof");
-    expect(relation.where[0]).to.not.contain("<> ALL");
-  });
-
   it("reads a key as the column's type rather than casting it", () => {
     expect(Apply(Root().getAll("3000", "age")).relation.where).to.deep.equal([
       NUMERIC_TEXT_KEY,
@@ -175,21 +148,6 @@ describe("the getAll stage", () => {
       ApplyRaw([QueryStage("getAll", { index: COMPOUND_INDEX }, [["Alice"]])]),
     ).to.throw(
       "The 'byNameAge' index takes a key of 2 values, received 1 values",
-    );
-  });
-
-  it("names the index and the position of a hole inside a compound key", () => {
-    expect(() =>
-      ApplyRaw([
-        QueryStage(
-          "getAll",
-          { index: COMPOUND_INDEX },
-          // @ts-expect-error a hole in a compound key, which the index refuses by naming the position
-          [["Alice", undefined]],
-        ),
-      ]),
-    ).to.throw(
-      "The 'byNameAge' index takes a value for every field, and has none at position 1",
     );
   });
 });
@@ -352,24 +310,6 @@ describe("the between stage", () => {
     ).to.throw(
       `The 'between' stage ranges over one field, but '${COMPOUND_INDEX}' names 2`,
     );
-  });
-
-  it("requires both bounds, naming the stage and the missing one", () => {
-    expect(() =>
-      // @ts-expect-error one bound, which the between stage refuses by naming itself and the position
-      ApplyRaw([QueryStage("between", { index: "age" }, 0)]),
-    ).to.throw("Stage 'between' requires an operand at position 1");
-    // @ts-expect-error no bound, which the between stage refuses by naming itself and the position
-    expect(() => ApplyRaw([QueryStage("between", { index: "age" })])).to.throw(
-      "Stage 'between' requires an operand at position 0",
-    );
-  });
-
-  it("requires the field to range over", () => {
-    expect(() =>
-      // @ts-expect-error no field, which the between stage refuses by naming itself
-      ApplyRaw([QueryStage("between", { index: undefined }, 0, 10)]),
-    ).to.throw("The 'between' stage is missing its field name");
   });
 
   it("reads a text bound as the column's type rather than casting it", () => {

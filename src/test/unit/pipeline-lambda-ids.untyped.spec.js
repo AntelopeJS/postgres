@@ -19,44 +19,38 @@ const FILTER_ARGUMENT_TAIL =
 const MAP_CONSTANT =
   'SELECT ($1::double precision) AS "value" FROM "directory"."people" AS "t0"';
 
-function Compile(...stages: QueryStage[]): string {
-  return Render(ApplyRaw(stages).relation);
-}
-
 describe("lambda parameter ids that are neither numbers nor texts", () => {
   for (const { label, id } of ODD_IDS) {
     it(`compiles a filter whose only id is ${label} and whose body is a constant`, () => {
-      const sql = Compile(
-        QueryStage(
-          "filter",
-          undefined,
-          // @ts-expect-error a parameter id that is not a number, which the filter compiles with its constant body
-          QueryStage("func", undefined, [id], true),
-        ),
+      const filter = QueryStage(
+        "filter",
+        undefined,
+        QueryStage("func", undefined, [id], true),
       );
+      const sql = Render(ApplyRaw([filter]).relation);
 
       expect(sql.endsWith(FILTER_CONSTANT_TAIL)).to.equal(true);
     });
 
     it(`compiles a filter whose body reads the ${label} id back`, () => {
-      const sql = Compile(
-        QueryStage(
-          "filter",
-          undefined,
-          // @ts-expect-error a parameter id that is not a number, on the func and its arg, which the filter compiles by reading the id back
-          QueryStage("func", undefined, [id], QueryStage("arg", undefined, id)),
-        ),
+      const filter = QueryStage(
+        "filter",
+        undefined,
+        QueryStage("func", undefined, [id], QueryStage("arg", undefined, id)),
       );
+      const sql = Render(ApplyRaw([filter]).relation);
 
       expect(sql.endsWith(FILTER_ARGUMENT_TAIL)).to.equal(true);
     });
   }
 
   it("compiles a map whose id is an empty object", () => {
-    const sql = Compile(
-      // @ts-expect-error an empty object as the parameter id, which the map compiles with its constant body
-      QueryStage("map", undefined, QueryStage("func", undefined, [{}], 5)),
+    const map = QueryStage(
+      "map",
+      undefined,
+      QueryStage("func", undefined, [{}], 5),
     );
+    const sql = Render(ApplyRaw([map]).relation);
 
     expect(sql).to.equal(MAP_CONSTANT);
   });

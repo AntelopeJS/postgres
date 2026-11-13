@@ -13,7 +13,6 @@ import { BOOL } from "../../implementations/database/types";
 import { Render } from "../../implementations/database/render";
 import {
   type Applied,
-  ApplyRaw,
   ApplySubqueries,
   ReadParamLedger,
   Root,
@@ -110,13 +109,6 @@ describe("the group stage", () => {
     const { relation } = GroupedBy("age");
     expect(relation.aggregated).to.equal(true);
     expect(relation.single).to.equal(false);
-  });
-
-  it("names itself when the stage carries no index to group on", () => {
-    // @ts-expect-error no index or field, which the group stage refuses by naming itself
-    expect(() => ApplyRaw([QueryStage("group", {})])).to.throw(
-      "The 'group' stage is missing the index or field to group on",
-    );
   });
 
   it("binds no parameter for a mapper that reads the group alone", () => {

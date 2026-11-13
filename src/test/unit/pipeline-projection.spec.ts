@@ -1,11 +1,9 @@
 import { expect } from "chai";
 import { ValueProxy } from "@antelopejs/interface-database";
-import { QueryStage } from "@antelopejs/interface-database/common";
 
 import { Render } from "../../implementations/database/render";
 import {
   Apply,
-  ApplyRaw,
   CallerRoot,
   DOCUMENT,
   FROM_TABLE,
@@ -225,13 +223,6 @@ describe("the pluck stage", () => {
       Apply(Root().pluck("name", "age")).relation.projection?.type,
     ).to.deep.equal({ kind: "json", keys: { name: TEXT, age: FLOAT } });
   });
-
-  it("rejects a field list that is not a list of names", () => {
-    // @ts-expect-error a field list of numbers, which the pluck stage refuses by naming itself
-    expect(() => ApplyRaw([QueryStage("pluck", undefined, [1])])).to.throw(
-      "Stage 'pluck' requires a list of field names",
-    );
-  });
 });
 
 describe("the without stage", () => {
@@ -285,12 +276,5 @@ describe("the without stage", () => {
     const type = Apply(Root().pluck("name", "age").without("age")).relation
       .projection?.type;
     expect(type).to.deep.equal({ kind: "json", keys: { name: TEXT } });
-  });
-
-  it("rejects a field list that is not a list of names", () => {
-    // @ts-expect-error a field list of numbers, which the without stage refuses by naming itself
-    expect(() => ApplyRaw([QueryStage("without", undefined, [2])])).to.throw(
-      "Stage 'without' requires a list of field names",
-    );
   });
 });

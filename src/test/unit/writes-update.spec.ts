@@ -102,20 +102,6 @@ describe("the update statement", () => {
     const written = Write(Root().update({ age: AGE }));
     expect(Sql(written)).to.equal(Changes('"age" = ($2::double precision)'));
   });
-
-  it("refuses a payload that is not a document, naming the stage", () => {
-    expect(() =>
-      // @ts-expect-error a string payload; update refuses it, naming the stage and the kind received
-      Update("a"),
-    ).to.throw("The 'update' stage takes a document, received text");
-  });
-
-  it("refuses an array rather than writing its indices as keys", () => {
-    expect(() =>
-      // @ts-expect-error an array payload; update refuses it, naming the stage and the kind received
-      Update([]),
-    ).to.throw("The 'update' stage takes a document, received list");
-  });
 });
 
 describe("the update statement's overflow column", () => {

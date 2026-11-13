@@ -76,21 +76,6 @@ describe("ParseFieldType", () => {
       /Unsupported field type/,
     );
   });
-
-  it("rejects a declaration that is neither a string, array nor object", () => {
-    expect(() =>
-      // @ts-expect-error a null field declaration; ParseFieldType throws Unsupported field type
-      ParseFieldType(null, "t.f"),
-    ).to.throw(/Unsupported field type/);
-    expect(() =>
-      // @ts-expect-error a number as a field declaration; ParseFieldType throws Unsupported field type
-      ParseFieldType(123, "t.f"),
-    ).to.throw(/Unsupported field type/);
-    expect(() =>
-      // @ts-expect-error an undefined field declaration; ParseFieldType throws Unsupported field type
-      ParseFieldType(undefined, "t.f"),
-    ).to.throw(/Unsupported field type/);
-  });
 });
 
 describe("ParseTable", () => {

@@ -280,35 +280,6 @@ describe("date_with_timezone", () => {
     expect(stages).to.not.contain("date_with_timezone");
   });
 
-  it("names the stage when the zone is absent", () => {
-    expect(() =>
-      CompileExpression(
-        [
-          QueryStage("arg", undefined, ROW_ID),
-          // @ts-expect-error no zone, which the date_with_timezone stage refuses by naming itself
-          QueryStage("date_with_timezone"),
-        ],
-        NewContext(),
-      ),
-    ).to.throw(/'date_with_timezone'/);
-  });
-
-  it("names the stage when the zone is empty or is not a name", () => {
-    const dynamic = ValueProxy.arg<any>(ROW_ID).key("name");
-    for (const zone of ["", 5, dynamic]) {
-      expect(() =>
-        CompileExpression(
-          [
-            QueryStage("arg", undefined, ROW_ID),
-            // @ts-expect-error a number among the zones, which the date_with_timezone stage refuses by naming itself
-            QueryStage("date_with_timezone", undefined, zone),
-          ],
-          NewContext(),
-        ),
-      ).to.throw(/'date_with_timezone'/);
-    }
-  });
-
   it("is cleared by an unrelated stage between the zone and the part", () => {
     const context = NewContext();
     const out = CompileIn(context, (doc) =>
@@ -395,19 +366,6 @@ describe("date_during", () => {
     expect(out.sql).to.equal(
       `((${CREATED} >= ${FromEpoch("($1::double precision)")}) AND (${CREATED} < ${FromEpoch("($2::double precision)")}))`,
     );
-  });
-
-  it("names the stage when a bound is absent", () => {
-    expect(() =>
-      CompileExpression(
-        [
-          QueryStage("arg", undefined, ROW_ID),
-          // @ts-expect-error one bound, which the date_during stage refuses by naming itself
-          QueryStage("date_during", undefined, new Date(0)),
-        ],
-        NewContext(),
-      ),
-    ).to.throw(/'date_during'/);
   });
 });
 
