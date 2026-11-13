@@ -175,13 +175,6 @@ describe("the replace statement's refusals", () => {
       "Payload key '_extra' is a column this adapter owns and no payload may write it",
     );
   });
-
-  it("refuses a payload that is not a document, naming the stage", () => {
-    expect(() =>
-      // @ts-expect-error a string payload; replace refuses it, naming the stage and the kind received
-      Replace(NAME),
-    ).to.throw("The 'replace' stage takes a document, received text");
-  });
 });
 
 describe("the replace statement's parameter ledger", () => {

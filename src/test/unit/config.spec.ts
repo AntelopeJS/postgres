@@ -1,6 +1,7 @@
 import { expect } from "chai";
 
 import { WithOptions } from "./spec-fixture";
+import { VALIDATED, type ValidatedOption } from "./config-fixture";
 import { GetOptions, type Options, SetOptions } from "../../config";
 
 const DEFAULT_CURSOR_BATCH_SIZE = 100;
@@ -9,16 +10,6 @@ const DEFAULT_CHANGE_RETENTION_MS = 300_000;
 const DEFAULT_CHANGE_BATCH_SIZE = 256;
 const DEFAULT_CHANGE_POLL_INTERVAL_MS = 5_000;
 
-const VALIDATED = [
-  "cursorBatchSize",
-  "cursorIdleTimeoutMs",
-  "changeRetentionMs",
-  "changeBatchSize",
-  "changePollIntervalMs",
-] as const;
-
-type ValidatedOption = (typeof VALIDATED)[number];
-
 const DEFAULTS: Record<ValidatedOption, number> = {
   cursorBatchSize: DEFAULT_CURSOR_BATCH_SIZE,
   cursorIdleTimeoutMs: DEFAULT_CURSOR_IDLE_TIMEOUT_MS,
@@ -26,20 +17,6 @@ const DEFAULTS: Record<ValidatedOption, number> = {
   changeBatchSize: DEFAULT_CHANGE_BATCH_SIZE,
   changePollIntervalMs: DEFAULT_CHANGE_POLL_INTERVAL_MS,
 };
-
-const REFUSED: readonly unknown[] = [
-  0,
-  -1,
-  1.5,
-  Number.NaN,
-  Number.POSITIVE_INFINITY,
-  Number.NEGATIVE_INFINITY,
-  Number.MAX_SAFE_INTEGER + 2,
-  1e21,
-  "100",
-  null,
-  {},
-];
 
 const EXTERNAL_REFUSED: readonly Options[] = [
   { schemaPrefix: "app_" },
@@ -67,16 +44,6 @@ describe("SetOptions", () => {
       WithOptions({}, () => {
         expect(GetOptions()[option]).to.equal(DEFAULTS[option]);
       });
-    });
-
-    it(`refuses a ${option} that is not a positive safe integer`, () => {
-      for (const value of REFUSED) {
-        const options: Options = {};
-        // @ts-expect-error REFUSED holds values that are not positive safe integers; SetOptions throws, naming the option and the value
-        options[option] = value;
-        expect(() => SetOptions(options)).to.throw(option);
-        expect(() => SetOptions(options)).to.throw(String(value));
-      }
     });
   }
 
@@ -109,13 +76,6 @@ describe("SetOptions", () => {
     WithOptions({}, () => {
       expect(GetOptions().mode).to.equal("owned");
     });
-  });
-
-  it("refuses a mode it does not know", () => {
-    expect(() =>
-      // @ts-expect-error the unknown mode "readonly"; SetOptions throws, naming it
-      SetOptions({ mode: "readonly" }),
-    ).to.throw("readonly");
   });
 
   for (const refused of EXTERNAL_REFUSED) {

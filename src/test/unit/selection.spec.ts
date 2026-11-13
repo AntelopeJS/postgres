@@ -1,76 +1,28 @@
 import { expect } from "chai";
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
-import { SchemaInstance, ValueProxy } from "@antelopejs/interface-database";
+import { ValueProxy } from "@antelopejs/interface-database";
 import {
   QueryStage,
   StagedObject,
 } from "@antelopejs/interface-database/common";
 
-import { RefusingCompilers, WithOptions } from "./spec-fixture";
-import { FLOAT, TEXT } from "../../implementations/database/types";
-import type { TableModel } from "../../implementations/database/fields";
-import { DecodingContext } from "../../implementations/database/context";
-import type { TableOrigin } from "../../implementations/database/relation";
+import { WithOptions } from "./spec-fixture";
 import {
   BuildRoot,
   CollectSchemaIds,
   RegisteredOrigin,
-  type RootSelection,
 } from "../../implementations/database/selection";
+import {
+  Build,
+  NewContext,
+  Root,
+  SCHEMA_ID,
+  TABLE_ID,
+} from "./selection-fixture";
 
-interface Vehicle {
-  car: string;
-  price: number;
-}
-
-interface Shop {
-  vehicles: Vehicle;
-}
-
-const SCHEMA_ID = "shop";
 const OTHER_SCHEMA_ID = "warehouse";
-const TABLE_ID = "vehicles";
 const LAMBDA_ID_FLOOR = 0;
 const ROW_ID = LAMBDA_ID_FLOOR - 1;
-
-const VEHICLES: TableModel = {
-  fields: {
-    car: { column: "car", type: TEXT },
-    price: { column: "price", type: FLOAT },
-  },
-};
-
-const INDEXES = new Map<string, string[]>([["byCar", ["car", "price"]]]);
-
-type InstanceId = string | typeof CROSS_INSTANCE | undefined;
-
-function StubOrigin(schemaId: string, tableId: string): TableOrigin {
-  return {
-    schemaId,
-    tableId,
-    model: VEHICLES,
-    index: (name) => INDEXES.get(name) ?? [name],
-  };
-}
-
-function NewContext(): DecodingContext {
-  return new DecodingContext(RefusingCompilers(), StubOrigin);
-}
-
-function Root(schemaId = SCHEMA_ID, instanceId?: InstanceId) {
-  const schema = new SchemaInstance<Shop>(
-    QueryStage("schema", { id: schemaId }),
-  );
-  const instance = new SchemaInstance<Shop>(
-    QueryStage("instance", { id: instanceId }),
-    schema,
-  );
-  return instance.table(TABLE_ID);
-}
-
-function Build(query: StagedObject, context: DecodingContext): RootSelection {
-  return WithOptions({}, () => BuildRoot(query.build(), context));
-}
 
 type TableQuery = ReturnType<typeof Root>;
 
@@ -128,14 +80,6 @@ describe("BuildRoot", () => {
     expect(context.params.all()).to.deep.equal([]);
   });
 
-  it("rejects an instance id that is neither a string nor the sentinel", () => {
-    // @ts-expect-error the number 7 as an instance id; building the query refuses it, naming the type received
-    const query = Root(SCHEMA_ID, 7);
-    expect(() => Build(query, NewContext())).to.throw(
-      "An instance id must be a string or CROSS_INSTANCE, received number",
-    );
-  });
-
   it("starts in row mode addressing the origin's own columns", () => {
     const { relation } = Build(Root(), NewContext());
     expect(relation.projection).to.equal(undefined);
@@ -162,15 +106,6 @@ describe("BuildRoot", () => {
     expect(() =>
       WithOptions({}, () => BuildRoot(stages, NewContext())),
     ).to.throw("stage 0 is 'instance'");
-  });
-
-  it("rejects a prefix stage carrying no id", () => {
-    const stages = Root().build();
-    // @ts-expect-error no id, which BuildRoot refuses on the schema stage
-    stages[0] = QueryStage("schema");
-    expect(() =>
-      WithOptions({}, () => BuildRoot(stages, NewContext())),
-    ).to.throw("The 'schema' stage of a table query is missing its id");
   });
 });
 

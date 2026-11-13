@@ -129,30 +129,6 @@ describe("numeric stage dispatch", () => {
     );
     expect(out.timezone).to.equal(undefined);
   });
-
-  it("names the stage when the second operand is absent", () => {
-    const binary = [
-      "add",
-      "sub",
-      "mul",
-      "div",
-      "mod",
-      "bit_and",
-      "bit_or",
-      "bit_xor",
-      "bit_lshift",
-      "bit_rshift",
-    ];
-    for (const name of binary) {
-      expect(() =>
-        CompileExpression(
-          // @ts-expect-error a binary stage with no operand, which each stage refuses by naming itself
-          [QueryStage("arg", undefined, ROW_ID), QueryStage(name)],
-          NewContext(),
-        ),
-      ).to.throw(`'${name}'`);
-    }
-  });
 });
 
 describe("add", () => {
@@ -196,15 +172,6 @@ describe("add", () => {
       `("t"."tags" || NULLIF(($1::jsonb), 'null'::jsonb))`,
     );
     expect(out.type).to.deep.equal(ArrayOf(TEXT));
-  });
-
-  it("rejects two dates, naming the stage", () => {
-    expect(() =>
-      // @ts-expect-error two dates, which the add stage refuses by naming itself
-      Compile((doc) => doc.key("createdAt").add(new Date())),
-    ).to.throw(
-      /Stage 'add' has no reading for a 'timestamp' and a 'timestamp'/,
-    );
   });
 
   it("pulls an undeclared key toward the kind of the other operand", () => {

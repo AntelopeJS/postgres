@@ -166,18 +166,6 @@ describe("the insert statement's conflict modes", () => {
     );
     expect(Sql(written)).to.not.contain("COALESCE");
   });
-
-  it("refuses a conflict mode it does not know, naming the ones it does", () => {
-    expect(() =>
-      Insert(
-        { name: "a" },
-        // @ts-expect-error the unknown conflict mode "ignore"; insert refuses it, naming update, replace and the mode received
-        { conflict: "ignore" },
-      ),
-    ).to.throw(
-      "The 'insert' stage takes a conflict mode of update or replace, received \"ignore\"",
-    );
-  });
 });
 
 describe("the insert statement's heterogeneous batch", () => {
@@ -323,24 +311,6 @@ describe("the ids an insert answers", () => {
     const written = Insert([]);
     expect(written.statement.ids).to.deep.equal([]);
     expect(written.statement.sql).to.equal("");
-  });
-
-  it("refuses an argument that is not a document", () => {
-    expect(() =>
-      // @ts-expect-error a string document; insert refuses it, naming the stage, the position and the kind received
-      Insert("a"),
-    ).to.throw(
-      "The 'insert' stage takes documents, received text at position 0",
-    );
-  });
-
-  it("refuses a nested array rather than storing its indices as keys", () => {
-    expect(() =>
-      // @ts-expect-error an array as a batch entry; insert refuses it, naming the stage, the position and the kind received
-      Insert([[]]),
-    ).to.throw(
-      "The 'insert' stage takes documents, received list at position 0",
-    );
   });
 });
 

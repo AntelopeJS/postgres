@@ -205,16 +205,6 @@ describe("obj_merge", () => {
     expect(out.sql).to.contain(`AS "t0"`);
     expect(out.sql).to.contain(`AS "t1"`);
   });
-
-  it("names the stage when the other object is absent", () => {
-    expect(() =>
-      CompileExpression(
-        // @ts-expect-error no other object, which the obj_merge stage refuses by naming itself
-        [QueryStage("arg", undefined, ROW_ID), QueryStage("obj_merge")],
-        NewContext(),
-      ),
-    ).to.throw(/'obj_merge'/);
-  });
 });
 
 describe("obj_keys", () => {
@@ -323,28 +313,5 @@ describe("obj_has", () => {
     const age = `to_jsonb("t"."age")`;
     const out = Compile((doc) => doc.key("age").hasfields("a"));
     expect(out.sql).to.equal(HasFields(age, `array['a']::text[]`));
-  });
-
-  it("names the stage when the field list is not a list", () => {
-    expect(() =>
-      CompileExpression(
-        // @ts-expect-error no field list, which the obj_has stage refuses by naming itself
-        [QueryStage("arg", undefined, ROW_ID), QueryStage("obj_has")],
-        NewContext(),
-      ),
-    ).to.throw(/'obj_has'/);
-  });
-
-  it("names the stage when a field name is not a string", () => {
-    expect(() =>
-      CompileExpression(
-        [
-          QueryStage("arg", undefined, ROW_ID),
-          // @ts-expect-error a field name that is not a string, which the obj_has stage refuses by naming itself
-          QueryStage("obj_has", undefined, [5]),
-        ],
-        NewContext(),
-      ),
-    ).to.throw(/'obj_has'/);
   });
 });

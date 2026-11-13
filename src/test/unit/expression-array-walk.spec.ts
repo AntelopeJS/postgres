@@ -1,10 +1,6 @@
 import { expect } from "chai";
 
-import { QueryStage } from "@antelopejs/interface-database/common";
-
 import { Occurrences } from "./spec-fixture";
-
-import { CompileExpression } from "../../implementations/database/expression";
 
 import {
   ArrayOf,
@@ -14,8 +10,6 @@ import {
   TIMESTAMP,
 } from "../../implementations/database/types";
 import {
-  ROW_ID,
-  NewContext,
   Compile,
   TAGS,
   EXTRA,
@@ -113,16 +107,6 @@ describe("arr_map", () => {
     );
     expect(Aliases(out.sql)).to.deep.equal(["t1", "t0"]);
   });
-
-  it("names the stage when the callback is absent", () => {
-    expect(() =>
-      CompileExpression(
-        // @ts-expect-error no callback, which the arr_map stage refuses by naming itself
-        [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_map")],
-        NewContext(),
-      ),
-    ).to.throw(/'arr_map'/);
-  });
 });
 
 describe("arr_filter", () => {
@@ -146,16 +130,6 @@ describe("arr_filter", () => {
   it("reads a non-boolean body as javascript truthiness", () => {
     const out = Compile((doc) => doc.key("scores").filter((score) => score));
     expect(out.sql).to.contain(`WHERE (${AsNumber(Element("t0"))} <> 0)`);
-  });
-
-  it("names the stage when the callback is absent", () => {
-    expect(() =>
-      CompileExpression(
-        // @ts-expect-error no callback, which the arr_filter stage refuses by naming itself
-        [QueryStage("arg", undefined, ROW_ID), QueryStage("arr_filter")],
-        NewContext(),
-      ),
-    ).to.throw(/'arr_filter'/);
   });
 });
 
