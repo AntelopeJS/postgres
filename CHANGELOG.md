@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.4.0
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.3.0...v0.4.0)
+
+### 💅 Refactors
+
+- **result:** Read _extra through IsPlainObject instead of a cast ([#92](https://github.com/AntelopeJS/postgres/pull/92))
+
+### 📦 Build
+
+- **deps:** Adopt @antelopejs/interface-database 0.4.0 ([#94](https://github.com/AntelopeJS/postgres/pull/94))
+
+### ✅ Tests
+
+- **unit:** Drive the runtime refusals from plain-JS specs instead of @ts-expect-error ([#93](https://github.com/AntelopeJS/postgres/pull/93))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.3.0
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.8...v0.3.0)
