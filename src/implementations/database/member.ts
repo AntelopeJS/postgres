@@ -121,7 +121,6 @@ function IsConstantJson(value: unknown): value is ConstantJson {
  * never walked. The order is the order the kinds were always told apart in, which is what makes a
  * `ValueProxy` a proxy before it is an object.
  */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- value is any caller-supplied query argument or document member (a ValueProxy, a Date, a Buffer, a nested document, any JSON), and this function is the classifier that parses it into a Member kind; a named type would only relabel unknown
 export function ClassifyMember(value: unknown): Member {
   const document: DocumentView | undefined = IsDocument(value)
     ? {
