@@ -73,7 +73,7 @@ describe("what an external relation refuses", () => {
     const expected = stage === "atomicMutation" ? stage : "may not write to";
     it(`refuses ${stage} on a relation the connected role may not write, naming it, and writes nothing`, async () => {
       const message = await Refusal(async () => {
-        await write();
+        await write().run();
       });
       expect(message).to.contain(expected).and.to.contain('"sales"."accounts"');
     });
@@ -91,18 +91,18 @@ describe("what an external relation refuses", () => {
   it("refuses creating and destroying an instance", async () => {
     expect(
       await Refusal(async () => {
-        await sales.createInstance("t1");
+        await sales.createInstance("t1").run();
       }),
     ).to.contain("createInstance");
     expect(
       await Refusal(async () => {
-        await sales.destroyInstance("t1");
+        await sales.destroyInstance("t1").run();
       }),
     ).to.contain("destroyInstance");
   });
 
   it("lists no instances", async () => {
-    expect(await sales.listInstances()).to.deep.equal([]);
+    expect(await sales.listInstances().run()).to.deep.equal([]);
   });
 
   for (const { description, read } of [
@@ -121,14 +121,18 @@ describe("what an external relation refuses", () => {
   ]) {
     it(`refuses ${description} on a relation with no key, naming it`, async () => {
       const message = await Refusal(async () => {
-        await read();
+        await read().run();
       });
       expect(message).to.contain('"sales"."raw_log"').and.to.contain("no _id");
     });
   }
 
   it("still reads a keyless relation by a field", async () => {
-    const rows = await sales.instance().table("raw_log").getAll(["r1"], "msg");
+    const rows = await sales
+      .instance()
+      .table("raw_log")
+      .getAll(["r1"], "msg")
+      .run();
     expect(rows).to.have.length(1);
   });
 });

@@ -101,12 +101,14 @@ async function Compete(query: StagedObject, winner?: StagedObject) {
 
 describe("legacy conditional writes under contention", () => {
   beforeEach(async () => {
-    await table.delete();
-    await table.insert({
-      _id: ID,
-      revision: "old",
-      value: "initial",
-    });
+    await table.delete().run();
+    await table
+      .insert({
+        _id: ID,
+        revision: "old",
+        value: "initial",
+      })
+      .run();
   });
 
   it("reproduces two different patches matching one stale revision", async () => {
@@ -116,7 +118,7 @@ describe("legacy conditional writes under contention", () => {
         .update({ revision: "next", value: "writer-b" }),
     );
     expect(result).to.equal(1);
-    expect((await table.get(ID))?.value).to.equal("writer-b");
+    expect((await table.get(ID).run())?.value).to.equal("writer-b");
   });
 
   it("reproduces a stale conditional delete removing an updated row", async () => {
@@ -124,18 +126,20 @@ describe("legacy conditional writes under contention", () => {
       table.filter((row) => row.key("revision").eq("old")).delete(),
     );
     expect(result).to.equal(1);
-    expect(await table.get(ID)).to.equal(undefined);
+    expect(await table.get(ID).run()).to.equal(undefined);
   });
 });
 
 describe("atomic mutations under contention", () => {
   beforeEach(async () => {
-    await table.delete();
-    await table.insert({
-      _id: ID,
-      revision: "old",
-      value: "initial",
-    });
+    await table.delete().run();
+    await table
+      .insert({
+        _id: ID,
+        revision: "old",
+        value: "initial",
+      })
+      .run();
   });
 
   function Winner() {
@@ -157,7 +161,7 @@ describe("atomic mutations under contention", () => {
       patch: { value: "writer-b" },
     });
     expect(await Compete(second, Winner())).to.equal("not-applied");
-    const record = await table.get(ID);
+    const record = await table.get(ID).run();
     expect(record?.revision).to.equal("next-a");
     expect(record?.value).to.equal("writer-a");
   });
@@ -169,7 +173,7 @@ describe("atomic mutations under contention", () => {
       expectedRevision: "old",
     });
     expect(await Compete(second, Winner())).to.equal("not-applied");
-    expect((await table.get(ID))?.value).to.equal("writer-a");
+    expect((await table.get(ID).run())?.value).to.equal("writer-a");
   });
 
   it("rechecks scalar equality after a concurrent update", async () => {
@@ -179,13 +183,13 @@ describe("atomic mutations under contention", () => {
       expectedValue: "initial",
     });
     expect(await Compete(second, Winner())).to.equal("not-applied");
-    expect((await table.get(ID))?.value).to.equal("writer-a");
+    expect((await table.get(ID).run())?.value).to.equal("writer-a");
   });
 
   it("allows only one bootstrap of a missing overflow revision", async () => {
     const overflow = schema.instance("tenant").table("overflow");
-    await overflow.delete();
-    await overflow.insert({ _id: ID, value: "initial" });
+    await overflow.delete().run();
+    await overflow.insert({ _id: ID, value: "initial" }).run();
     const request = {
       type: "update",
       revisionField: "revision",
@@ -200,8 +204,8 @@ describe("atomic mutations under contention", () => {
       patch: { value: "writer-b" },
     });
     expect(await Compete(second, first)).to.equal("not-applied");
-    expect((await overflow.get(ID))?.revision).to.equal("next-a");
-    expect((await overflow.get(ID))?.value).to.equal("writer-a");
+    expect((await overflow.get(ID).run())?.revision).to.equal("next-a");
+    expect((await overflow.get(ID).run())?.value).to.equal("writer-a");
   });
 
   it("reports unknown when the committed response is lost without retrying", async () => {
@@ -218,6 +222,6 @@ describe("atomic mutations under contention", () => {
     );
     expect(outcome).to.equal("unknown");
     expect(calls).to.equal(1);
-    expect((await table.get(ID))?.revision).to.equal("next-a");
+    expect((await table.get(ID).run())?.revision).to.equal("next-a");
   });
 });

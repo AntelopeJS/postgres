@@ -180,13 +180,13 @@ async function ReleaseWrites(client: PoolClient): Promise<void> {
 
 async function Seed(schema: Schema<Tables>, rowsPerInstance: number) {
   for (const instance of INSTANCES) {
-    await schema.createInstance(instance);
+    await schema.createInstance(instance).run();
     const rows = Array.from({ length: rowsPerInstance }, (_, n) => ({
       _id: `${instance}-${n}`,
       sku: `sku-${n}`,
       price: n,
     }));
-    await schema.instance(instance).table("items").insert(rows);
+    await schema.instance(instance).table("items").insert(rows).run();
   }
 }
 
@@ -199,13 +199,14 @@ function Lookup(schema: Schema<Tables>, instance: InstanceId) {
 }
 
 async function ReadEverything(schema: Schema<Tables>): Promise<Reads> {
-  const scoped = await Lookup(schema, SCOPED_INSTANCE);
-  const crossInstance = await Lookup(schema, CROSS_INSTANCE);
+  const scoped = await Lookup(schema, SCOPED_INSTANCE).run();
+  const crossInstance = await Lookup(schema, CROSS_INSTANCE).run();
   const ordered = await schema
     .instance(CROSS_INSTANCE)
     .table("items")
     .orderBy("price")
-    .slice(0, INSTANCES.length);
+    .slice(0, INSTANCES.length)
+    .run();
   return {
     scoped: [...scoped].sort(ById),
     crossInstance: [...crossInstance].sort(ById),
@@ -405,9 +406,9 @@ describe("cross-instance reads of secondary indexes", () => {
       expect(scopedPlan).to.match(/items_sku\b/);
       expect(scopedPlan).to.not.contain("items_sku__g");
 
-      const crossInstance = await Lookup(schema, CROSS_INSTANCE);
+      const crossInstance = await Lookup(schema, CROSS_INSTANCE).run();
       const perInstance = await Promise.all(
-        INSTANCES.map((instance) => Lookup(schema, instance)),
+        INSTANCES.map((instance) => Lookup(schema, instance).run()),
       );
       expect([...crossInstance].sort(ById)).to.deep.equal(
         perInstance.flat().sort(ById),
@@ -424,12 +425,12 @@ describe("cross-instance reads of secondary indexes", () => {
     const scoped = schema.instance(SCOPED_INSTANCE).table("items");
 
     const warnings = await CaptureWarnings(async () => {
-      await crossInstance.getAll(1, "price");
-      await crossInstance.getAll(2, "price");
-      await crossInstance.orderBy("price");
-      await crossInstance.getAll(LOOKED_UP_SKU, "sku");
-      await crossInstance.getAll(LOOKED_UP_SKU, "undeclared");
-      await scoped.getAll(1, "price");
+      await crossInstance.getAll(1, "price").run();
+      await crossInstance.getAll(2, "price").run();
+      await crossInstance.orderBy("price").run();
+      await crossInstance.getAll(LOOKED_UP_SKU, "sku").run();
+      await crossInstance.getAll(LOOKED_UP_SKU, "undeclared").run();
+      await scoped.getAll(1, "price").run();
     });
 
     expect(warnings).to.have.lengthOf(1);

@@ -64,14 +64,15 @@ describe("an external key that its column cannot hold", () => {
     ["order_lines", '["x", "1"]'],
   ]) {
     it(`gets nothing for ${key} on ${table}, rather than failing the request`, async () => {
-      expect(await Table(table).get(key)).to.equal(undefined);
+      expect(await Table(table).get(key).run()).to.equal(undefined);
     });
   }
 
   it("filters nothing for an enum label the type does not have", async () => {
     const total = await Table("accounts")
       .filter((row) => row.key("status").eq("archived"))
-      .count();
+      .count()
+      .run();
     expect(total).to.equal(0);
   });
 });
@@ -117,7 +118,8 @@ describe("numbers read from an external relation's exact types", () => {
   it("sums a numeric column exactly", async () => {
     const total = await Table("accounts")
       .filter((row) => row.key("active").eq(true))
-      .sum("revenue");
+      .sum("revenue")
+      .run();
     const [expected] = await Native<{ total: number }>(
       "SELECT sum(revenue)::double precision AS total FROM sales.accounts WHERE active",
     );
@@ -136,7 +138,8 @@ describe("numbers read from an external relation's exact types", () => {
     it(`keeps the meaning of '${operator} 5.5' on an integer column`, async () => {
       const total = await Table("accounts")
         .filter((row) => row.key("score")[method](5.5))
-        .count();
+        .count()
+        .run();
       expect(total).to.equal(
         await NativeCount(
           `SELECT count(*) FROM sales.accounts WHERE score ${operator} 5.5`,
@@ -162,10 +165,12 @@ describe("inequality against an external column's own type", () => {
     it(`answers ${field} ne ${JSON.stringify(value)} as the complement of eq, keeping NULL rows`, async () => {
       const unequal = await Table("flags")
         .filter((row) => row.key(field).ne(value))
-        .count();
+        .count()
+        .run();
       const equal = await Table("flags")
         .filter((row) => row.key(field).eq(value))
-        .count();
+        .count()
+        .run();
       expect(unequal).to.equal(expected);
       expect(unequal + equal).to.equal(2);
     });

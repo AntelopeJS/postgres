@@ -105,7 +105,7 @@ function Table<K extends keyof Tables>(table: K) {
 }
 
 async function Ids(stream: Stream<Book>): Promise<string[]> {
-  return (await stream).map((book) => book._id);
+  return (await stream.run()).map((book) => book._id);
 }
 
 async function LookedUp(
@@ -114,7 +114,8 @@ async function LookedUp(
 ): Promise<(string | undefined)[]> {
   const reviews = await Table("reviews")
     .orderBy("_id")
-    .lookup(Table(table), "bookTitle", otherKey);
+    .lookup(Table(table), "bookTitle", otherKey)
+    .run();
   return reviews.map((review) => review.bookTitle?._id);
 }
 
@@ -150,7 +151,7 @@ async function PlanOverIndexes(stream: Stream<Book>): Promise<string> {
 
 async function InsertRejected(book: Book): Promise<DuplicateKeyError> {
   try {
-    await Table("booksIndexed").insert(book);
+    await Table("booksIndexed").insert(book).run();
   } catch (error) {
     if (IsDuplicateKeyError(error)) {
       return error;
@@ -160,24 +161,27 @@ async function InsertRejected(book: Book): Promise<DuplicateKeyError> {
   return expect.fail(`the insert of ${book._id} was not refused`);
 }
 
+/** Recreates the schema and seeds every table the suite reads. */
+async function SeedTables(): Promise<void> {
+  await Query(
+    `DROP SCHEMA IF EXISTS ${QuoteIdentifier(SchemaName(SCHEMA_ID))} CASCADE`,
+  );
+  schema = new Schema<Tables>(SCHEMA_ID, DEFINITION);
+  await WaitForIndexes(SCHEMA_ID);
+  await schema.createInstance(INSTANCE).run();
+  await Table("books").insert(BOOKS).run();
+  await Table("booksIndexed").insert(BOOKS).run();
+  await Table("events").insert(EVENTS).run();
+  await Table("reviews")
+    .insert(REVIEWED.map((bookTitle, n) => ({ _id: `review-${n}`, bookTitle })))
+    .run();
+}
+
 describe("dotted names read nested paths", () => {
-  before(async () => {
-    await Query(
-      `DROP SCHEMA IF EXISTS ${QuoteIdentifier(SchemaName(SCHEMA_ID))} CASCADE`,
-    );
-    schema = new Schema<Tables>(SCHEMA_ID, DEFINITION);
-    await WaitForIndexes(SCHEMA_ID);
-    await schema.createInstance(INSTANCE);
-    await Table("books").insert(BOOKS);
-    await Table("booksIndexed").insert(BOOKS);
-    await Table("events").insert(EVENTS);
-    await Table("reviews").insert(
-      REVIEWED.map((bookTitle, n) => ({ _id: `review-${n}`, bookTitle })),
-    );
-  });
+  before(SeedTables);
 
   after(async () => {
-    await schema.destroyInstance(INSTANCE);
+    await schema.destroyInstance(INSTANCE).run();
   });
 
   it("orderBy sorts by a path below a declared field", async () => {
@@ -247,7 +251,7 @@ describe("dotted names read nested paths", () => {
   });
 
   it("an index over a date below a declared field builds, refuses a duplicate, and the sort reads dates", async () => {
-    const sorted = await Table("events").orderBy("meta.at");
+    const sorted = await Table("events").orderBy("meta.at").run();
     expect(sorted.map((event) => event._id)).to.deep.equal([
       "event-1",
       "event-2",
@@ -255,7 +259,9 @@ describe("dotted names read nested paths", () => {
     ]);
     let refused: unknown;
     try {
-      await Table("events").insert({ ...EVENTS[0], _id: "event-copy" });
+      await Table("events")
+        .insert({ ...EVENTS[0], _id: "event-copy" })
+        .run();
     } catch (error) {
       refused = error;
     }
@@ -267,9 +273,12 @@ describe("dotted names read nested paths", () => {
       _id,
       meta: { at: null },
     }));
-    await Table("events").insert(unset);
+    await Table("events").insert(unset).run();
     expect(
-      await Table("events").getAll(["event-null-0", "event-null-1"]).count(),
+      await Table("events")
+        .getAll(["event-null-0", "event-null-1"])
+        .count()
+        .run(),
     ).to.equal(2);
   });
 

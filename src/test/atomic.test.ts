@@ -35,23 +35,25 @@ const update: AtomicUpdate<Document> = {
 };
 
 async function Seed(document: Partial<Document> = {}) {
-  await table.insert({ _id: ID, value: "before", ...document });
+  await table.insert({ _id: ID, value: "before", ...document }).run();
 }
 
 describe("atomic mutation results and scope", () => {
   beforeEach(async () => {
-    await table.delete();
+    await table.delete().run();
   });
 
   it("persists inserted overflow revisions and replaces nested fields as a whole", async () => {
     await Seed({ revision: "old", details: { removed: true } });
-    expect((await table.get(ID))?.revision).to.equal("old");
-    expect(await table.atomicMutation(ID, update)).to.equal("applied");
-    expect(await table.get(ID)).to.include({
+    expect((await table.get(ID).run())?.revision).to.equal("old");
+    expect(await table.atomicMutation(ID, update).run()).to.equal("applied");
+    expect(await table.get(ID).run()).to.include({
       revision: "fresh",
       value: "after",
     });
-    const rows = await table.filter((row) => row.key("revision").eq("fresh"));
+    const rows = await table
+      .filter((row) => row.key("revision").eq("fresh"))
+      .run();
     expect(rows).to.have.length(1);
     expect(rows[0].revision).to.equal("fresh");
     expect(rows[0].details).to.deep.equal({ kept: true });
@@ -62,12 +64,16 @@ describe("atomic mutation results and scope", () => {
       ...update,
       expectedRevision: { kind: "missing" } as const,
     };
-    expect(await table.atomicMutation(ID, request)).to.equal("not-applied");
+    expect(await table.atomicMutation(ID, request).run()).to.equal(
+      "not-applied",
+    );
     await Seed({ revision: null });
-    expect(await table.atomicMutation(ID, request)).to.equal("not-applied");
-    await table.get(ID).update({ revision: undefined });
-    expect(await table.atomicMutation(ID, request)).to.equal("applied");
-    expect((await table.get(ID))?.revision).to.equal("fresh");
+    expect(await table.atomicMutation(ID, request).run()).to.equal(
+      "not-applied",
+    );
+    await table.get(ID).update({ revision: undefined }).run();
+    expect(await table.atomicMutation(ID, request).run()).to.equal("applied");
+    expect((await table.get(ID).run())?.revision).to.equal("fresh");
   });
 
   it("rejects missing-revision bootstrap on declared columns", async () => {
@@ -78,7 +84,8 @@ describe("atomic mutation results and scope", () => {
         .atomicMutation(ID, {
           ...update,
           expectedRevision: { kind: "missing" },
-        });
+        })
+        .run();
       expect.fail("expected unsupported bootstrap");
     } catch (error) {
       expect(String(error)).to.include(
@@ -89,9 +96,9 @@ describe("atomic mutation results and scope", () => {
 
   it("supports the default instance and refuses cross-instance mutation", async () => {
     const defaults = schema.instance().table("records");
-    await defaults.delete();
-    await defaults.insert({ _id: ID, revision: "old" });
-    expect(await defaults.atomicMutation(ID, update)).to.equal("applied");
+    await defaults.delete().run();
+    await defaults.insert({ _id: ID, revision: "old" }).run();
+    expect(await defaults.atomicMutation(ID, update).run()).to.equal("applied");
     expect(() =>
       schema
         .instance(CROSS_INSTANCE)
@@ -103,59 +110,71 @@ describe("atomic mutation results and scope", () => {
 
 describe("atomic scalar equality deletes", () => {
   beforeEach(async () => {
-    await table.delete();
+    await table.delete().run();
   });
 
   it("compares declared dates by instant and leaves a changed date untouched", async () => {
     const declared = schema.instance().table("declared");
-    await declared.delete();
+    await declared.delete().run();
     const updatedAt = new Date("2026-01-05T10:00:00+02:00");
-    await declared.insert({ _id: ID, updatedAt });
+    await declared.insert({ _id: ID, updatedAt }).run();
     expect(
-      await declared.atomicMutation(ID, {
-        type: "deleteIfEqual",
-        field: "updatedAt",
-        expectedValue: new Date("2026-01-05T08:00:01Z"),
-      }),
+      await declared
+        .atomicMutation(ID, {
+          type: "deleteIfEqual",
+          field: "updatedAt",
+          expectedValue: new Date("2026-01-05T08:00:01Z"),
+        })
+        .run(),
     ).to.equal("not-applied");
     expect(
-      await declared.atomicMutation(ID, {
-        type: "deleteIfEqual",
-        field: "updatedAt",
-        expectedValue: new Date("2026-01-05T08:00:00Z"),
-      }),
+      await declared
+        .atomicMutation(ID, {
+          type: "deleteIfEqual",
+          field: "updatedAt",
+          expectedValue: new Date("2026-01-05T08:00:00Z"),
+        })
+        .run(),
     ).to.equal("applied");
   });
 
   it("preserves scalar types in overflow equality and ignores missing fields", async () => {
     await Seed({ attempts: 7, active: true });
     expect(
-      await table.atomicMutation(ID, {
-        type: "deleteIfEqual",
-        field: "updatedAt",
-        expectedValue: new Date(),
-      }),
+      await table
+        .atomicMutation(ID, {
+          type: "deleteIfEqual",
+          field: "updatedAt",
+          expectedValue: new Date(),
+        })
+        .run(),
     ).to.equal("not-applied");
     expect(
-      await table.atomicMutation(ID, {
-        type: "deleteIfEqual",
-        field: "attempts",
-        expectedValue: "7",
-      }),
+      await table
+        .atomicMutation(ID, {
+          type: "deleteIfEqual",
+          field: "attempts",
+          expectedValue: "7",
+        })
+        .run(),
     ).to.equal("not-applied");
     expect(
-      await table.atomicMutation(ID, {
-        type: "deleteIfEqual",
-        field: "active",
-        expectedValue: false,
-      }),
+      await table
+        .atomicMutation(ID, {
+          type: "deleteIfEqual",
+          field: "active",
+          expectedValue: false,
+        })
+        .run(),
     ).to.equal("not-applied");
     expect(
-      await table.atomicMutation(ID, {
-        type: "deleteIfEqual",
-        field: "attempts",
-        expectedValue: 7,
-      }),
+      await table
+        .atomicMutation(ID, {
+          type: "deleteIfEqual",
+          field: "attempts",
+          expectedValue: 7,
+        })
+        .run(),
     ).to.equal("applied");
   });
 
@@ -163,11 +182,13 @@ describe("atomic scalar equality deletes", () => {
     const updatedAt = new Date("2026-02-12T03:04:05Z");
     await Seed({ updatedAt });
     expect(
-      await table.atomicMutation(ID, {
-        type: "deleteIfEqual",
-        field: "updatedAt",
-        expectedValue: updatedAt,
-      }),
+      await table
+        .atomicMutation(ID, {
+          type: "deleteIfEqual",
+          field: "updatedAt",
+          expectedValue: updatedAt,
+        })
+        .run(),
     ).to.equal("applied");
   });
 });

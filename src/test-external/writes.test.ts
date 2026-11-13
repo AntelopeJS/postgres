@@ -86,9 +86,9 @@ describe("inserting into an external relation", () => {
 
   it("answers the database's generated keys in input order, each reading back its own row", async () => {
     const labels = Array.from({ length: 1000 }, (_, n) => `label-${999 - n}`);
-    const ids = await Table("w_serial").insert(
-      labels.map((label) => ({ label })),
-    );
+    const ids = await Table("w_serial")
+      .insert(labels.map((label) => ({ label })))
+      .run();
     expect(ids).to.have.length(1000);
     const rows = await Native<{ id: string; label: string }>(
       "SELECT id::text AS id, label FROM sales.w_serial",
@@ -98,8 +98,8 @@ describe("inserting into an external relation", () => {
   });
 
   it("fills an omitted column with its DEFAULT and answers an identity key as _id", async () => {
-    const [id] = await Table("w_accounts").insert({ code: "d1" });
-    const row = await Table("w_accounts").get(id);
+    const [id] = await Table("w_accounts").insert({ code: "d1" }).run();
+    const row = await Table("w_accounts").get(id).run();
     expect(row).to.include({
       _id: id,
       id,
@@ -111,22 +111,28 @@ describe("inserting into an external relation", () => {
   });
 
   it("answers a key the database generates by default, and a list then shows the row under it", async () => {
-    const [account] = await Table("w_accounts").insert({
-      code: "d2",
-    });
-    const [sku] = await Table("w_items").insert({
-      account_id: account,
-      qty: 3,
-    });
+    const [account] = await Table("w_accounts")
+      .insert({
+        code: "d2",
+      })
+      .run();
+    const [sku] = await Table("w_items")
+      .insert({
+        account_id: account,
+        qty: 3,
+      })
+      .run();
     expect(sku).to.match(/^[0-9a-f-]{36}$/);
-    const listed = await Table("w_items").filter((row) =>
-      row.key("account_id").eq(account),
-    );
+    const listed = await Table("w_items")
+      .filter((row) => row.key("account_id").eq(account))
+      .run();
     expect(listed.map((row) => row._id)).to.deep.equal([sku]);
   });
 
   it("writes a supplied composite _id into its key columns", async () => {
-    const ids = await Table("w_lines").insert({ _id: '["7", "2"]', qty: 1 });
+    const ids = await Table("w_lines")
+      .insert({ _id: '["7", "2"]', qty: 1 })
+      .run();
     expect(ids).to.deep.equal(['["7", "2"]']);
     expect(
       await NativeCount(
@@ -137,11 +143,13 @@ describe("inserting into an external relation", () => {
 
   it("refuses an _id and a key field that disagree, writing nothing", async () => {
     const failure = await Failure(async () => {
-      await Table("w_lines").insert({
-        _id: '["8", "1"]',
-        order_id: 9,
-        line_no: 1,
-      });
+      await Table("w_lines")
+        .insert({
+          _id: '["8", "1"]',
+          order_id: 9,
+          line_no: 1,
+        })
+        .run();
     });
     expect(failure.message).to.contain("order_id");
     expect(
@@ -164,7 +172,7 @@ describe("inserting into an external relation", () => {
   ] satisfies [string, Row, string][]) {
     it(`refuses ${description}, writing nothing`, async () => {
       const failure = await Failure(async () => {
-        await Table("w_accounts").insert(document);
+        await Table("w_accounts").insert(document).run();
       });
       expect(failure.message).to.contain(named);
       expect(
@@ -177,20 +185,18 @@ describe("inserting into an external relation", () => {
   }
 
   it("upserts on the key: update keeps an unmentioned column, replace clears it", async () => {
-    await Table("w_lines").insert({ _id: '["20", "1"]', qty: 5 });
-    await Table("w_lines").insert(
-      { _id: '["20", "1"]' },
-      { conflict: "update" },
-    );
+    await Table("w_lines").insert({ _id: '["20", "1"]', qty: 5 }).run();
+    await Table("w_lines")
+      .insert({ _id: '["20", "1"]' }, { conflict: "update" })
+      .run();
     expect(
       await NativeCount(
         "SELECT qty AS count FROM sales.w_lines WHERE order_id = 20",
       ),
     ).to.equal(5);
-    await Table("w_lines").insert(
-      { order_id: 20, line_no: 1 },
-      { conflict: "replace" },
-    );
+    await Table("w_lines")
+      .insert({ order_id: 20, line_no: 1 }, { conflict: "replace" })
+      .run();
     const [row] = await Native<{ qty: number | null }>(
       "SELECT qty FROM sales.w_lines WHERE order_id = 20",
     );
@@ -216,7 +222,7 @@ describe("values an external column cannot hold", () => {
   for (const [table, document, field] of INVALID_VALUES) {
     it(`refuses ${JSON.stringify(document[field])} for ${table}.${field} before writing, naming the field`, async () => {
       const failure = await WriteFailure(async () => {
-        await Table(table).insert(document);
+        await Table(table).insert(document).run();
       });
       expect(failure.kind).to.equal("invalid");
       expect(failure.message).to.contain(`sales.${table}.${field}`);
@@ -236,19 +242,20 @@ describe("writing back what was read from an external relation", () => {
   it("changes no byte of what a lossy read cannot spell, and counts no changed row", async () => {
     const id = await Seeded("r1");
     const before = await Stored(id);
-    const stored = await Table("w_accounts").get(id);
-    expect(await Table("w_accounts").get(id).update(stored)).to.equal(0);
+    const stored = await Table("w_accounts").get(id).run();
+    expect(await Table("w_accounts").get(id).update(stored).run()).to.equal(0);
     expect(await Stored(id)).to.deep.equal(before);
   });
 
   it("writes the one field an edit changed and keeps every other stored value", async () => {
     const id = await Seeded("r2");
     const before = await Stored(id);
-    const stored = await Table("w_accounts").get(id);
+    const stored = await Table("w_accounts").get(id).run();
     expect(
       await Table("w_accounts")
         .get(id)
-        .update({ ...stored, code: "r2b" }),
+        .update({ ...stored, code: "r2b" })
+        .run(),
     ).to.equal(1);
     expect(await Stored(id)).to.deep.equal({
       ...before,
@@ -261,10 +268,13 @@ describe("writing back what was read from an external relation", () => {
     const id = await Seeded("r3");
     const other = await Seeded("r4");
     expect(
-      await Table("w_accounts").get(id).update({ _id: other, code: "zz" }),
+      await Table("w_accounts")
+        .get(id)
+        .update({ _id: other, code: "zz" })
+        .run(),
     ).to.equal(0);
     expect(
-      await Table("w_accounts").get(id).update({ id: other, code: "zz" }),
+      await Table("w_accounts").get(id).update({ id: other, code: "zz" }).run(),
     ).to.equal(0);
     expect((await Stored(id)).code).to.equal("r3");
   });
@@ -274,9 +284,9 @@ describe("writing back what was read from an external relation", () => {
     await Native("UPDATE sales.w_accounts SET email = 'a@b.c' WHERE id = $1", [
       id,
     ]);
-    expect(await Table("w_accounts").get(id).replace({ code: "r5b" })).to.equal(
-      1,
-    );
+    expect(
+      await Table("w_accounts").get(id).replace({ code: "r5b" }).run(),
+    ).to.equal(1);
     const [row] = await Native<Row>(
       "SELECT email, code, upper_code, status::text AS status FROM sales.w_accounts WHERE id = $1",
       [id],
@@ -312,12 +322,13 @@ describe("editing through a key field read lossily, as data-api's edit sends it"
   ]) {
     it(`edits ${table}, whose key field is not read as the key's text, and answers 1`, async () => {
       await Native(seed);
-      const stored = await Table(table).get(id);
+      const stored = await Table(table).get(id).run();
       expect(stored._id).to.equal(id);
       expect(
         await Table(table)
           .get(id)
-          .update({ ...stored, [field]: "b" }),
+          .update({ ...stored, [field]: "b" })
+          .run(),
       ).to.equal(1);
       expect(
         await NativeCount(
@@ -335,15 +346,18 @@ describe("selecting the rows an external write changes", () => {
   });
 
   it("updates rows selected by composite _id", async () => {
-    await Table("w_lines").insert([
-      { _id: '["30", "1"]', qty: 1 },
-      { _id: '["30", "2"]', qty: 1 },
-      { _id: '["30", "3"]', qty: 1 },
-    ]);
+    await Table("w_lines")
+      .insert([
+        { _id: '["30", "1"]', qty: 1 },
+        { _id: '["30", "2"]', qty: 1 },
+        { _id: '["30", "3"]', qty: 1 },
+      ])
+      .run();
     expect(
       await Table("w_lines")
         .getAll(['["30", "1"]', '["30", "3"]'])
-        .update({ qty: 9 }),
+        .update({ qty: 9 })
+        .run(),
     ).to.equal(2);
     expect(
       await NativeCount(
@@ -355,11 +369,12 @@ describe("selecting the rows an external write changes", () => {
   it("deletes by _id and by filter, answering the count", async () => {
     const id = await Seeded("r6");
     await Seeded("r7");
-    expect(await Table("w_accounts").get(id).delete()).to.equal(1);
+    expect(await Table("w_accounts").get(id).delete().run()).to.equal(1);
     expect(
       await Table("w_accounts")
         .filter((row) => row.key("code").eq("r7"))
-        .delete(),
+        .delete()
+        .run(),
     ).to.equal(1);
     expect(
       await NativeCount(
@@ -405,20 +420,23 @@ describe("selecting the rows an external write changes", () => {
     const failure = await Failure(async () => {
       await Table("raw_log")
         .filter((row) => row.key("msg").eq("r1"))
-        .delete();
+        .delete()
+        .run();
     });
     expect(failure.message).to.contain('"sales"."raw_log"');
   });
 
   it("still refuses atomicMutation, naming the stage", async () => {
     const failure = await Failure(async () => {
-      await Table("w_accounts").atomicMutation("1", {
-        type: "update",
-        revisionField: "code",
-        expectedRevision: "a",
-        nextRevision: "b",
-        patch: {},
-      });
+      await Table("w_accounts")
+        .atomicMutation("1", {
+          type: "update",
+          revisionField: "code",
+          expectedRevision: "a",
+          nextRevision: "b",
+          patch: {},
+        })
+        .run();
     });
     expect(failure.message).to.contain("atomicMutation");
   });
@@ -431,9 +449,9 @@ describe("what the database refuses on a write to an external relation", () => {
   });
 
   it("reports a duplicate value of a unique constraint", async () => {
-    await Table("w_accounts").insert({ code: "e1" });
+    await Table("w_accounts").insert({ code: "e1" }).run();
     const failure = await WriteFailure(async () => {
-      await Table("w_accounts").insert({ code: "e1" });
+      await Table("w_accounts").insert({ code: "e1" }).run();
     });
     expect(failure.kind).to.equal("duplicate");
     expect(failure.constraint).to.equal("w_accounts_code_key");
@@ -442,7 +460,7 @@ describe("what the database refuses on a write to an external relation", () => {
 
   it("reports a missing required field, naming it", async () => {
     const failure = await WriteFailure(async () => {
-      await Table("w_items").insert({ qty: null });
+      await Table("w_items").insert({ qty: null }).run();
     });
     expect(failure.kind).to.equal("missing");
     expect(failure.fields).to.deep.equal(["qty"]);
@@ -450,25 +468,27 @@ describe("what the database refuses on a write to an external relation", () => {
 
   it("reports a reference to a row that does not exist", async () => {
     const failure = await WriteFailure(async () => {
-      await Table("w_items").insert({ account_id: "999999", qty: 1 });
+      await Table("w_items").insert({ account_id: "999999", qty: 1 }).run();
     });
     expect(failure.kind).to.equal("reference");
   });
 
   it("reports deleting a row that is still referenced", async () => {
-    const [account] = await Table("w_accounts").insert({
-      code: "e2",
-    });
-    await Table("w_items").insert({ account_id: account, qty: 1 });
+    const [account] = await Table("w_accounts")
+      .insert({
+        code: "e2",
+      })
+      .run();
+    await Table("w_items").insert({ account_id: account, qty: 1 }).run();
     const failure = await WriteFailure(async () => {
-      await Table("w_accounts").get(account).delete();
+      await Table("w_accounts").get(account).delete().run();
     });
     expect(failure.kind).to.equal("referenced");
   });
 
   it("reports a broken check constraint", async () => {
     const failure = await WriteFailure(async () => {
-      await Table("w_accounts").insert({ code: "e3", revenue: -1 });
+      await Table("w_accounts").insert({ code: "e3", revenue: -1 }).run();
     });
     expect(failure.kind).to.equal("check");
     expect(failure.constraint).to.equal("w_accounts_revenue_check");
