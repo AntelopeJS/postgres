@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.3.0
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.8...v0.3.0)
+
+### 🩹 Fixes
+
+- **reads:** Read dotted names as nested paths in orderBy, lookup and indexes ([#91](https://github.com/AntelopeJS/postgres/pull/91))
+
+### 📖 Documentation
+
+- **readme:** Adopt the AntelopeJS framework README style ([#89](https://github.com/AntelopeJS/postgres/pull/89))
+- **agents:** State the interface-database range package.json declares ([#90](https://github.com/AntelopeJS/postgres/pull/90))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.2.8
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.2.7...v0.2.8)
