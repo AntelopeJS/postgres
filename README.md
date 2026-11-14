@@ -51,7 +51,7 @@ export default defineConfig({
       source: {
         type: "package",
         package: "@antelopejs/postgres",
-        version: "^0.2.0",
+        version: ">=0.4.0 <0.5.0",
       },
       config: {
         url: "postgres://postgres@localhost:5432/my-project",
@@ -118,7 +118,7 @@ This repository documents what is specific to the PostgreSQL backend:
 
 | Package                                  | Supported        | Tested with |
 | ---------------------------------------- | ---------------- | ----------- |
-| `@antelopejs/interface-core`             | `>=0.1.1 <1.0.0` | `0.4.0`     |
+| `@antelopejs/interface-core`             | `>=0.5.0 <0.6.0` | `0.5.1`     |
 | `@antelopejs/interface-database`         | `>=0.4.0 <0.5.0` | `0.4.0`     |
 | `@antelopejs/interface-database-catalog` | `>=0.0.3 <0.1.0` | `0.0.3`     |
 
