@@ -82,14 +82,20 @@ const FORGOTTEN: EndReason = "forgotten";
 interface OpenCursor {
   readonly client: CursorClient;
   readonly decode: RowDecoder;
-  isDrained: boolean;
   timer?: NodeJS.Timeout;
+}
+
+/** The decoded rows of one `FETCH`, and whether it was the cursor's last. */
+interface FetchedBatch {
+  readonly rows: unknown[];
+  readonly isLast: boolean;
 }
 
 interface CursorState {
   chain: Promise<unknown>;
   cursor?: OpenCursor;
   isOpening: boolean;
+  isClosing: boolean;
   idleTimeoutMs: number;
   reason?: EndReason;
 }
@@ -222,6 +228,7 @@ function Registered(reqId: number): CursorState {
   const state: CursorState = {
     chain: Promise.resolve(),
     isOpening: false,
+    isClosing: false,
     idleTimeoutMs: UNARMED,
   };
   cursors.set(reqId, state);
@@ -264,7 +271,6 @@ async function Declare(request: CursorRequest): Promise<OpenCursor> {
   return {
     client,
     decode: request.decode,
-    isDrained: false,
   };
 }
 
@@ -324,14 +330,20 @@ function ArmReaper(
   state.idleTimeoutMs = idleTimeoutMs;
 }
 
-/** One round trip; a batch shorter than the count asked for is the end of the cursor. */
+/**
+ * One round trip; a batch shorter than the count asked for is the end of the cursor, and so is a
+ * batch that decodes to nothing, which only a relation yielding at most one row can produce.
+ */
 async function FetchBatch(
   cursor: OpenCursor,
   batchSize: number,
-): Promise<unknown[]> {
+): Promise<FetchedBatch> {
   const fetched = await cursor.client.query(FetchStatement(batchSize));
-  cursor.isDrained = fetched.rows.length < batchSize;
-  return cursor.decode(fetched.rows);
+  const rows = cursor.decode(fetched.rows);
+  return {
+    rows,
+    isLast: fetched.rows.length < batchSize || rows.length === EMPTY,
+  };
 }
 
 async function Fetched(
@@ -339,7 +351,7 @@ async function Fetched(
   state: CursorState,
   cursor: OpenCursor,
   batchSize: number,
-): Promise<unknown[]> {
+): Promise<FetchedBatch> {
   try {
     return await FetchBatch(cursor, batchSize);
   } catch (err) {
@@ -391,17 +403,18 @@ async function Advance(
   if (state.reason) {
     return ENDED_ANSWERS[state.reason](reqId, state);
   }
+  if (state.isClosing) {
+    return Done();
+  }
   const cursor = await Established(reqId, state, open);
   ClearReaper(cursor);
-  const batch = cursor.isDrained
-    ? Done()
-    : await Fetched(reqId, state, cursor, options.cursorBatchSize);
-  if (batch.length === EMPTY) {
+  const batch = await Fetched(reqId, state, cursor, options.cursorBatchSize);
+  if (batch.isLast) {
     await Teardown(reqId, state, EXHAUSTED);
-    return batch;
+  } else {
+    ArmReaper(reqId, state, cursor, options.cursorIdleTimeoutMs);
   }
-  ArmReaper(reqId, state, cursor, options.cursorIdleTimeoutMs);
-  return batch;
+  return state.isClosing ? Done() : batch.rows;
 }
 
 /**
@@ -424,10 +437,15 @@ async function Advance(
  * `EndReason` carries which answer and why, and the two that throw are the reclaimed cursor and the
  * forgotten one.
  *
- * A batch shorter than the configured count means the cursor is exhausted, so it is handed over
- * without a further round trip and the read after it tears the cursor down and answers the empty
- * batch. Nothing asks for that: the contract's own suite iterates to completion and never closes,
- * so self-reclaim is the only thing between this adapter and one leaked pool client per iteration.
+ * A batch shorter than the configured count means the cursor is exhausted, so the read that hands
+ * it over also tears the cursor down, and every read after it answers the empty batch. Releasing
+ * there rather than one read later leaves no idle cursor for the reaper to reclaim, so a consumer
+ * that took its time over the last batch is not refused the empty one. Nothing asks for that
+ * release: the contract's own suite iterates to completion and never closes, so self-reclaim is the
+ * only thing between this adapter and one leaked pool client per iteration.
+ *
+ * The idle timeout runs from the read that hands a batch over to the next read, so a consumer has
+ * `cursorIdleTimeoutMs` to work through `cursorBatchSize` rows before the cursor is reclaimed.
  *
  * The options are read here, synchronously, rather than inside the machinery, so that a spec can
  * drive a cursor through a temporary configuration without the set outliving the call.
@@ -453,6 +471,9 @@ export function ReadCursorBatch(
  * this the sweep's one primitive: a teardown another path already started is itself on the chain, so
  * a close behind it resolves only once that teardown has released.
  *
+ * The close marks the state before it waits, so a read in flight answers the empty batch rather
+ * than rows the consumer has already let go of, and a read that has not started yet opens nothing.
+ *
  * **A close for a `reqId` that never opened registers it and ends it, rather than doing nothing.**
  * Nothing orders a close against a first read — `IterableCursor.return()` on a cursor that was
  * built and never iterated arrives here first — and a `reqId` left unregistered still looks new to
@@ -463,6 +484,7 @@ export function ReadCursorBatch(
  */
 export function CloseOneCursor(reqId: number): Promise<void> {
   const state = Registered(reqId);
+  state.isClosing = true;
   const closed = state.chain.then(() => Teardown(reqId, state, CLOSED));
   state.chain = closed.then(Ignore, Ignore);
   return closed;

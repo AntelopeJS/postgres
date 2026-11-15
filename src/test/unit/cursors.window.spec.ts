@@ -58,8 +58,8 @@ describe("the cursor registry", () => {
   it("refuses a reqId whose reaping it has forgotten, rather than re-serving its rows", async () => {
     const log = Recorder();
     const reqId = NextReqId();
-    const open = Reopening(log, 1, 2);
-    expect(await Read(reqId, open, REAPING)).to.deep.equal([1, 2]);
+    const open = Reopening(log, 1, 2, 3);
+    expect(await Read(reqId, open, REAPING)).to.deep.equal([1, 2, 3]);
     await Delay(REAP_WINDOW_MS);
     expect(log.releases).to.equal(1);
     await OverflowEndings();
@@ -89,14 +89,14 @@ describe("the cursor registry", () => {
     const ended = Recorder();
     const liveId = NextReqId();
     const endedId = NextReqId();
-    const openLive = Requesting(live, [Rows(1, 2, 3), Rows(4)]);
+    const openLive = Requesting(live, [Rows(1, 2, 3), Rows(4, 5, 6)]);
     expect(await Read(liveId, openLive)).to.deep.equal([1, 2, 3]);
     expect(CountOpenCursors()).to.equal(baseline + 1);
     expect(await Drain(endedId, Reopening(ended, 5, 6))).to.deep.equal([
       [5, 6],
     ]);
     await OverflowEndings();
-    expect(await Read(liveId, openLive)).to.deep.equal([4]);
+    expect(await Read(liveId, openLive)).to.deep.equal([4, 5, 6]);
     expect(CountOpenCursors()).to.equal(baseline + 1);
     expect(live.acquires).to.equal(1);
     expect(Count(live, BEGIN)).to.equal(1);

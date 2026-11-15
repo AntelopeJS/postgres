@@ -39,5 +39,6 @@ The module uses the `pg` driver and leaves pooling to `pg.Pool`:
 - `migrations` controls how far registration may go. See [Schema convergence](./storage.md#schema-convergence).
 - `schemaPrefix` is for several applications that share one database.
 - `cursorBatchSize` and `cursorIdleTimeoutMs` are refused unless they are positive safe integers. Every other numeric option is taken as given. `FETCH` does not accept a bound parameter for its count, so `cursorBatchSize` is the one configured value that reaches SQL as text and not as a parameter. That is why `construct()` validates it.
+- A `for await` receives `cursorBatchSize` rows per read, and `cursorIdleTimeoutMs` runs from one read to the next. A loop therefore has `cursorIdleTimeoutMs` to work through one batch before the cursor is reclaimed: 60 ms per row with the defaults. For slower work per row, lower `cursorBatchSize` or raise `cursorIdleTimeoutMs`.
 - The three `change*` options are validated the same way. `changeRetentionMs` is a contract, not a tuning value. It sets how long a consumer may stall before its feed is ended. See [Change feeds](./change-feeds.md).
 - `catalog.enabled` turns the catalog of an external instance on or off. Unset, the catalog follows the project's development mode. See [The catalog](./external-mode.md#the-catalog).

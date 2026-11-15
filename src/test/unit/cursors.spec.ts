@@ -16,6 +16,7 @@ import {
   FORGOTTEN_HINT,
   GuardTheRegistry,
   IDLE_TIMEOUT_OPTION,
+  NEXT_TURN_MS,
   NextReqId,
   OverflowEndings,
   Read,
@@ -133,14 +134,15 @@ describe("the cursor registry", () => {
 describe("the cursor registry", () => {
   GuardTheRegistry();
 
-  it("holds one registration while iterating and none once exhausted", async () => {
+  it("holds one registration while iterating and releases it with the last batch", async () => {
     const log = Recorder();
     const reqId = NextReqId();
-    const open = Requesting(log, [Rows(1, 2)]);
-    expect(await Read(reqId, open)).to.deep.equal([1, 2]);
+    const open = Requesting(log, [Rows(1, 2, 3), Rows(4)]);
+    expect(await Read(reqId, open)).to.deep.equal([1, 2, 3]);
     expect(CountOpenCursors()).to.equal(baseline + 1);
-    expect(await Read(reqId, open)).to.deep.equal([]);
+    expect(await Read(reqId, open)).to.deep.equal([4]);
     expect(CountOpenCursors()).to.equal(baseline);
+    expect(await Read(reqId, open)).to.deep.equal([]);
     expect(log.releases).to.equal(1);
   });
 
@@ -185,6 +187,16 @@ describe("the cursor registry", () => {
     expect(CountOpenCursors()).to.equal(baseline);
   });
 
+  it("answers an empty batch after the last batch, however long the consumer took over it", async () => {
+    const log = Recorder();
+    const reqId = NextReqId();
+    const open = Requesting(log, [Rows(1, 2)]);
+    expect(await Read(reqId, open, REAPING)).to.deep.equal([1, 2]);
+    await Delay(REAP_WINDOW_MS);
+    expect(await Read(reqId, open, REAPING)).to.deep.equal([]);
+    expect(log.releases).to.equal(1);
+  });
+
   it("throws on a read after the idle reaper reclaimed the cursor", async () => {
     const log = Recorder();
     const reqId = NextReqId();
@@ -222,18 +234,37 @@ describe("the cursor registry", () => {
 describe("the cursor registry", () => {
   GuardTheRegistry();
 
-  it("closes behind a read that is still in flight, and answers it first", async () => {
+  it("answers an empty batch to a read issued just before the close, opening nothing", async () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Requesting(log, [Rows(1, 2, 3), Rows(4)]);
     const reading = Read(reqId, open);
     const closing = CloseOneCursor(reqId);
-    const first = await reading;
+    expect(await reading).to.deep.equal([]);
     await closing;
-    expect(first).to.deep.equal([1, 2, 3]);
+    expect(log.acquires).to.equal(0);
+    expect(log.statements).to.deep.equal([]);
+    expect(CountOpenCursors()).to.equal(baseline);
+  });
+
+  it("answers an empty batch to a read whose FETCH is on the wire when the close arrives", async () => {
+    const log = Recorder();
+    const reqId = NextReqId();
+    const open = Requesting(log, [Rows(1, 2, 3), Rows(4, 5, 6)]);
+    expect(await Read(reqId, open)).to.deep.equal([1, 2, 3]);
+    log.holdsNextFetch = true;
+    const reading = Read(reqId, open);
+    while (!log.resumeFetch) {
+      await Delay(NEXT_TURN_MS);
+    }
+    const closing = CloseOneCursor(reqId);
+    log.resumeFetch();
+    expect(await reading).to.deep.equal([]);
+    await closing;
     expect(log.statements).to.deep.equal([
       BEGIN,
       DECLARE,
+      FETCH,
       FETCH,
       CLOSE,
       ROLLBACK,
