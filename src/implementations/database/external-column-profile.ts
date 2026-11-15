@@ -118,12 +118,39 @@ function InstantExpression(column: ProfiledColumn): string {
   return (INSTANTS[column.family] ?? ((value: string) => value))(column.quoted);
 }
 
-function BaseSql(column: ProfiledColumn, source: Source): string {
+/** How a base query reads a column's ends: a `WITH` clause it opens with, and its two columns. */
+interface RangeClauses {
+  prefix: string;
+  ends: string;
+}
+
+/**
+ * The ends of a column. Those of a column whose values can be categories are taken among values
+ * counted at least {@link CATEGORY_MIN_ROWS} times inside the query, so a rare value never leaves
+ * the database; the `WITH` clause is read twice and so grouped once.
+ */
+function RangeSql(column: ProfiledColumn, source: Source): RangeClauses {
   const range = RangeExpression(column);
+  if (!range) {
+    return { prefix: "", ends: "NULL AS min, NULL AS max" };
+  }
+  if (!CATEGORY_FAMILIES.includes(column.family)) {
+    return { prefix: "", ends: `min(${range}) AS min, max(${range}) AS max` };
+  }
+  return {
+    prefix: `WITH counted AS (SELECT ${range} AS value FROM ${source.from}
+      WHERE ${column.quoted} IS NOT NULL GROUP BY 1 HAVING count(*) >= ${CATEGORY_MIN_ROWS})
+    `,
+    ends: "(SELECT min(value) FROM counted) AS min, (SELECT max(value) FROM counted) AS max",
+  };
+}
+
+function BaseSql(column: ProfiledColumn, source: Source): string {
+  const range = RangeSql(column, source);
   const isText = TEXT_FAMILIES.includes(column.family);
   const length = `length(${column.quoted})`;
-  return `SELECT (count(*) - count(${column.quoted}))::float8 AS nulls,
-    ${range ? `min(${range})` : "NULL"} AS min, ${range ? `max(${range})` : "NULL"} AS max,
+  return `${range.prefix}SELECT (count(*) - count(${column.quoted}))::float8 AS nulls,
+    ${range.ends},
     ${isText ? `min(${length})` : "NULL"}::float8 AS "minLength",
     ${isText ? `avg(${length})` : "NULL"}::float8 AS "avgLength",
     ${isText ? `max(${length})` : "NULL"}::float8 AS "maxLength"
