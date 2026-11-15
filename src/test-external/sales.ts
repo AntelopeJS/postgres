@@ -3,7 +3,8 @@ import {
   type SchemaDefinition,
 } from "@antelopejs/interface-database/schema";
 
-import type { QueryResultRow } from "pg";
+import assert from "node:assert";
+import { Client, type QueryResultRow } from "pg";
 
 import { Query } from "../connection";
 import { WaitForSchemaReady } from "../implementations/database/schema";
@@ -140,6 +141,28 @@ export async function Native<T extends QueryResultRow>(
   params: unknown[] = [],
 ): Promise<T[]> {
   return (await Query<T>(sql, params)).rows;
+}
+
+/**
+ * Runs `body` while the fixture's owner holds `relation` in `ACCESS EXCLUSIVE` mode on a connection
+ * of its own, so every read of it made inside `body` waits until `body` has settled.
+ */
+export async function WhileLocked<T>(
+  relation: string,
+  body: () => Promise<T>,
+): Promise<T> {
+  const url = process.env.PG_TEST_CLIENT_OWNER_URL;
+  assert(url, "the external test setup exports the fixture owner's URL");
+  const owner = new Client({ connectionString: url });
+  await owner.connect();
+  try {
+    await owner.query("BEGIN");
+    await owner.query(`LOCK TABLE ${relation} IN ACCESS EXCLUSIVE MODE`);
+    return await body();
+  } finally {
+    await owner.query("ROLLBACK");
+    await owner.end();
+  }
 }
 
 export async function NativeCount(

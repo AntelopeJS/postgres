@@ -255,6 +255,15 @@ export async function WaitForIndexes(schemaId: string): Promise<void> {
 }
 
 /**
+ * Settles once every registered schema has converged and its background index phase has settled,
+ * whatever the outcomes. Nothing in the query path awaits it; it is how a caller observes the
+ * convergence that registering many schemas at once starts, which holds pool clients while it runs.
+ */
+export async function WaitForAllIndexes(): Promise<void> {
+  await Promise.allSettled([...ready.keys()].map(WaitForIndexes));
+}
+
+/**
  * Settles once a write to the schema can rely on its unique indexes, which is when its background
  * index phase has settled — immediately for a schema that declares none.
  *
