@@ -88,6 +88,9 @@ const STARTUP_ROWS = [
   { name: "options", value: "-c search_path=x", sent: "-c search_path=x" },
 ];
 
+/** A server's yes to an SSLRequest. */
+const TLS_ACCEPTED = Buffer.from("S");
+
 /** Long enough that work worse than linear in it would take seconds. */
 const HOSTILE_LENGTH = 1_000_000;
 
@@ -181,6 +184,39 @@ function WorkCases() {
       });
     });
   }
+
+  for (const value of ["false", "require", "abc"]) {
+    it(`refuses ssl=${value}, which pg fails on once TLS starts, before connecting`, async () => {
+      await WithServer(
+        await StartRecordingServer(TLS_ACCEPTED),
+        async (server) => {
+          const url = WithParameter(
+            OnPort(LoginUrl(LOGIN.reader), server.port),
+            "ssl",
+            value,
+          );
+          expect(await Bounded(url)).to.include({
+            outcome: "refused",
+            refusal: "other",
+          });
+          expect(Seen(server)).to.deep.equal(NO_CONNECTION);
+        },
+      );
+    });
+  }
+
+  it("keeps ssl=no-verify and asks for TLS", async () => {
+    await WithServer(await StartRecordingServer(), async (server) => {
+      await Bounded(
+        WithParameter(
+          OnPort(LoginUrl(LOGIN.reader), server.port),
+          "ssl",
+          "no-verify",
+        ),
+      );
+      expect(server.connections()).to.equal(1);
+    });
+  });
 
   it("refuses many sslrootcert keys within its bound", async () => {
     const url = `${OnPort(LoginUrl(LOGIN.reader), await ClosedPort())}?${`sslrootcert=${__filename}&`.repeat(10_000)}`;

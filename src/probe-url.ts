@@ -12,6 +12,12 @@ const CLIENT_CERTIFICATE =
 const ROOT_CERTIFICATE =
   "the URL names a CA file of the probing host (sslrootcert), and the probe reads no file: a read of one cannot be bounded in time";
 
+/** The `ssl` values `pg` turns into a TLS setting; it fails on any other string once TLS starts. */
+const SSL_VALUES = new Set(["true", "1", "0", "no-verify"]);
+
+const SSL_VALUE =
+  "the URL's ssl value is none of true, 1, 0 or no-verify, and pg fails on it once the server accepts TLS";
+
 const NO_USER =
   "the URL names no user, and the probe signs in as no user of the probing process";
 
@@ -59,6 +65,18 @@ function FileRefusal(query: URLSearchParams): string | undefined {
   return query.has("sslrootcert") ? ROOT_CERTIFICATE : undefined;
 }
 
+/**
+ * Why `pg` would throw outside the probe's reach: the parser keeps the last `ssl` value as a string
+ * unless `sslmode` replaces it, and `pg` then reads it as an object when the server accepts TLS.
+ */
+function SslRefusal(query: URLSearchParams): string | undefined {
+  const ssl = query.getAll("ssl").at(-1);
+  if (ssl === undefined || query.has("sslmode") || SSL_VALUES.has(ssl)) {
+    return undefined;
+  }
+  return SSL_VALUE;
+}
+
 /** Why the parsed URL would sign in with the probing process's user name or host. */
 function IdentityRefusal(url: ConnectionOptions): string | undefined {
   if (!url.user) {
@@ -75,9 +93,10 @@ export function ReadUrl(url: string): UrlReading {
   if (HasControlCharacter(url)) {
     return { kind: "refused", message: CONTROL_REFUSAL };
   }
-  const fileRefusal = FileRefusal(QueryOf(url));
-  if (fileRefusal) {
-    return { kind: "refused", message: fileRefusal };
+  const query = QueryOf(url);
+  const queryRefusal = FileRefusal(query) ?? SslRefusal(query);
+  if (queryRefusal) {
+    return { kind: "refused", message: queryRefusal };
   }
   const parsed = parse(url);
   const identityRefusal = IdentityRefusal(parsed);
