@@ -134,15 +134,16 @@ describe("the cursor registry", () => {
 describe("the cursor registry", () => {
   GuardTheRegistry();
 
-  it("holds one registration while iterating and releases it with the last batch", async () => {
+  it("holds one registration while iterating and releases it on the empty batch", async () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Requesting(log, [Rows(1, 2, 3), Rows(4)]);
     expect(await Read(reqId, open)).to.deep.equal([1, 2, 3]);
     expect(CountOpenCursors()).to.equal(baseline + 1);
     expect(await Read(reqId, open)).to.deep.equal([4]);
-    expect(CountOpenCursors()).to.equal(baseline);
+    expect(CountOpenCursors()).to.equal(baseline + 1);
     expect(await Read(reqId, open)).to.deep.equal([]);
+    expect(CountOpenCursors()).to.equal(baseline);
     expect(log.releases).to.equal(1);
   });
 

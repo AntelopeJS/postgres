@@ -299,13 +299,14 @@ describe("the cursor registry", () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Requesting(log, [Rows(1)]);
+    expect(await Read(reqId, open)).to.deep.equal([1]);
     log.holdsStatement = CLOSE;
     const ending = Read(reqId, open);
     const resume = await WhenHeld(log);
     expect(CountOpenCursors()).to.equal(baseline + 1);
     expect(log.releases).to.equal(0);
     resume();
-    expect(await ending).to.deep.equal([1]);
+    expect(await ending).to.deep.equal([]);
     expect(log.releases).to.equal(1);
     expect(CountOpenCursors()).to.equal(baseline);
   });
@@ -314,6 +315,7 @@ describe("the cursor registry", () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Requesting(log, [Rows(1)]);
+    expect(await Read(reqId, open)).to.deep.equal([1]);
     log.holdsStatement = CLOSE;
     const ending = Read(reqId, open);
     const resume = await WhenHeld(log);
@@ -388,6 +390,7 @@ describe("the cursor registry", () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Requesting(log, [Rows(1)]);
+    expect(await Read(reqId, open)).to.deep.equal([1]);
     log.holdsStatement = CLOSE;
     const ending = Read(reqId, open);
     const resume = await WhenHeld(log);

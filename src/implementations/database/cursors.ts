@@ -82,13 +82,8 @@ const FORGOTTEN: EndReason = "forgotten";
 interface OpenCursor {
   readonly client: CursorClient;
   readonly decode: RowDecoder;
+  isDrained: boolean;
   timer?: NodeJS.Timeout;
-}
-
-/** The decoded rows of one `FETCH`, and whether it was the cursor's last. */
-interface FetchedBatch {
-  readonly rows: unknown[];
-  readonly isLast: boolean;
 }
 
 interface CursorState {
@@ -271,6 +266,7 @@ async function Declare(request: CursorRequest): Promise<OpenCursor> {
   return {
     client,
     decode: request.decode,
+    isDrained: false,
   };
 }
 
@@ -298,16 +294,22 @@ async function Teardown(
   Forget(reqId);
 }
 
-/** Reclaims the cursor only if the timer that fired is still its current one; a read may have re-armed it. */
+/**
+ * Reclaims the cursor only if the timer that fired is still its current one; a read may have re-armed it.
+ *
+ * A drained cursor has already handed over every row, so reclaiming it ends it as exhausted: the read
+ * that comes for the empty batch gets it, however long the consumer took over the last one.
+ */
 async function Expire(
   reqId: number,
   state: CursorState,
   timer: NodeJS.Timeout,
 ): Promise<void> {
-  if (state.cursor?.timer !== timer) {
+  const cursor = state.cursor;
+  if (cursor?.timer !== timer) {
     return;
   }
-  await Teardown(reqId, state, REAPED);
+  await Teardown(reqId, state, cursor.isDrained ? EXHAUSTED : REAPED);
 }
 
 /** Queues the reclaim behind whatever the entry is already doing, so it cannot cut into a read. */
@@ -330,20 +332,14 @@ function ArmReaper(
   state.idleTimeoutMs = idleTimeoutMs;
 }
 
-/**
- * One round trip; a batch shorter than the count asked for is the end of the cursor, and so is a
- * batch that decodes to nothing, which only a relation yielding at most one row can produce.
- */
+/** One round trip; a batch shorter than the count asked for is the end of the cursor. */
 async function FetchBatch(
   cursor: OpenCursor,
   batchSize: number,
-): Promise<FetchedBatch> {
+): Promise<unknown[]> {
   const fetched = await cursor.client.query(FetchStatement(batchSize));
-  const rows = cursor.decode(fetched.rows);
-  return {
-    rows,
-    isLast: fetched.rows.length < batchSize || rows.length === EMPTY,
-  };
+  cursor.isDrained = fetched.rows.length < batchSize;
+  return cursor.decode(fetched.rows);
 }
 
 async function Fetched(
@@ -351,7 +347,7 @@ async function Fetched(
   state: CursorState,
   cursor: OpenCursor,
   batchSize: number,
-): Promise<FetchedBatch> {
+): Promise<unknown[]> {
   try {
     return await FetchBatch(cursor, batchSize);
   } catch (err) {
@@ -408,13 +404,15 @@ async function Advance(
   }
   const cursor = await Established(reqId, state, open);
   ClearReaper(cursor);
-  const batch = await Fetched(reqId, state, cursor, options.cursorBatchSize);
-  if (batch.isLast) {
+  const batch = cursor.isDrained
+    ? Done()
+    : await Fetched(reqId, state, cursor, options.cursorBatchSize);
+  if (batch.length === EMPTY) {
     await Teardown(reqId, state, EXHAUSTED);
-  } else {
-    ArmReaper(reqId, state, cursor, options.cursorIdleTimeoutMs);
+    return batch;
   }
-  return state.isClosing ? Done() : batch.rows;
+  ArmReaper(reqId, state, cursor, options.cursorIdleTimeoutMs);
+  return state.isClosing ? Done() : batch;
 }
 
 /**
@@ -437,12 +435,12 @@ async function Advance(
  * `EndReason` carries which answer and why, and the two that throw are the reclaimed cursor and the
  * forgotten one.
  *
- * A batch shorter than the configured count means the cursor is exhausted, so the read that hands
- * it over also tears the cursor down, and every read after it answers the empty batch. Releasing
- * there rather than one read later leaves no idle cursor for the reaper to reclaim, so a consumer
- * that took its time over the last batch is not refused the empty one. Nothing asks for that
- * release: the contract's own suite iterates to completion and never closes, so self-reclaim is the
- * only thing between this adapter and one leaked pool client per iteration.
+ * A batch shorter than the configured count means the cursor is exhausted, so it is handed over
+ * without a further round trip and the read after it tears the cursor down and answers the empty
+ * batch. Nothing asks for that: the contract's own suite iterates to completion and never closes,
+ * so self-reclaim is the only thing between this adapter and one leaked pool client per iteration.
+ * The cursor stays live until that read rather than ending with its last batch, because an ending
+ * is only remembered for `REMEMBERED_ENDINGS` others, and the empty batch is still owed.
  *
  * The idle timeout runs from the read that hands a batch over to the next read, so a consumer has
  * `cursorIdleTimeoutMs` to work through `cursorBatchSize` rows before the cursor is reclaimed.

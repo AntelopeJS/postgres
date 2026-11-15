@@ -55,6 +55,18 @@ describe("the cursor registry", () => {
     expect(CountOpenCursors()).to.equal(baseline);
   });
 
+  it("answers the empty batch it still owes after the last one, however many cursors ended since", async () => {
+    const log = Recorder();
+    const reqId = NextReqId();
+    const open = Requesting(log, [Rows(1, 2, 3), Rows(4)]);
+    expect(await Read(reqId, open)).to.deep.equal([1, 2, 3]);
+    expect(await Read(reqId, open)).to.deep.equal([4]);
+    await OverflowEndings();
+    expect(await Read(reqId, open)).to.deep.equal([]);
+    expect(log.releases).to.equal(1);
+    expect(CountOpenCursors()).to.equal(baseline);
+  });
+
   it("refuses a reqId whose reaping it has forgotten, rather than re-serving its rows", async () => {
     const log = Recorder();
     const reqId = NextReqId();
