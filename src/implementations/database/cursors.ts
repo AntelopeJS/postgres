@@ -298,7 +298,8 @@ async function Teardown(
  * Reclaims the cursor only if the timer that fired is still its current one; a read may have re-armed it.
  *
  * A drained cursor has already handed over every row, so reclaiming it ends it as exhausted: the read
- * that comes for the empty batch gets it, however long the consumer took over the last one.
+ * that comes for the empty batch gets it, for as long as that ending is among the
+ * `REMEMBERED_ENDINGS` most recent ones.
  */
 async function Expire(
   reqId: number,

@@ -188,7 +188,7 @@ describe("the cursor registry", () => {
     expect(CountOpenCursors()).to.equal(baseline);
   });
 
-  it("answers an empty batch after the last batch, however long the consumer took over it", async () => {
+  it("answers an empty batch after the last batch, even once the idle reaper has ended it", async () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Requesting(log, [Rows(1, 2)]);
