@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.4.1
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.4.0...v0.4.1)
+
+### 🚀 Enhancements
+
+- **probe:** ⚠️  Export a connection probe; requires @antelopejs/dms 0.20.2 or later in the same project (interface-database-catalog 0.1) ([#98](https://github.com/AntelopeJS/postgres/pull/98))
+
+### 🩹 Fixes
+
+- **config:** Refuse a URL ssl value pg would end the process on ([#101](https://github.com/AntelopeJS/postgres/pull/101))
+
+### 💅 Refactors
+
+- **member:** Drop the no-unknown-parameters directive on ClassifyMember ([#96](https://github.com/AntelopeJS/postgres/pull/96))
+
+### 📖 Documentation
+
+- **changelog:** Upgrade notes of postgres 0.4.0 ([#95](https://github.com/AntelopeJS/postgres/pull/95))
+
+### ✅ Tests
+
+- Wait on what two Windows-flaky tests depend on ([#100](https://github.com/AntelopeJS/postgres/pull/100))
+
+### 🤖 CI
+
+- Run CI on Windows beside Linux ([#97](https://github.com/AntelopeJS/postgres/pull/97))
+
+#### ⚠️ Breaking Changes
+
+- **probe:** ⚠️  Export a connection probe; requires @antelopejs/dms 0.20.2 or later in the same project (interface-database-catalog 0.1) ([#98](https://github.com/AntelopeJS/postgres/pull/98))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.4.0
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.3.0...v0.4.0)
