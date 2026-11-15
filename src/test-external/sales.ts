@@ -129,6 +129,12 @@ export type SalesRow = { _id?: string } & Record<string, SalesValue>;
 /** Registers the declaration and waits for it, as a generated module's startup does. */
 export type SalesTables = Record<string, SalesRow>;
 
+/**
+ * How long a registration of the fixture may take to settle: on the Windows CI runner it settled in
+ * 0.02 to 1.13 s in 22 of 23 runs, and past mocha's 2 s default in the other.
+ */
+export const REGISTRATION_TIMEOUT_MS = 30_000;
+
 export async function RegisterSales(): Promise<Schema<SalesTables>> {
   const schema = new Schema<SalesTables>(SALES, SALES_DEFINITION);
   await WaitForSchemaReady(SALES);
