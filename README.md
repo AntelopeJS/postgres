@@ -116,11 +116,11 @@ This repository documents what is specific to the PostgreSQL backend:
 
 <!-- antelopejs-docs-compat:start -->
 
-| Package                                  | Supported        | Tested with |
-| ---------------------------------------- | ---------------- | ----------- |
-| `@antelopejs/interface-core`             | `>=0.5.0 <0.6.0` | `0.5.1`     |
-| `@antelopejs/interface-database`         | `>=0.4.0 <0.5.0` | `0.4.0`     |
-| `@antelopejs/interface-database-catalog` | `>=0.0.3 <0.1.0` | `0.0.3`     |
+| Package                                  | Supported                                                          | Tested with                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `@antelopejs/interface-core`             | `>=0.5.0 <0.6.0`                                                   | `0.5.1`                                                            |
+| `@antelopejs/interface-database`         | `>=0.4.0 <0.5.0`                                                   | `0.4.0`                                                            |
+| `@antelopejs/interface-database-catalog` | `file:.tgz-deps/antelopejs-interface-database-catalog-46e94f6.tgz` | `file:.tgz-deps/antelopejs-interface-database-catalog-46e94f6.tgz` |
 
 <!-- antelopejs-docs-compat:end -->
 

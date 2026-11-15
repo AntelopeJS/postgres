@@ -101,6 +101,22 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA sales TO dms_client;
 
 A write to a table that the account was not granted fails as `forbidden`. The module never needs more. With this account, a module wired by mistake to an owned instance on this URL fails at its first `CREATE` and does not change the client's database. Set `statementTimeoutMs` too, because these are someone else's production tables.
 
+### Checking an account before connecting
+
+`@antelopejs/postgres/dist/probe` exports `probe`, the `Probe` of `@antelopejs/interface-database-catalog`. It loads in plain Node, outside the AntelopeJS runtime, and reads no module configuration. It signs in once with `url` and changes no row:
+
+```typescript fragment
+import { probe } from "@antelopejs/postgres/dist/probe";
+
+const answer = await probe({ url, timeoutMs: 5000, signal });
+```
+
+- `refused` names the reason the server gave: `credentials` for `28P01`, `host` for `28000`, `database` for `3D000`, and `other`, with the server's message, for any other server error.
+- `unreachable` means no server answered, or it stopped answering within `timeoutMs`.
+- `signed-in` carries `user`, the account's `current_user`, and `latencyMs`, its first query rounded up. `canWrite` holds when the account may insert, update or delete in any relation the catalog's `ListRelations` sees. `canRead` holds when it may read one of those relations as a whole, or sees none. Each relation is judged as `ListRelations` judges it, so a relation readable on some columns only does not count.
+
+The probe closes its connection once it answers, and shuts the socket when the server has not closed it 250 ms later. When `signal` aborts, it shuts every socket at once.
+
 ## The catalog
 
 An external instance also implements `@antelopejs/interface-database-catalog`. The catalog describes and profiles the database for a generator: relations, columns, keys, references, row estimates, and aggregates over the data. It answers with this module's own registration rules. A relation that it calls mappable registers, and the declarations that it lists for a column are the ones that registration accepts.

@@ -1,4 +1,5 @@
 import { Query } from "../../connection";
+import { RELATION_KINDS } from "./external-access";
 
 /** One column of a relation the adapter did not create, as `pg_catalog` describes it. */
 export interface CatalogColumn {
@@ -53,8 +54,6 @@ interface RelationRow {
   kind: string;
   readable: boolean;
 }
-
-export const RELATION_KINDS = "('r', 'p', 'v', 'm', 'f')";
 
 const RELATION_SQL = `
   SELECT c.oid, c.relkind AS kind, has_table_privilege(c.oid, 'SELECT') AS readable
