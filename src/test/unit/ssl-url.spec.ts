@@ -1,10 +1,5 @@
 import { execFile } from "node:child_process";
-import {
-  type AddressInfo,
-  type Server,
-  type Socket,
-  createServer,
-} from "node:net";
+import { type AddressInfo, type Server, Socket, createServer } from "node:net";
 import path from "node:path";
 
 import { expect } from "chai";
@@ -99,16 +94,29 @@ function ConnectElsewhere(optionsJson: string): Promise<Ending> {
   });
 }
 
-/** Where an unusable `ssl` can come from, each against a server that accepts TLS. */
+/** Where an unusable `ssl` can come from, the source the refusal must name, and the options as JSON. */
 function UnusableConfigs(port: number): [string, string][] {
   const url = `postgres://reader:secret@127.0.0.1:${port}/erp`;
+  const unusable = `${url}?ssl=false`;
   return [
-    ["config.url", JSON.stringify({ url: `${url}?ssl=false` })],
+    ["config.url sets ssl=false", JSON.stringify({ url: unusable })],
     [
-      "config.pool",
-      JSON.stringify({ url, pool: { connectionString: `${url}?ssl=false` } }),
+      "config.url sets ssl=false",
+      JSON.stringify({ url: unusable, pool: { connectionString: url } }),
     ],
-    ["config.pool", JSON.stringify({ url, pool: { ssl: "false" } })],
+    [
+      "config.pool.connectionString sets ssl=false",
+      JSON.stringify({ url, pool: { connectionString: unusable } }),
+    ],
+    [
+      "config.pool.connectionString sets ssl=false",
+      JSON.stringify({ url, pool: { connectionString: unusable, ssl: false } }),
+    ],
+    [
+      "config.pool.ssl is false",
+      JSON.stringify({ url, pool: { ssl: "false" } }),
+    ],
+    ["config.pool.ssl is 1", JSON.stringify({ url, pool: { ssl: 1 } })],
   ];
 }
 
@@ -125,7 +133,7 @@ describe("a config.url with an ssl value pg cannot use", function () {
       for (const [source, optionsJson] of UnusableConfigs(server.port)) {
         const ending = await ConnectElsewhere(optionsJson);
         expect(ending.exited, ending.output).to.equal(false);
-        expect(ending.output).to.contain("refused: ").and.contain(source);
+        expect(ending.output).to.contain(`refused: ${source}, `);
       }
       expect(server.connections()).to.equal(0);
     } finally {
@@ -140,6 +148,16 @@ describe("a config.url with an ssl value pg cannot use", function () {
       );
     });
   }
+
+  it("never calls a pool.stream factory while checking", () => {
+    let calls = 0;
+    const stream = () => {
+      calls += 1;
+      return new Socket();
+    };
+    expect(Configured({ url: BASE, pool: { stream } })).to.equal(BASE);
+    expect(calls).to.equal(0);
+  });
 
   it("is accepted for a socket URL with ssl=true, which pg converts", () => {
     const url = "socket:///var/run/postgresql?db=erp&ssl=true";
