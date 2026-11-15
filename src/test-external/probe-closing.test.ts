@@ -1,3 +1,5 @@
+import { getEventListeners } from "node:events";
+
 import { expect } from "chai";
 
 import {
@@ -71,6 +73,16 @@ describe("the connection probe's closing", function () {
         opened: 1,
         open: 0,
       });
+    });
+  });
+
+  it("leaves no listener on the signal once it has closed", async () => {
+    await WithRelay(await StartRelayTo(ServerPort()), async (relay) => {
+      const { signal } = new AbortController();
+      SignedIn(await Probe(ReaderOn(relay), signal));
+      SignedIn(await Probe(ReaderOn(relay), signal));
+      expect(await relay.openAfter(CLOSE_SETTLE_MS)).to.equal(0);
+      expect(getEventListeners(signal, "abort")).to.have.length(0);
     });
   });
 

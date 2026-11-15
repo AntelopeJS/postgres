@@ -42,8 +42,23 @@ function Quoted(role: string): string {
   return `"${role}"`;
 }
 
+/** Drops whatever an earlier run left, so a run killed midway does not wedge the next one. */
+const TEARDOWN = [
+  `DROP DATABASE IF EXISTS ${LOCKED_DATABASE}`,
+  `DROP SCHEMA IF EXISTS ${TRAP_SCHEMA} CASCADE`,
+  `DO $$ DECLARE role text; BEGIN
+     FOREACH role IN ARRAY ARRAY[${ROLES.map((role) => `'${role}'`).join(", ")}] LOOP
+       IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role) THEN
+         EXECUTE format('DROP OWNED BY %I', role);
+         EXECUTE format('DROP ROLE %I', role);
+       END IF;
+     END LOOP;
+   END $$`,
+];
+
 /** Grants that make each login what it is named for; the trapped one fails its relation listing. */
 const SETUP = [
+  ...TEARDOWN,
   ...Object.values(LOGIN).map(
     (role) => `CREATE ROLE ${Quoted(role)} LOGIN PASSWORD '${SECRET}'`,
   ),
@@ -64,15 +79,6 @@ const SETUP = [
   `ALTER ROLE ${LOGIN.trapped} SET search_path = ${TRAP_SCHEMA}, pg_catalog`,
   `CREATE DATABASE ${LOCKED_DATABASE}`,
   `REVOKE CONNECT ON DATABASE ${LOCKED_DATABASE} FROM PUBLIC`,
-];
-
-const TEARDOWN = [
-  `DROP DATABASE ${LOCKED_DATABASE}`,
-  `DROP SCHEMA ${TRAP_SCHEMA} CASCADE`,
-  ...ROLES.flatMap((role) => [
-    `DROP OWNED BY ${Quoted(role)}`,
-    `DROP ROLE ${Quoted(role)}`,
-  ]),
 ];
 
 function OwnerUrl(): string {

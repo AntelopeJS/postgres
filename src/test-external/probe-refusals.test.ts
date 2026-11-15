@@ -110,6 +110,15 @@ describe("the connection probe's refusals", function () {
     }
   });
 
+  it("refuses any other server error during the sign-in as other, with its message", async () => {
+    const url = Altered(LoginUrl(LOGIN.reader), (target) => {
+      target.searchParams.set("options", "-c probe_bogus=1");
+    });
+    const answer = await Probe(url);
+    expect(answer).to.include({ outcome: "refused", refusal: "other" });
+    expect(answer).to.have.property("message").that.contains("probe_bogus");
+  });
+
   it("answers a port nothing listens on as unreachable, within the timeout", async () => {
     const started = performance.now();
     const answer = await Probe(
