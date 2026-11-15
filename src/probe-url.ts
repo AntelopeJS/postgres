@@ -1,9 +1,15 @@
-import { statSync } from "node:fs";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
 
 import { type ConnectionOptions, parse } from "pg-connection-string";
 
 /** Larger than any CA bundle, small enough to read at once. */
 const MAX_ROOT_CERTIFICATE_BYTES = 1 << 20;
+
+/** The first character code past the C0 controls. */
+const FIRST_PRINTABLE = 0x20;
+
+const CONTROL_REFUSAL =
+  "the URL contains a control character, which the URL parser would remove or trim";
 
 const CLIENT_CERTIFICATE =
   "the URL presents a client certificate of the probing host (sslcert, sslkey), which the probe never sends";
@@ -37,10 +43,45 @@ function QueryOf(url: string): URLSearchParams {
   );
 }
 
+/** Whether `url` holds a C0 control: the URL parser drops tab, CR and LF and trims the rest at the ends. */
+function HasControlCharacter(url: string): boolean {
+  for (let index = 0; index < url.length; index += 1) {
+    if (url.charCodeAt(index) < FIRST_PRINTABLE) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Whether reading `descriptor` to its end takes at most `limit` bytes, never trusting its size. */
+function EndsWithin(descriptor: number, limit: number): boolean {
+  const buffer = Buffer.alloc(limit + 1);
+  let total = 0;
+  while (total <= limit) {
+    const read = readSync(descriptor, buffer, total, limit + 1 - total, null);
+    if (read === 0) {
+      return true;
+    }
+    total += read;
+  }
+  return false;
+}
+
+/**
+ * Whether `path` is a regular file that ends within the limit when read. Its reported size is not
+ * trusted: a `/proc` file reports 0 and can return gigabytes.
+ */
 function IsSmallRegularFile(path: string): boolean {
   try {
-    const stats = statSync(path);
-    return stats.isFile() && stats.size <= MAX_ROOT_CERTIFICATE_BYTES;
+    if (!statSync(path).isFile()) {
+      return false;
+    }
+    const descriptor = openSync(path, "r");
+    try {
+      return EndsWithin(descriptor, MAX_ROOT_CERTIFICATE_BYTES);
+    } finally {
+      closeSync(descriptor);
+    }
   } catch {
     return false;
   }
@@ -72,6 +113,9 @@ function IdentityRefusal(url: ConnectionOptions): string | undefined {
  * credential, a user name or a host from the probing host.
  */
 export function ReadUrl(url: string): UrlReading {
+  if (HasControlCharacter(url)) {
+    return { kind: "refused", message: CONTROL_REFUSAL };
+  }
   const fileRefusal = FileRefusal(QueryOf(url));
   if (fileRefusal) {
     return { kind: "refused", message: fileRefusal };
