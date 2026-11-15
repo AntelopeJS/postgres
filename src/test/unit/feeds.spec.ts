@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { expect } from "chai";
 import { QueryStage } from "@antelopejs/interface-database/common";
 
-import { WhileConfigured } from "./spec-fixture";
+import { WhileConfigured, WithOptions } from "./spec-fixture";
 import { CloseCursor, ReadCursor } from "../../implementations/database/query";
 import {
   CloseAllFeeds,
@@ -21,6 +21,7 @@ import {
 } from "./feeds-fixture";
 
 const SETTLE_MS = 60;
+const QUICK_POLL_MS = 5;
 const LATER_EPOCH = new Date("2026-08-12T10:00:00.000Z");
 
 /** One side of an event as the laterals answer it: what it projected, and whether it matched. */
@@ -269,18 +270,41 @@ describe("a change feed's events", () => {
     const { read } = Reader([
       { scanned_to: "0" },
       {
-        scanned_to: "2",
+        scanned_to: "3",
         events: [
           { op: "added", old: ABSENT, new: Side({ _id: "first" }) },
           { op: "added", old: ABSENT, new: Side({ _id: "second" }) },
+          { op: "added", old: ABSENT, new: Side({ _id: "third" }) },
         ],
       },
     ]);
     await Feed(async (reqId) => {
       const events = await Step(reqId, read);
-      expect(events).to.have.lengthOf(2);
+      expect(events).to.have.lengthOf(3);
       expect(events[0]).to.have.nested.property("newValue._id", "first");
       expect(events[1]).to.have.nested.property("newValue._id", "second");
+      expect(events[2]).to.have.nested.property("newValue._id", "third");
+    });
+  });
+});
+
+describe("a quiet change feed", () => {
+  it("keeps a read waiting through a quiet poll until an event arrives", async () => {
+    const { read } = Reader([
+      { scanned_to: "0" },
+      { events: [] },
+      {
+        scanned_to: "1",
+        events: [{ op: "added", old: ABSENT, new: Side({ _id: "late" }) }],
+      },
+    ]);
+    await Feed(async (reqId) => {
+      const events = await WithOptions(
+        { changePollIntervalMs: QUICK_POLL_MS },
+        () => Step(reqId, read),
+      );
+      expect(events).to.have.lengthOf(1);
+      expect(events[0]).to.have.nested.property("newValue._id", "late");
     });
   });
 });
