@@ -9,6 +9,12 @@ export const CLIENT_ROLE = "dms_client";
 
 export const READER_PASSWORD = "reader";
 
+/**
+ * One `big_events` row in this many is a `refund`: 55 rows in the table, but 3 in its seeded sample,
+ * so the value is a category of the table and a record of the sample.
+ */
+const BIG_EVENTS_REFUND_EVERY = 20_000;
+
 export const FIXTURE: readonly string[] = [
   "CREATE EXTENSION IF NOT EXISTS citext",
   "CREATE SCHEMA sales",
@@ -137,7 +143,8 @@ export const FIXTURE: readonly string[] = [
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, kind text NOT NULL, at timestamptz NOT NULL
   ) WITH (autovacuum_enabled = false)`,
   `INSERT INTO sales.big_events (kind, at)
-    SELECT (ARRAY['click', 'view', 'buy'])[1 + g % 3], timestamptz '2025-01-01' + (g || ' seconds')::interval
+    SELECT CASE WHEN g % ${BIG_EVENTS_REFUND_EVERY} = 0 THEN 'refund' ELSE (ARRAY['click', 'view', 'buy'])[1 + g % 3] END,
+      timestamptz '2025-01-01' + (g || ' seconds')::interval
     FROM generate_series(1, 1100000) g`,
 ];
 
