@@ -138,23 +138,23 @@ function Privileges(access: RelationAccess[]) {
 }
 
 /** An error's message, or its causes' when it has none: Node's for every address of a host refusing. */
-function MessageOf(err: unknown): string {
-  if (!(err instanceof Error)) {
-    return String(err);
-  }
+function MessageOf(err: Error): string {
   if (err.message || !(err instanceof AggregateError)) {
     return err.message;
   }
-  const causes: unknown[] = err.errors;
-  return causes.map(MessageOf).join("; ");
+  return err.errors
+    .map((cause) =>
+      MessageOf(cause instanceof Error ? cause : new Error(String(cause))),
+    )
+    .join("; ");
 }
 
-function Unanswered(err: unknown): ProbeAnswer {
+function Unanswered(err: Error): ProbeAnswer {
   return { outcome: "unreachable", message: MessageOf(err) };
 }
 
 /** A failed sign-in: the server's refusal, a password the server asked for and the URL lacks, or no answer. */
-function Refusal(err: unknown): ProbeAnswer {
+function Refusal(err: Error): ProbeAnswer {
   if (err instanceof DatabaseError) {
     const refusal = (err.code && REFUSALS.get(err.code)) || "other";
     return { outcome: "refused", refusal, message: err.message };
@@ -189,7 +189,7 @@ async function Read(client: Client): Promise<ProbeAnswer> {
     return { ...answer, ...Privileges(relations.rows.map(AccessOf)) };
   } catch (err) {
     if (!(err instanceof DatabaseError)) {
-      return Unanswered(err);
+      return Unanswered(err instanceof Error ? err : new Error(String(err)));
     }
     const latencyMs =
       answer.latencyMs || Math.ceil(performance.now() - started);
@@ -201,7 +201,7 @@ async function SignIn(session: Session): Promise<ProbeAnswer> {
   try {
     await session.client.connect();
   } catch (err) {
-    return Refusal(err);
+    return Refusal(err instanceof Error ? err : new Error(String(err)));
   }
   return Read(session.client);
 }
@@ -249,7 +249,7 @@ export const probe: Probe = async ({ url, timeoutMs, signal }) => {
     }
     return await Promise.race([SignIn(session), aborted.answer]);
   } catch (err) {
-    return Unanswered(err);
+    return Unanswered(err instanceof Error ? err : new Error(String(err)));
   } finally {
     aborted.withdraw();
     if (session) {

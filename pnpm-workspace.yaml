@@ -2,3 +2,5 @@ packages:
   - "./"
 allowBuilds:
   lefthook: false
+minimumReleaseAgeExclude:
+  - "@antelopejs/interface-*"
