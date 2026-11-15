@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.4.2
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.4.1...v0.4.2)
+
+### 🚀 Enhancements
+
+- **cursors:** Hand over one FETCH batch per ReadCursor read ([#99](https://github.com/AntelopeJS/postgres/pull/99))
+
+### 🩹 Fixes
+
+- **catalog:** Fold rare category values inside the query ([#102](https://github.com/AntelopeJS/postgres/pull/102))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli ([@Upd4ting](http://github.com/Upd4ting))
+
 ## v0.4.1
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.4.0...v0.4.1)
