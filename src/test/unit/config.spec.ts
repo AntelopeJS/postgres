@@ -4,7 +4,7 @@ import { WithOptions } from "./spec-fixture";
 import { VALIDATED, type ValidatedOption } from "./config-fixture";
 import { GetOptions, type Options, SetOptions } from "../../config";
 
-const DEFAULT_CURSOR_BATCH_SIZE = 100;
+const DEFAULT_CURSOR_BATCH_SIZE = 1000;
 const DEFAULT_CURSOR_IDLE_TIMEOUT_MS = 60_000;
 const DEFAULT_CHANGE_RETENTION_MS = 300_000;
 const DEFAULT_CHANGE_BATCH_SIZE = 256;

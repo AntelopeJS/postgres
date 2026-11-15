@@ -12,7 +12,7 @@ Every option that `construct` accepts, and what each one does.
     url: "postgres://postgres@localhost:5432/antelopejs",  // PostgreSQL connection string
     migrations: "safe",                 // "safe" (default) or "destructive"
     schemaPrefix: "",                   // Prefix for generated PostgreSQL schema names
-    cursorBatchSize: 100,               // Rows fetched per round trip when iterating
+    cursorBatchSize: 1000,              // Rows fetched per round trip, handed over per read
     cursorIdleTimeoutMs: 60000,         // Idle cursors are reclaimed after this delay
     statementTimeoutMs: undefined,      // Optional per-statement timeout
     changeRetentionMs: 300000,          // How long a change event stays readable, a contract
