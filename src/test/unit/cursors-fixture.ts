@@ -8,7 +8,7 @@ import {
   CountOpenCursors,
   type CursorClient,
   type CursorOpener,
-  ReadCursorRow,
+  ReadCursorBatch,
 } from "../../implementations/database/cursors";
 
 export const CURSOR = '"antelopejs_cursor"';
@@ -56,7 +56,7 @@ export const PROBING: Options = {
 
 export const NO_VALUES: unknown[] = [];
 export const STUB_FAILURE = "the stub client refused this statement";
-export const NEVER_ENDED = "the cursor never answered done";
+export const NEVER_ENDED = "the cursor never answered an empty batch";
 export const NEVER_REJECTED = "the read was expected to reject";
 export const NEVER_ARRIVED = "no read arrived while the sweep was running";
 export const NEVER_HELD =
@@ -224,20 +224,21 @@ export function Read(
   open: CursorOpener,
   options: Options = OPTIONS,
 ) {
-  return WithOptions(options, () => ReadCursorRow(reqId, open));
+  return WithOptions(options, () => ReadCursorBatch(reqId, open));
 }
 
+/** Reads until the empty batch, answering the non-empty batches in the order they were handed over. */
 export async function Drain(
   reqId: number,
   open: CursorOpener,
-): Promise<unknown[]> {
-  const values: unknown[] = [];
-  while (values.length < DRAIN_LIMIT) {
-    const next = await Read(reqId, open);
-    if (next.done) {
-      return values;
+): Promise<unknown[][]> {
+  const batches: unknown[][] = [];
+  while (batches.length < DRAIN_LIMIT) {
+    const batch = await Read(reqId, open);
+    if (batch.length === 0) {
+      return batches;
     }
-    values.push(next.value);
+    batches.push(batch);
   }
   throw new Error(NEVER_ENDED);
 }

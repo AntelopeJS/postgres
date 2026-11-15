@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { expect } from "chai";
 import { QueryStage } from "@antelopejs/interface-database/common";
 
-import { WhileConfigured } from "./spec-fixture";
+import { WhileConfigured, WithOptions } from "./spec-fixture";
 import { CloseCursor, ReadCursor } from "../../implementations/database/query";
 import {
   CloseAllFeeds,
@@ -21,6 +21,7 @@ import {
 } from "./feeds-fixture";
 
 const SETTLE_MS = 60;
+const QUICK_POLL_MS = 5;
 const LATER_EPOCH = new Date("2026-08-12T10:00:00.000Z");
 
 /** One side of an event as the laterals answer it: what it projected, and whether it matched. */
@@ -184,10 +185,10 @@ describe("a change feed's events", () => {
       },
     ]);
     await Feed(async (reqId) => {
-      const step = await Step(reqId, read);
-      expect(step.value).to.have.property("changeType", "added");
-      expect(step.value).to.not.have.property("oldValue");
-      expect(step.value).to.have.deep.property("newValue", {
+      const [event] = await Step(reqId, read);
+      expect(event).to.have.property("changeType", "added");
+      expect(event).to.not.have.property("oldValue");
+      expect(event).to.have.deep.property("newValue", {
         _id: "a",
         car: "Renault",
       });
@@ -203,10 +204,10 @@ describe("a change feed's events", () => {
       },
     ]);
     await Feed(async (reqId) => {
-      const step = await Step(reqId, read);
-      expect(step.value).to.have.property("changeType", "removed");
-      expect(step.value).to.not.have.property("newValue");
-      expect(step.value).to.have.deep.property("oldValue", { _id: "a" });
+      const [event] = await Step(reqId, read);
+      expect(event).to.have.property("changeType", "removed");
+      expect(event).to.not.have.property("newValue");
+      expect(event).to.have.deep.property("oldValue", { _id: "a" });
     });
   });
 
@@ -225,13 +226,13 @@ describe("a change feed's events", () => {
       },
     ]);
     await Feed(async (reqId) => {
-      const step = await Step(reqId, read);
-      expect(step.value).to.have.property("changeType", "modified");
-      expect(step.value).to.have.deep.property("oldValue", {
+      const [event] = await Step(reqId, read);
+      expect(event).to.have.property("changeType", "modified");
+      expect(event).to.have.deep.property("oldValue", {
         _id: "a",
         price: 1,
       });
-      expect(step.value).to.have.deep.property("newValue", {
+      expect(event).to.have.deep.property("newValue", {
         _id: "a",
         price: 2,
       });
@@ -253,34 +254,57 @@ describe("a change feed's events", () => {
       },
     ]);
     await Feed(async (reqId) => {
-      const step = await Step(reqId, read);
-      expect(step.value).to.have.deep.property("oldValue", {
+      const [event] = await Step(reqId, read);
+      expect(event).to.have.deep.property("oldValue", {
         _id: "a",
         price: 50,
       });
-      expect(step.value).to.have.deep.property("newValue", {
+      expect(event).to.have.deep.property("newValue", {
         _id: "a",
         price: 200,
       });
     });
   });
 
-  it("buffers a batch and answers it one event per read, in order", async () => {
+  it("hands over every event of one poll in one read, in order", async () => {
     const { read } = Reader([
       { scanned_to: "0" },
       {
-        scanned_to: "2",
+        scanned_to: "3",
         events: [
           { op: "added", old: ABSENT, new: Side({ _id: "first" }) },
           { op: "added", old: ABSENT, new: Side({ _id: "second" }) },
+          { op: "added", old: ABSENT, new: Side({ _id: "third" }) },
         ],
       },
     ]);
     await Feed(async (reqId) => {
-      const one = await Step(reqId, read);
-      const two = await Step(reqId, read);
-      expect(one.value).to.have.nested.property("newValue._id", "first");
-      expect(two.value).to.have.nested.property("newValue._id", "second");
+      const events = await Step(reqId, read);
+      expect(events).to.have.lengthOf(3);
+      expect(events[0]).to.have.nested.property("newValue._id", "first");
+      expect(events[1]).to.have.nested.property("newValue._id", "second");
+      expect(events[2]).to.have.nested.property("newValue._id", "third");
+    });
+  });
+});
+
+describe("a quiet change feed", () => {
+  it("keeps a read waiting through a quiet poll until an event arrives", async () => {
+    const { read } = Reader([
+      { scanned_to: "0" },
+      { events: [] },
+      {
+        scanned_to: "1",
+        events: [{ op: "added", old: ABSENT, new: Side({ _id: "late" }) }],
+      },
+    ]);
+    await Feed(async (reqId) => {
+      const events = await WithOptions(
+        { changePollIntervalMs: QUICK_POLL_MS },
+        () => Step(reqId, read),
+      );
+      expect(events).to.have.lengthOf(1);
+      expect(events[0]).to.have.nested.property("newValue._id", "late");
     });
   });
 });
@@ -310,8 +334,7 @@ describe("the three ways a change feed ends", () => {
       },
     ]);
     await Feed(async (reqId) => {
-      const step = await Step(reqId, read);
-      expect(step.done).to.equal(false);
+      expect(await Step(reqId, read)).to.have.lengthOf(1);
     });
   });
 
@@ -332,12 +355,12 @@ describe("the three ways a change feed ends", () => {
     });
   });
 
-  it("answers done rather than rejecting when it was closed", async () => {
+  it("answers an empty batch rather than rejecting when it was closed", async () => {
     const { read } = Reader([{ scanned_to: "0" }, { events: [] }]);
     const reqId = NewReqId();
     const pending = WhileConfigured(() => Step(reqId, read));
     await CloseOneFeed(reqId);
-    expect(await pending).to.deep.equal({ done: true, value: undefined });
+    expect(await pending).to.deep.equal([]);
   });
 
   it("resolves a waiting read when the connection is being torn down", async () => {
@@ -345,7 +368,7 @@ describe("the three ways a change feed ends", () => {
     const reqId = NewReqId();
     const pending = WhileConfigured(() => Step(reqId, read));
     await CloseAllFeeds();
-    expect(await pending).to.deep.equal({ done: true, value: undefined });
+    expect(await pending).to.deep.equal([]);
   });
 });
 
@@ -360,14 +383,11 @@ describe("the change feed registry", () => {
     await pending;
   });
 
-  it("closes a reqId it has never seen, so a read arriving after it answers done", async () => {
+  it("closes a reqId it has never seen, so a read arriving after it answers an empty batch", async () => {
     const reqId = NewReqId();
     await CloseOneFeed(reqId);
     const { read } = Reader([{ scanned_to: "0" }, { events: [] }]);
-    expect(await WhileConfigured(() => Step(reqId, read))).to.deep.equal({
-      done: true,
-      value: undefined,
-    });
+    expect(await WhileConfigured(() => Step(reqId, read))).to.deep.equal([]);
   });
 });
 
@@ -402,10 +422,7 @@ describe("dispatching an iteration between a cursor and a feed", () => {
     const reqId = NewReqId();
     const opened = WhileConfigured(() => Step(reqId, read));
     await CloseCursor(reqId);
-    expect(await opened).to.deep.equal({ done: true, value: undefined });
-    expect(await WhileConfigured(() => Step(reqId, read))).to.deep.equal({
-      done: true,
-      value: undefined,
-    });
+    expect(await opened).to.deep.equal([]);
+    expect(await WhileConfigured(() => Step(reqId, read))).to.deep.equal([]);
   });
 });

@@ -70,7 +70,7 @@ interface FeedTarget {
 /**
  * Why a feed stopped, and therefore what a read arriving after it is told.
  * `lapsed` and `restarted` are losses and raise, naming the feed and the range that went;
- * `closed` is an ending and resolves `done`.
+ * `closed` is an ending and resolves an empty batch.
  */
 type FeedEnd =
   | { reason: "closed" }
@@ -477,9 +477,9 @@ async function Open(state: FeedState, stages: QueryStage[]): Promise<void> {
   await state.env.listen();
 }
 
-function Ended(end: FeedEnd): IteratorResult<unknown, void> {
+function Ended(end: FeedEnd): unknown[] {
   if (end.reason === "closed") {
-    return { done: true, value: undefined };
+    return [];
   }
   throw new Error(
     end.reason === "lapsed"
@@ -489,7 +489,9 @@ function Ended(end: FeedEnd): IteratorResult<unknown, void> {
 }
 
 /**
- * Answers one event, waiting for as long as it takes, with a transient failure retried not fatal.
+ * Answers the events of one poll, waiting for as long as it takes for at least one, with a
+ * transient failure retried not fatal. A poll that delivers anything hands it over at once, never
+ * waiting for `changeBatchSize` events.
  * The poll is raced against the feed's own ending, since `pool.end()` abandons queued acquisitions.
  */
 async function Advance(
@@ -497,7 +499,7 @@ async function Advance(
   state: FeedState,
   stages: QueryStage[],
   options: ResolvedOptions,
-): Promise<IteratorResult<unknown, void>> {
+): Promise<unknown[]> {
   if (isSweeping) {
     Retire(reqId, state, CLOSED);
   }
@@ -506,7 +508,7 @@ async function Advance(
       return Ended(state.end);
     }
     if (state.buffer.length > EMPTY) {
-      return { done: false, value: state.buffer.shift() };
+      return state.buffer.splice(0);
     }
     if (!IsOpen(state)) {
       await Open(state, stages);
@@ -526,7 +528,7 @@ async function Advance(
 }
 
 /**
- * Answers one event of the feed named by `reqId`, opening it on the first read.
+ * Answers the next events of the feed named by `reqId`, opening it on the first read.
  *
  * Every read on one `reqId` is chained onto the last, the open included, for `cursors.ts`'
  * reason: two overlapping reads would both poll from the same watermark, deliver the same events
@@ -535,11 +537,11 @@ async function Advance(
  * The options are read here, synchronously, so a spec can drive a feed through a temporary
  * configuration without the set outliving the call.
  */
-export function ReadFeedEvent(
+export function ReadFeedEvents(
   reqId: number,
   stages: QueryStage[],
   env?: FeedEnvironment,
-): Promise<IteratorResult<unknown, void>> {
+): Promise<unknown[]> {
   const options = GetOptions();
   const state = Registered(reqId, env);
   const next = state.chain.then(() => Advance(reqId, state, stages, options));
@@ -563,7 +565,7 @@ export function CloseOneFeed(reqId: number): Promise<void> {
  * Ends every feed, and is registered to run before the pool is ended.
  *
  * A feed holds no pool client, so this is not `cursors.ts`' leak sweep — it exists so an abandoned
- * feed's pending read resolves `{done: true}` instead of being left suspended forever, and so a
+ * feed's pending read resolves an empty batch instead of being left suspended forever, and so a
  * read starting during the sweep ends rather than opening a connection the teardown will not wait
  * for. Teardown is an ending, not a loss, which is why it resolves rather than rejects.
  */

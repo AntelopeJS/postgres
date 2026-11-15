@@ -39,7 +39,7 @@ import {
 } from "./writes-shared";
 import { CompileWrite, SplitWrite, type WriteSplit } from "./writes";
 import { ATOMIC_MUTATION, ExecuteAtomicWrite } from "./writes-atomic";
-import { CloseOneFeed, IsRegisteredFeed, ReadFeedEvent } from "./feeds";
+import { CloseOneFeed, IsRegisteredFeed, ReadFeedEvents } from "./feeds";
 import { CreateInstance, DestroyInstance, ListInstances } from "./instances";
 import {
   CREATE_INSTANCE,
@@ -47,7 +47,7 @@ import {
   ID_COLUMN,
   type QueryStage,
 } from "./utils";
-import { CloseOneCursor, type CursorRequest, ReadCursorRow } from "./cursors";
+import { CloseOneCursor, type CursorRequest, ReadCursorBatch } from "./cursors";
 import { OUTPUT_COLUMN, type Relation, RequireOrigin } from "./relation";
 import { Render } from "./render";
 import {
@@ -367,7 +367,8 @@ function IsFeed(stages: QueryStage[]): boolean {
 }
 
 /**
- * Answers one element of whichever kind of iteration `reqId` names.
+ * Answers the next batch of whichever kind of iteration `reqId` names: the rows of one `FETCH`, or
+ * the events of one change-feed poll, and an empty batch once it has ended.
  *
  * `ReadCursor` is the contract's one entry point for both, and `reqId` comes from the same
  * module-global counter either way, so the kind is decided from the *stages* — and a `reqId`
@@ -380,12 +381,12 @@ function IsFeed(stages: QueryStage[]): boolean {
 export function ReadCursor(
   reqId: number,
   stages: QueryStage[],
-): Promise<IteratorResult<any, void>> {
+): Promise<unknown[]> {
   try {
     if (IsFeed(stages) || IsRegisteredFeed(reqId)) {
-      return ReadFeedEvent(reqId, stages);
+      return ReadFeedEvents(reqId, stages);
     }
-    return ReadCursorRow(reqId, () => CompileCursor(stages, QueryContext()));
+    return ReadCursorBatch(reqId, () => CompileCursor(stages, QueryContext()));
   } catch (err) {
     return Promise.reject(err);
   }

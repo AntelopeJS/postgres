@@ -7,7 +7,7 @@ import {
   type FeedEnvironment,
   type FeedReader,
   type LoggedEvent,
-  ReadFeedEvent,
+  ReadFeedEvents,
 } from "../../implementations/database/feeds";
 
 /**
@@ -100,11 +100,11 @@ export function Feed<T>(body: (reqId: number) => Promise<T>) {
   return WhileConfigured(() => body(reqId)).finally(() => CloseOneFeed(reqId));
 }
 
-/** Reads one event, with the environment supplied so nothing touches a pool. */
+/** Reads the events of one poll, with the environment supplied so nothing touches a pool. */
 export function Step(
   reqId: number,
   read: FeedEnvironment,
   ...between: QueryStage[]
 ) {
-  return ReadFeedEvent(reqId, Stages(...between), read);
+  return ReadFeedEvents(reqId, Stages(...between), read);
 }

@@ -53,7 +53,8 @@ export interface Options {
   /** Schema convergence policy. Defaults to `safe`. */
   migrations?: MigrationMode;
   /**
-   * Rows fetched per round trip when iterating a cursor. Defaults to 100.
+   * Rows fetched per round trip when iterating a cursor, and handed over together by one read.
+   * Defaults to 1000.
    *
    * Refused unless it is a positive safe integer, where every other number here is taken as given:
    * `FETCH FORWARD $1` is a syntax error (`42601`), so this one is interpolated into the statement
@@ -128,7 +129,7 @@ const OWNED_ONLY_OPTIONS: readonly (keyof Options)[] = [
 ];
 const DEFAULT_MIGRATIONS: MigrationMode = "safe";
 const DEFAULT_SCHEMA_PREFIX = "";
-const DEFAULT_CURSOR_BATCH_SIZE = 100;
+const DEFAULT_CURSOR_BATCH_SIZE = 1000;
 const DEFAULT_CURSOR_IDLE_TIMEOUT_MS = 60_000;
 const DEFAULT_CHANGE_RETENTION_MS = 300_000;
 const DEFAULT_CHANGE_BATCH_SIZE = 256;
