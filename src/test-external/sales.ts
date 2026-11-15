@@ -144,6 +144,12 @@ export async function Native<T extends QueryResultRow>(
 }
 
 /**
+ * How long the owner waits for its lock: it is granted at once unless another session is reading the
+ * relation, and then the test fails on that rather than queueing every later reader behind it.
+ */
+const OWNER_LOCK_TIMEOUT_MS = 1000;
+
+/**
  * Runs `body` while the fixture's owner holds `relation` in `ACCESS EXCLUSIVE` mode on a connection
  * of its own, so every read of it made inside `body` waits until `body` has settled.
  */
@@ -157,6 +163,7 @@ export async function WhileLocked<T>(
   await owner.connect();
   try {
     await owner.query("BEGIN");
+    await owner.query(`SET LOCAL lock_timeout = ${OWNER_LOCK_TIMEOUT_MS}`);
     await owner.query(`LOCK TABLE ${relation} IN ACCESS EXCLUSIVE MODE`);
     return await body();
   } finally {
