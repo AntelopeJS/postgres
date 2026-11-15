@@ -182,6 +182,7 @@ Each consumer reaches the catalog through a connection on its own module entry. 
 
 - Text columns answer no minimum or maximum.
 - A profile names a value only as a category of a column with at most 25 distinct values, and only if the value is counted at least 5 times.
+- The range of an enum or integer column ends at the smallest and largest values counted at least 5 times. When no value is, the range answers `{ status: "error", code: "empty" }`. Decimal, floating-point and date columns answer their true minimum and maximum.
 - The profile does not read values from `pg_stats`.
 
 **A sample of rows is for a person.** `SampleRows` is the one catalog function that answers row values. They are for a person to look at, never for a generator or a model.
