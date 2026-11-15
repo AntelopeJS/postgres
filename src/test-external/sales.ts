@@ -135,10 +135,28 @@ export type SalesTables = Record<string, SalesRow>;
  */
 export const REGISTRATION_TIMEOUT_MS = 30_000;
 
+/** Every registration {@link RegisterSales} started that has not settled yet, the latest or not. */
+const inFlight = new Set<Promise<void>>();
+
 export async function RegisterSales(): Promise<Schema<SalesTables>> {
   const schema = new Schema<SalesTables>(SALES, SALES_DEFINITION);
-  await WaitForSchemaReady(SALES);
+  const settled = WaitForSchemaReady(SALES);
+  inFlight.add(settled);
+  try {
+    await settled;
+  } finally {
+    inFlight.delete(settled);
+  }
   return schema;
+}
+
+/**
+ * Settles once every registration {@link RegisterSales} started has settled, including one a timed
+ * out hook left running, which a schema's readiness gate no longer answers for once a later
+ * registration replaced it.
+ */
+export async function RegistrationsSettled(): Promise<void> {
+  await Promise.allSettled(inFlight);
 }
 
 /** The answer a native query over the same rows gives, which is what every read is held to. */

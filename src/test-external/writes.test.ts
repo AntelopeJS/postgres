@@ -16,6 +16,7 @@ import { ExternalWriteError } from "../implementations/database/external-errors"
 import {
   Native,
   NativeCount,
+  REGISTRATION_TIMEOUT_MS,
   RegisterSales,
   type SalesRow as Row,
   type SalesTables,
@@ -79,7 +80,8 @@ async function Seeded(code: string): Promise<string> {
 }
 
 describe("inserting into an external relation", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
     await Reset();
   });
@@ -205,7 +207,8 @@ describe("inserting into an external relation", () => {
 });
 
 describe("values an external column cannot hold", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
     await Reset();
   });
@@ -234,7 +237,8 @@ describe("values an external column cannot hold", () => {
 });
 
 describe("writing back what was read from an external relation", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
     await Reset();
   });
@@ -301,7 +305,8 @@ describe("writing back what was read from an external relation", () => {
 });
 
 describe("editing through a key field read lossily, as data-api's edit sends it", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
     await Reset();
   });
@@ -340,7 +345,8 @@ describe("editing through a key field read lossily, as data-api's edit sends it"
 });
 
 describe("selecting the rows an external write changes", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
     await Reset();
   });
@@ -443,7 +449,8 @@ describe("selecting the rows an external write changes", () => {
 });
 
 describe("what the database refuses on a write to an external relation", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
     await Reset();
   });

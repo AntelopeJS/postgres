@@ -7,6 +7,7 @@ import {
 import {
   Native,
   NativeCount,
+  REGISTRATION_TIMEOUT_MS,
   RegisterSales,
   type SalesRow as Row,
   type SalesTables,
@@ -33,7 +34,8 @@ function NextDay(iso: string): Date {
 }
 
 describe("listing an external relation as a TableView does", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
   });
 
@@ -134,7 +136,8 @@ describe("listing an external relation as a TableView does", () => {
 });
 
 describe("reading an external row by key", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
   });
 
@@ -192,7 +195,8 @@ describe("reading an external row by key", () => {
 });
 
 describe("reading across external relations", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
   });
 
@@ -250,7 +254,8 @@ describe("reading across external relations", () => {
 });
 
 describe("the _id of relations without a single-column primary key", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
   });
 
@@ -294,7 +299,8 @@ describe("the _id of relations without a single-column primary key", () => {
 });
 
 describe("instances over an external relation", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
   });
 
