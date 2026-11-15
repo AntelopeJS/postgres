@@ -101,6 +101,28 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA sales TO dms_client;
 
 A write to a table that the account was not granted fails as `forbidden`. The module never needs more. With this account, a module wired by mistake to an owned instance on this URL fails at its first `CREATE` and does not change the client's database. Set `statementTimeoutMs` too, because these are someone else's production tables.
 
+### Checking an account before connecting
+
+`@antelopejs/postgres/dist/probe` exports `probe`, the `Probe` of `@antelopejs/interface-database-catalog`. It loads in plain Node, outside the AntelopeJS runtime, and reads no module configuration. It signs in once with `url` and changes no row:
+
+```typescript fragment
+import { probe } from "@antelopejs/postgres/dist/probe";
+
+const answer = await probe({ url, timeoutMs: 5000, signal });
+```
+
+- `refused` names why the server turned the sign-in down: `credentials` for `28P01`, `host` for `28000`, `database` for `3D000`, `database-denied` for `42501` (no `CONNECT` on the database), and `other`, with the server's message, for any other server error. `sign-in-required` means the server asked for a password the URL does not give. The probe uses the URL's credentials only: it never takes a missing password from `PGPASSWORD` or `.pgpass`, so the probing process's own secret never reaches the host the URL names.
+- `unreachable` means no server answered, or it stopped answering within `timeoutMs`.
+- `signed-in` carries `user`, the account's `current_user`, and `latencyMs`, its first query rounded up. `canWrite` holds when the account may insert, update or delete in any relation the catalog's `ListRelations` sees. `canRead` holds when it may read one of those relations as a whole, or sees none. Each relation is judged as `ListRelations` judges it, so a relation readable on some columns only does not count. When the server refuses the relation listing after the sign-in, the answer says `unreadable: "cannot-list"`, with `canRead` and `canWrite` false.
+
+The probe signs in to the host the URL names with the user name and password the URL carries, and nothing else:
+
+- A URL with a control character, no user or no host is refused as `other` before connecting: `pg` would take them from `PGUSER`, the OS user name or `PGHOST`. A password the URL lacks is never taken from `PGPASSWORD`, `PGPASSFILE` or `~/.pgpass`.
+- `sslcert`, `sslkey` and `sslrootcert` are refused as `other` before connecting: the probe reads no file of the probing host. A client certificate of that host is a credential, and a read of a CA file cannot be bounded in time. Every other TLS option of the URL is kept, as the driver's pool reads it, except an `ssl` value other than `true`, `1`, `0` or `no-verify`, which `pg` fails on once the server accepts TLS: that URL is refused as `other`.
+- `timeoutMs` bounds each answer whatever the URL says: the probe sets `query_timeout`, `statement_timeout`, `lock_timeout` and `idle_in_transaction_session_timeout` itself, and opens no replication session. The relation listing runs in a read-only transaction, so a `search_path` from the URL's `options` cannot make it write.
+
+The probe closes its connection once it answers, and shuts the socket when the server has not closed it 250 ms later. When `signal` aborts before the probe answers, it shuts every socket at once and answers `{ outcome: "unreachable", message: "The probe was aborted." }`, whatever the server has said so far. A signal that has already aborted gets the same answer, and nothing is opened. An abort while the probe waits for the server to close shuts the socket at once too.
+
 ## The catalog
 
 An external instance also implements `@antelopejs/interface-database-catalog`. The catalog describes and profiles the database for a generator: relations, columns, keys, references, row estimates, and aggregates over the data. It answers with this module's own registration rules. A relation that it calls mappable registers, and the declarations that it lists for a column are the ones that registration accepts.

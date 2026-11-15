@@ -1,6 +1,6 @@
 import type { SampleInfo } from "@antelopejs/interface-database-catalog";
 
-import type { RelationRow } from "./external-discovery";
+import type { RelationRow } from "./external-access";
 import { QualifiedName } from "./identifier";
 
 /** Above this many estimated rows a relation is sampled rather than read whole. */

@@ -27,8 +27,8 @@ import {
   ReadReferences,
   ReferenceOf,
   RelationName,
-  type RelationRow,
 } from "./external-discovery";
+import type { RelationRow } from "./external-access";
 import {
   FirstRow,
   type MeasureSession,

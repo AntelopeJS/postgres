@@ -14,8 +14,8 @@ import {
   EstimateOf,
   KeyFrom,
   ReadNamedRelationRows,
-  type RelationRow,
 } from "./external-discovery";
+import type { RelationRow } from "./external-access";
 import { FirstRow, WithMeasures } from "./external-measures";
 import { SourceFor } from "./external-sample";
 import { QualifiedName } from "./identifier";

@@ -120,7 +120,7 @@ This repository documents what is specific to the PostgreSQL backend:
 | ---------------------------------------- | ---------------- | ----------- |
 | `@antelopejs/interface-core`             | `>=0.5.0 <0.6.0` | `0.5.1`     |
 | `@antelopejs/interface-database`         | `>=0.4.0 <0.5.0` | `0.4.0`     |
-| `@antelopejs/interface-database-catalog` | `>=0.0.3 <0.1.0` | `0.0.3`     |
+| `@antelopejs/interface-database-catalog` | `>=0.1.0 <0.2.0` | `0.1.0`     |
 
 <!-- antelopejs-docs-compat:end -->
 
