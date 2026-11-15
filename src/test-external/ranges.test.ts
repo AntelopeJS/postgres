@@ -11,9 +11,10 @@ const DECLARED_GRADES = '["bronze","silver","gold","platinum"]';
 
 async function ProfiledColumn(
   column: string,
+  relation = "sales.grades",
 ): Promise<{ profile: ColumnProfile | undefined; results: string }> {
   const { answer, results } = await Received(() =>
-    Profile({ relation: "sales.grades", columns: [column] }),
+    Profile({ relation, columns: [column] }),
   );
   return {
     profile: answer.columns.find((profiled) => profiled.name === column),
@@ -51,5 +52,18 @@ describe("the range of an external column", function () {
   it("answers empty for an integer column whose every value is seen once", async () => {
     const { profile } = await ProfiledColumn("id");
     expect(profile?.range).to.deep.equal({ status: "error", code: "empty" });
+  });
+
+  it("counts int8 values one float8 cannot tell apart as distinct values, so five seen once each stay unnamed", async () => {
+    const { profile, results } = await ProfiledColumn(
+      "ref",
+      "sales.snowflakes",
+    );
+    expect(profile?.range).to.deep.equal({ status: "error", code: "empty" });
+    expect(profile?.categories).to.deep.equal({
+      status: "ok",
+      value: { values: [], other: 5 },
+    });
+    expect(results).to.not.match(/15000000000000000\d\d/);
   });
 });
