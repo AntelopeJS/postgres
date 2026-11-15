@@ -206,6 +206,19 @@ function WorkCases() {
     });
   }
 
+  for (const query of ["ssl=", "ssl=0"]) {
+    it(`keeps ${query}, which pg reads as no TLS`, async () => {
+      await WithServer(await StartRecordingServer(), async (server) => {
+        await Bounded(
+          `${OnPort(LoginUrl(LOGIN.reader), server.port)}?${query}`,
+        );
+        expect(StartupParameters(server.first()).get("user")).to.equal(
+          LOGIN.reader,
+        );
+      });
+    });
+  }
+
   it("keeps ssl=no-verify and asks for TLS", async () => {
     await WithServer(await StartRecordingServer(), async (server) => {
       await Bounded(

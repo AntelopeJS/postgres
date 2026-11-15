@@ -1,3 +1,5 @@
+import type { ConnectionOptions } from "node:tls";
+
 import type { Client } from "pg";
 
 declare module "pg" {
@@ -10,8 +12,12 @@ declare module "pg" {
   }
 }
 
-/** The fields of `pg`'s `ConnectionParameters` the probe sets after the URL is merged. */
+/** The TLS setting `pg` connects with: off, on, its options, or text it did not convert. */
+type ConnectionSsl = boolean | string | ConnectionOptions | undefined;
+
+/** The fields of `pg`'s `ConnectionParameters` the probe reads or sets after the URL is merged. */
 interface ConnectionParameters {
+  ssl: ConnectionSsl;
   query_timeout: number | false | undefined;
   statement_timeout: number | false | undefined;
   lock_timeout: number | false | undefined;
@@ -68,5 +74,22 @@ export function OverrideParameters(client: Client, timeoutMs: number): void {
     lock_timeout: timeoutMs,
     idle_in_transaction_session_timeout: timeoutMs,
     replication: undefined,
-  } satisfies ConnectionParameters);
+  } satisfies Omit<ConnectionParameters, "ssl">);
+}
+
+const SSL_TEXT =
+  "the URL's ssl value is none of true, 1, 0, empty or no-verify, and pg fails on it once the server accepts TLS";
+
+/** Whether `pg` kept `ssl` as text, which it reads only when empty. */
+function IsSslText(ssl: ConnectionSsl): ssl is string {
+  return typeof ssl === "string";
+}
+
+/**
+ * Why `client` must not connect: `pg` resolved its `ssl` to text it does not convert, and once the
+ * server accepts TLS it throws on that text inside a socket event, where no promise catches it.
+ */
+export function SslRefusal(client: Client): string | undefined {
+  const { ssl } = client.connectionParameters;
+  return IsSslText(ssl) && ssl !== "" ? SSL_TEXT : undefined;
 }

@@ -13,7 +13,7 @@ import {
   type RelationAccess,
   type RelationPrivileges,
 } from "./implementations/database/external-access";
-import { OverrideParameters } from "./probe-parameters";
+import { OverrideParameters, SslRefusal } from "./probe-parameters";
 import { ReadUrl } from "./probe-url";
 
 /** How long a client may take to close before its sockets are shut. */
@@ -243,6 +243,10 @@ export const probe: Probe = async ({ url, timeoutMs, signal }) => {
       return { outcome: "refused", refusal: "other", message: reading.message };
     }
     session = Open(url, reading.url.password, timeoutMs);
+    const sslRefusal = SslRefusal(session.client);
+    if (sslRefusal) {
+      return { outcome: "refused", refusal: "other", message: sslRefusal };
+    }
     return await Promise.race([SignIn(session), aborted.answer]);
   } catch (err) {
     return Unanswered(err);

@@ -12,9 +12,6 @@ const CLIENT_CERTIFICATE =
 const ROOT_CERTIFICATE =
   "the URL names a CA file of the probing host (sslrootcert), and the probe reads no file: a read of one cannot be bounded in time";
 
-const SSL_VALUE =
-  "the URL's ssl value is none of true, 1, 0 or no-verify, and pg fails on it once the server accepts TLS";
-
 const NO_USER =
   "the URL names no user, and the probe signs in as no user of the probing process";
 
@@ -62,19 +59,8 @@ function FileRefusal(query: URLSearchParams): string | undefined {
   return query.has("sslrootcert") ? ROOT_CERTIFICATE : undefined;
 }
 
-/** Whether the parser left `ssl` as the URL's own text, which only `no-verify` may be. */
-function IsSslText(ssl: ConnectionOptions["ssl"]): ssl is string {
-  return typeof ssl === "string";
-}
-
-/**
- * Why the parsed URL cannot be used: `pg` would throw outside any promise on an `ssl` text it does
- * not know once the server accepts TLS, or sign in with the probing process's user name or host.
- */
+/** Why the parsed URL would sign in with the probing process's user name or host. */
 function ParsedRefusal(url: ConnectionOptions): string | undefined {
-  if (IsSslText(url.ssl) && url.ssl !== "no-verify") {
-    return SSL_VALUE;
-  }
   if (!url.user) {
     return NO_USER;
   }
