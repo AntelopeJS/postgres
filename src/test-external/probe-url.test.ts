@@ -185,16 +185,17 @@ function WorkCases() {
     });
   }
 
-  for (const value of ["false", "require", "abc"]) {
-    it(`refuses ssl=${value}, which pg fails on once TLS starts, before connecting`, async () => {
+  for (const query of [
+    "ssl=false",
+    "ssl=require",
+    "ssl=abc",
+    "ssl=false&sslmode=",
+  ]) {
+    it(`refuses ${query}, which pg fails on once TLS starts, before connecting`, async () => {
       await WithServer(
         await StartRecordingServer(TLS_ACCEPTED),
         async (server) => {
-          const url = WithParameter(
-            OnPort(LoginUrl(LOGIN.reader), server.port),
-            "ssl",
-            value,
-          );
+          const url = `${OnPort(LoginUrl(LOGIN.reader), server.port)}?${query}`;
           expect(await Bounded(url)).to.include({
             outcome: "refused",
             refusal: "other",

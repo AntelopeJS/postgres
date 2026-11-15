@@ -12,9 +12,6 @@ const CLIENT_CERTIFICATE =
 const ROOT_CERTIFICATE =
   "the URL names a CA file of the probing host (sslrootcert), and the probe reads no file: a read of one cannot be bounded in time";
 
-/** The `ssl` values `pg` turns into a TLS setting; it fails on any other string once TLS starts. */
-const SSL_VALUES = new Set(["true", "1", "0", "no-verify"]);
-
 const SSL_VALUE =
   "the URL's ssl value is none of true, 1, 0 or no-verify, and pg fails on it once the server accepts TLS";
 
@@ -65,20 +62,19 @@ function FileRefusal(query: URLSearchParams): string | undefined {
   return query.has("sslrootcert") ? ROOT_CERTIFICATE : undefined;
 }
 
-/**
- * Why `pg` would throw outside the probe's reach: the parser keeps the last `ssl` value as a string
- * unless `sslmode` replaces it, and `pg` then reads it as an object when the server accepts TLS.
- */
-function SslRefusal(query: URLSearchParams): string | undefined {
-  const ssl = query.getAll("ssl").at(-1);
-  if (ssl === undefined || query.has("sslmode") || SSL_VALUES.has(ssl)) {
-    return undefined;
-  }
-  return SSL_VALUE;
+/** Whether the parser left `ssl` as the URL's own text, which only `no-verify` may be. */
+function IsSslText(ssl: ConnectionOptions["ssl"]): ssl is string {
+  return typeof ssl === "string";
 }
 
-/** Why the parsed URL would sign in with the probing process's user name or host. */
-function IdentityRefusal(url: ConnectionOptions): string | undefined {
+/**
+ * Why the parsed URL cannot be used: `pg` would throw outside any promise on an `ssl` text it does
+ * not know once the server accepts TLS, or sign in with the probing process's user name or host.
+ */
+function ParsedRefusal(url: ConnectionOptions): string | undefined {
+  if (IsSslText(url.ssl) && url.ssl !== "no-verify") {
+    return SSL_VALUE;
+  }
   if (!url.user) {
     return NO_USER;
   }
@@ -94,13 +90,13 @@ export function ReadUrl(url: string): UrlReading {
     return { kind: "refused", message: CONTROL_REFUSAL };
   }
   const query = QueryOf(url);
-  const queryRefusal = FileRefusal(query) ?? SslRefusal(query);
+  const queryRefusal = FileRefusal(query);
   if (queryRefusal) {
     return { kind: "refused", message: queryRefusal };
   }
   const parsed = parse(url);
-  const identityRefusal = IdentityRefusal(parsed);
-  return identityRefusal
-    ? { kind: "refused", message: identityRefusal }
+  const parsedRefusal = ParsedRefusal(parsed);
+  return parsedRefusal
+    ? { kind: "refused", message: parsedRefusal }
     : { kind: "read", url: parsed };
 }
