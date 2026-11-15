@@ -121,7 +121,9 @@ function IsConstantJson(value: unknown): value is ConstantJson {
  * never walked. The order is the order the kinds were always told apart in, which is what makes a
  * `ValueProxy` a proxy before it is an object.
  */
-export function ClassifyMember(value: unknown): Member {
+export function ClassifyMember(
+  value: NonNullable<unknown> | null | undefined,
+): Member {
   const document: DocumentView | undefined = IsDocument(value)
     ? {
         entries: () =>
