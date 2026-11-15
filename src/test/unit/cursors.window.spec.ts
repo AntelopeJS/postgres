@@ -33,8 +33,8 @@ describe("the cursor registry", () => {
     await OverflowEndings();
     for (let index = 0; index < DESCENDING_CURSORS; index += 1) {
       const log = Recorder();
-      const rows = await Drain(NextReqId(), Requesting(log, [Rows(1, 2)]));
-      expect(rows).to.deep.equal([1, 2]);
+      const batches = await Drain(NextReqId(), Requesting(log, [Rows(1, 2)]));
+      expect(batches).to.deep.equal([[1, 2]]);
       expect(log.acquires).to.equal(1);
       expect(Count(log, BEGIN)).to.equal(1);
     }
@@ -44,8 +44,8 @@ describe("the cursor registry", () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Reopening(log, 1, 2);
-    expect(await Drain(reqId, open)).to.deep.equal([1, 2]);
-    expect((await Read(reqId, open)).done).to.equal(true);
+    expect(await Drain(reqId, open)).to.deep.equal([[1, 2]]);
+    expect(await Read(reqId, open)).to.deep.equal([]);
     await OverflowEndings();
     const err = await Rejection(Read(reqId, open));
     expect(err.message).to.contain(`${reqId}`);
@@ -59,7 +59,7 @@ describe("the cursor registry", () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Reopening(log, 1, 2);
-    expect((await Read(reqId, open, REAPING)).value).to.equal(1);
+    expect(await Read(reqId, open, REAPING)).to.deep.equal([1, 2]);
     await Delay(REAP_WINDOW_MS);
     expect(log.releases).to.equal(1);
     await OverflowEndings();
@@ -80,7 +80,7 @@ describe("the cursor registry", () => {
    * It is still live, still holding its client, and the registry still has it, so the range is not
    * the question being asked about it.
    *
-   * Consulting the range first instead would end a cursor mid-iteration, one row into a result the
+   * Consulting the range first instead would end a cursor mid-iteration, one batch into a result the
    * caller is still reading, and hand it the refusal a genuinely forgotten `reqId` earns — while
    * its client stays checked out with nothing left able to give it back.
    */
@@ -89,12 +89,14 @@ describe("the cursor registry", () => {
     const ended = Recorder();
     const liveId = NextReqId();
     const endedId = NextReqId();
-    const openLive = Reopening(live, 1, 2);
-    expect((await Read(liveId, openLive)).value).to.equal(1);
+    const openLive = Requesting(live, [Rows(1, 2, 3), Rows(4)]);
+    expect(await Read(liveId, openLive)).to.deep.equal([1, 2, 3]);
     expect(CountOpenCursors()).to.equal(baseline + 1);
-    expect(await Drain(endedId, Reopening(ended, 3, 4))).to.deep.equal([3, 4]);
+    expect(await Drain(endedId, Reopening(ended, 5, 6))).to.deep.equal([
+      [5, 6],
+    ]);
     await OverflowEndings();
-    expect((await Read(liveId, openLive)).value).to.equal(2);
+    expect(await Read(liveId, openLive)).to.deep.equal([4]);
     expect(CountOpenCursors()).to.equal(baseline + 1);
     expect(live.acquires).to.equal(1);
     expect(Count(live, BEGIN)).to.equal(1);
@@ -111,10 +113,10 @@ describe("the cursor registry", () => {
    * `release()` returns, but a failed open has nothing to give back and reaches that point already
    * empty-handed — so if the ending is not recorded where it happens, the state stays resident for
    * the life of the process. Every failed open, every read of a forgotten `reqId` and every read
-   * that raced the sweep would leave one behind, and each would go on answering `done` over a query
+   * that raced the sweep would leave one behind, and each would go on answering an empty batch over a query
    * that never ran where a forgotten cursor is refused.
    */
-  it("refuses a reqId whose failed open it has forgotten, rather than answering done", async () => {
+  it("refuses a reqId whose failed open it has forgotten, rather than answering an empty batch", async () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Requesting(log, [], DECLARE);

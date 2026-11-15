@@ -184,10 +184,10 @@ describe("a change feed's events", () => {
       },
     ]);
     await Feed(async (reqId) => {
-      const step = await Step(reqId, read);
-      expect(step.value).to.have.property("changeType", "added");
-      expect(step.value).to.not.have.property("oldValue");
-      expect(step.value).to.have.deep.property("newValue", {
+      const [event] = await Step(reqId, read);
+      expect(event).to.have.property("changeType", "added");
+      expect(event).to.not.have.property("oldValue");
+      expect(event).to.have.deep.property("newValue", {
         _id: "a",
         car: "Renault",
       });
@@ -203,10 +203,10 @@ describe("a change feed's events", () => {
       },
     ]);
     await Feed(async (reqId) => {
-      const step = await Step(reqId, read);
-      expect(step.value).to.have.property("changeType", "removed");
-      expect(step.value).to.not.have.property("newValue");
-      expect(step.value).to.have.deep.property("oldValue", { _id: "a" });
+      const [event] = await Step(reqId, read);
+      expect(event).to.have.property("changeType", "removed");
+      expect(event).to.not.have.property("newValue");
+      expect(event).to.have.deep.property("oldValue", { _id: "a" });
     });
   });
 
@@ -225,13 +225,13 @@ describe("a change feed's events", () => {
       },
     ]);
     await Feed(async (reqId) => {
-      const step = await Step(reqId, read);
-      expect(step.value).to.have.property("changeType", "modified");
-      expect(step.value).to.have.deep.property("oldValue", {
+      const [event] = await Step(reqId, read);
+      expect(event).to.have.property("changeType", "modified");
+      expect(event).to.have.deep.property("oldValue", {
         _id: "a",
         price: 1,
       });
-      expect(step.value).to.have.deep.property("newValue", {
+      expect(event).to.have.deep.property("newValue", {
         _id: "a",
         price: 2,
       });
@@ -253,19 +253,19 @@ describe("a change feed's events", () => {
       },
     ]);
     await Feed(async (reqId) => {
-      const step = await Step(reqId, read);
-      expect(step.value).to.have.deep.property("oldValue", {
+      const [event] = await Step(reqId, read);
+      expect(event).to.have.deep.property("oldValue", {
         _id: "a",
         price: 50,
       });
-      expect(step.value).to.have.deep.property("newValue", {
+      expect(event).to.have.deep.property("newValue", {
         _id: "a",
         price: 200,
       });
     });
   });
 
-  it("buffers a batch and answers it one event per read, in order", async () => {
+  it("hands over every event of one poll in one read, in order", async () => {
     const { read } = Reader([
       { scanned_to: "0" },
       {
@@ -277,10 +277,10 @@ describe("a change feed's events", () => {
       },
     ]);
     await Feed(async (reqId) => {
-      const one = await Step(reqId, read);
-      const two = await Step(reqId, read);
-      expect(one.value).to.have.nested.property("newValue._id", "first");
-      expect(two.value).to.have.nested.property("newValue._id", "second");
+      const events = await Step(reqId, read);
+      expect(events).to.have.lengthOf(2);
+      expect(events[0]).to.have.nested.property("newValue._id", "first");
+      expect(events[1]).to.have.nested.property("newValue._id", "second");
     });
   });
 });
@@ -310,8 +310,7 @@ describe("the three ways a change feed ends", () => {
       },
     ]);
     await Feed(async (reqId) => {
-      const step = await Step(reqId, read);
-      expect(step.done).to.equal(false);
+      expect(await Step(reqId, read)).to.have.lengthOf(1);
     });
   });
 
@@ -332,12 +331,12 @@ describe("the three ways a change feed ends", () => {
     });
   });
 
-  it("answers done rather than rejecting when it was closed", async () => {
+  it("answers an empty batch rather than rejecting when it was closed", async () => {
     const { read } = Reader([{ scanned_to: "0" }, { events: [] }]);
     const reqId = NewReqId();
     const pending = WhileConfigured(() => Step(reqId, read));
     await CloseOneFeed(reqId);
-    expect(await pending).to.deep.equal({ done: true, value: undefined });
+    expect(await pending).to.deep.equal([]);
   });
 
   it("resolves a waiting read when the connection is being torn down", async () => {
@@ -345,7 +344,7 @@ describe("the three ways a change feed ends", () => {
     const reqId = NewReqId();
     const pending = WhileConfigured(() => Step(reqId, read));
     await CloseAllFeeds();
-    expect(await pending).to.deep.equal({ done: true, value: undefined });
+    expect(await pending).to.deep.equal([]);
   });
 });
 
@@ -360,14 +359,11 @@ describe("the change feed registry", () => {
     await pending;
   });
 
-  it("closes a reqId it has never seen, so a read arriving after it answers done", async () => {
+  it("closes a reqId it has never seen, so a read arriving after it answers an empty batch", async () => {
     const reqId = NewReqId();
     await CloseOneFeed(reqId);
     const { read } = Reader([{ scanned_to: "0" }, { events: [] }]);
-    expect(await WhileConfigured(() => Step(reqId, read))).to.deep.equal({
-      done: true,
-      value: undefined,
-    });
+    expect(await WhileConfigured(() => Step(reqId, read))).to.deep.equal([]);
   });
 });
 
@@ -402,10 +398,7 @@ describe("dispatching an iteration between a cursor and a feed", () => {
     const reqId = NewReqId();
     const opened = WhileConfigured(() => Step(reqId, read));
     await CloseCursor(reqId);
-    expect(await opened).to.deep.equal({ done: true, value: undefined });
-    expect(await WhileConfigured(() => Step(reqId, read))).to.deep.equal({
-      done: true,
-      value: undefined,
-    });
+    expect(await opened).to.deep.equal([]);
+    expect(await WhileConfigured(() => Step(reqId, read))).to.deep.equal([]);
   });
 });
