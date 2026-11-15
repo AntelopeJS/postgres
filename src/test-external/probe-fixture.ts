@@ -1,0 +1,141 @@
+import { randomBytes } from "node:crypto";
+
+import type { ProbeAnswer } from "@antelopejs/interface-database-catalog";
+import { expect } from "chai";
+import { Client } from "pg";
+
+import { probe } from "../probe";
+
+export const TIMEOUT_MS = 2000;
+
+const SECRET = randomBytes(6).toString("hex");
+
+export const ABORTED_ANSWER = {
+  outcome: "unreachable",
+  message: "The probe was aborted.",
+};
+
+/** The logins the probe suites sign in as, each named for what it was granted. */
+export const LOGIN = {
+  reader: "probe_reader",
+  writer: "probe_writer",
+  updater: "probe_updater",
+  deleter: "probe_deleter",
+  columns: "probe_columns",
+  blind: "probe_blind",
+  unseen: "probe_unseen",
+  grantee: "probe@grantee",
+  trapped: "probe_trapped",
+} as const;
+
+export const NO_LOGIN = "probe_nologin";
+
+export const LOCKED_DATABASE = "probe_locked";
+
+const READERS_GROUP = "probe_readers";
+const TEAM_GROUP = "probe_team";
+const TRAP_SCHEMA = "probe_trap";
+const GROUPS = [READERS_GROUP, TEAM_GROUP];
+const ROLES = [...Object.values(LOGIN), NO_LOGIN, ...GROUPS];
+
+function Quoted(role: string): string {
+  return `"${role}"`;
+}
+
+/** Grants that make each login what it is named for; the trapped one fails its relation listing. */
+const SETUP = [
+  ...Object.values(LOGIN).map(
+    (role) => `CREATE ROLE ${Quoted(role)} LOGIN PASSWORD '${SECRET}'`,
+  ),
+  `CREATE ROLE ${NO_LOGIN} NOLOGIN PASSWORD '${SECRET}'`,
+  ...GROUPS.map((role) => `CREATE ROLE ${role} NOLOGIN`),
+  `GRANT USAGE ON SCHEMA sales TO ${[LOGIN.reader, LOGIN.writer, LOGIN.updater, LOGIN.deleter, LOGIN.columns, LOGIN.blind, LOGIN.trapped, READERS_GROUP].join(", ")}`,
+  `GRANT SELECT ON sales.countries TO ${LOGIN.reader}, ${LOGIN.trapped}, ${READERS_GROUP}`,
+  `GRANT SELECT, INSERT ON sales.countries TO ${LOGIN.writer}`,
+  `GRANT UPDATE ON sales.countries TO ${LOGIN.updater}`,
+  `GRANT DELETE ON sales.countries TO ${LOGIN.deleter}`,
+  `GRANT SELECT (code) ON sales.countries TO ${LOGIN.columns}`,
+  `GRANT ${READERS_GROUP} TO ${TEAM_GROUP}`,
+  `GRANT ${TEAM_GROUP} TO ${Quoted(LOGIN.grantee)}`,
+  `CREATE SCHEMA ${TRAP_SCHEMA}`,
+  `CREATE FUNCTION ${TRAP_SCHEMA}.obj_description(oid, name) RETURNS text
+    LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'the listing is refused'; END $$`,
+  `GRANT USAGE ON SCHEMA ${TRAP_SCHEMA} TO ${LOGIN.trapped}`,
+  `ALTER ROLE ${LOGIN.trapped} SET search_path = ${TRAP_SCHEMA}, pg_catalog`,
+  `CREATE DATABASE ${LOCKED_DATABASE}`,
+  `REVOKE CONNECT ON DATABASE ${LOCKED_DATABASE} FROM PUBLIC`,
+];
+
+const TEARDOWN = [
+  `DROP DATABASE ${LOCKED_DATABASE}`,
+  `DROP SCHEMA ${TRAP_SCHEMA} CASCADE`,
+  ...ROLES.flatMap((role) => [
+    `DROP OWNED BY ${Quoted(role)}`,
+    `DROP ROLE ${Quoted(role)}`,
+  ]),
+];
+
+function OwnerUrl(): string {
+  const url = process.env.PG_TEST_CLIENT_OWNER_URL;
+  if (!url) {
+    throw new Error("PG_TEST_CLIENT_OWNER_URL is set by the test setup");
+  }
+  return url;
+}
+
+async function RunAsOwner(statements: readonly string[]): Promise<void> {
+  const client = new Client({ connectionString: OwnerUrl() });
+  await client.connect();
+  try {
+    for (const statement of statements) {
+      await client.query(statement);
+    }
+  } finally {
+    await client.end();
+  }
+}
+
+/** Creates the probe suites' logins and database before a suite, and drops them after it. */
+export function WithProbeLogins(): void {
+  before(() => RunAsOwner(SETUP));
+  after(() => RunAsOwner(TEARDOWN));
+}
+
+export function Altered(url: string, change: (target: URL) => void): string {
+  const target = new URL(url);
+  change(target);
+  return target.toString();
+}
+
+export function LoginUrl(role: string, password = SECRET): string {
+  return Altered(OwnerUrl(), (target) => {
+    target.username = role;
+    target.password = password;
+  });
+}
+
+export function OnPort(url: string, port: number, host = "127.0.0.1"): string {
+  return Altered(url, (target) => {
+    target.hostname = host;
+    target.port = String(port);
+  });
+}
+
+export function ServerPort(): number {
+  return Number(new URL(OwnerUrl()).port);
+}
+
+export function Probe(
+  url: string,
+  signal: AbortSignal = new AbortController().signal,
+): Promise<ProbeAnswer> {
+  return probe({ url, timeoutMs: TIMEOUT_MS, signal });
+}
+
+export function SignedIn(answer: ProbeAnswer) {
+  expect(answer.outcome).to.equal("signed-in");
+  if (answer.outcome !== "signed-in") {
+    throw new Error("unreachable after the expectation");
+  }
+  return answer;
+}
