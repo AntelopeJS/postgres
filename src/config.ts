@@ -1,7 +1,11 @@
 import { GetRuntimeInfo } from "@antelopejs/interface-core/runtime";
 import { Client, type ClientConfig, type PoolConfig } from "pg";
 
-import type { ConnectionSsl } from "./pg-connection-parameters";
+import {
+  type ConnectionSsl,
+  IsUnusableSsl,
+  type UnusableSsl,
+} from "./pg-connection-parameters";
 
 /**
  * How aggressively schema registration is allowed to alter existing tables.
@@ -185,16 +189,6 @@ interface SslSource {
   name: string;
   config: ClientConfig;
   advice: string;
-}
-
-/** A primitive `pg` cannot read as a TLS setting: it reads only `true`, an object or a falsy value. */
-type UnusableSsl = string | number | bigint | symbol;
-
-const UNUSABLE_SSL_KINDS = new Set(["string", "number", "bigint", "symbol"]);
-
-/** Whether `pg` throws on `ssl` once the server accepts TLS: a truthy primitive other than `true`. */
-function IsUnusableSsl(ssl: ConnectionSsl): ssl is UnusableSsl {
-  return Boolean(ssl) && UNUSABLE_SSL_KINDS.has(typeof ssl);
 }
 
 function IsText(ssl: UnusableSsl): ssl is string {

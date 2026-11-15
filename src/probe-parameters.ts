@@ -1,29 +1,9 @@
-import type { ConnectionOptions } from "node:tls";
-
 import type { Client } from "pg";
 
-declare module "pg" {
-  interface Client {
-    /**
-     * What `pg` 8 connects with: the client's config with every parameter of its connection
-     * string assigned over it, so a URL parameter wins over the config it names.
-     */
-    connectionParameters: ConnectionParameters;
-  }
-}
-
-/** The TLS setting `pg` connects with: off, on, its options, or text it did not convert. */
-type ConnectionSsl = boolean | string | ConnectionOptions | undefined;
-
-/** The fields of `pg`'s `ConnectionParameters` the probe reads or sets after the URL is merged. */
-interface ConnectionParameters {
-  ssl: ConnectionSsl;
-  query_timeout: number | false | undefined;
-  statement_timeout: number | false | undefined;
-  lock_timeout: number | false | undefined;
-  idle_in_transaction_session_timeout: number | false | undefined;
-  replication: string | boolean | undefined;
-}
+import {
+  type ConnectionParameters,
+  IsUnusableSsl,
+} from "./pg-connection-parameters";
 
 /**
  * How the probe treats one field of `pg`'s `ConnectionParameters`, which is where every
@@ -80,16 +60,8 @@ export function OverrideParameters(client: Client, timeoutMs: number): void {
 const SSL_TEXT =
   "the URL's ssl value is none of true, 1, 0, empty or no-verify, and pg fails on it once the server accepts TLS";
 
-/** Whether `pg` kept `ssl` as text, which it reads only when empty. */
-function IsSslText(ssl: ConnectionSsl): ssl is string {
-  return typeof ssl === "string";
-}
-
-/**
- * Why `client` must not connect: `pg` resolved its `ssl` to text it does not convert, and once the
- * server accepts TLS it throws on that text inside a socket event, where no promise catches it.
- */
+/** Why `client` must not connect: `pg` resolved its `ssl` to a value it throws on once TLS starts. */
 export function SslRefusal(client: Client): string | undefined {
   const { ssl } = client.connectionParameters;
-  return IsSslText(ssl) && ssl !== "" ? SSL_TEXT : undefined;
+  return IsUnusableSsl(ssl) ? SSL_TEXT : undefined;
 }
