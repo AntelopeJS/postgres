@@ -1,5 +1,7 @@
 import { GetRuntimeInfo } from "@antelopejs/interface-core/runtime";
-import type { PoolConfig } from "pg";
+import { Client, type ClientConfig, type PoolConfig } from "pg";
+
+import type { ConnectionSsl } from "./pg-connection-parameters";
 
 /**
  * How aggressively schema registration is allowed to alter existing tables.
@@ -172,6 +174,94 @@ function ResolveMode(options?: Options): Mode {
   return mode;
 }
 
+const URL_SSL_ADVICE =
+  "write ssl=true or an sslmode for TLS, ssl=0 or sslmode=disable for none, or ssl=no-verify";
+
+const POOL_SSL_ADVICE =
+  "set pool.ssl to true, false or an object of TLS options";
+
+/** One place an `ssl` setting can come from, the config `pg` reads it from, and how to fix it. */
+interface SslSource {
+  name: string;
+  config: ClientConfig;
+  advice: string;
+}
+
+/** A primitive `pg` cannot read as a TLS setting: it reads only `true`, an object or a falsy value. */
+type UnusableSsl = string | number | bigint | symbol;
+
+const UNUSABLE_SSL_KINDS = new Set(["string", "number", "bigint", "symbol"]);
+
+/** Whether `pg` throws on `ssl` once the server accepts TLS: a truthy primitive other than `true`. */
+function IsUnusableSsl(ssl: ConnectionSsl): ssl is UnusableSsl {
+  return Boolean(ssl) && UNUSABLE_SSL_KINDS.has(typeof ssl);
+}
+
+function IsText(ssl: UnusableSsl): ssl is string {
+  return typeof ssl === "string";
+}
+
+/** Text quoted, so `"false"` cannot be read as the boolean the advice asks for. */
+function Described(ssl: UnusableSsl): string {
+  return IsText(ssl) ? JSON.stringify(ssl) : String(ssl);
+}
+
+/**
+ * The `ssl` setting `pg` would connect with under `config` when it is one `pg` cannot use, read
+ * from `pg`'s own connection parameters after every conversion it makes. Once the server accepts
+ * TLS, `pg` throws on such a setting inside a socket event, where no promise catches it and the
+ * process exits. The client is built without the config's `stream`, which `pg` would call and
+ * which the parameters never read; it never connects. A config `pg` cannot read is left for `pg`
+ * to refuse at connect, as it always has.
+ */
+function UnusableSsl(config: ClientConfig): string | undefined {
+  let ssl: ConnectionSsl;
+  try {
+    ssl = new Client({ ...config, stream: undefined }).connectionParameters.ssl;
+  } catch {
+    return undefined;
+  }
+  return IsUnusableSsl(ssl) ? Described(ssl) : undefined;
+}
+
+/**
+ * Where an `ssl` setting can come from, in the order to blame them: `url` alone, as the change-feed
+ * listener connects; `pool.connectionString`, which replaces `url` in the pool; and `url` with `pool`
+ * merged over it, as the pool connects.
+ */
+function SslSources(url: string, pool: PoolConfig): SslSource[] {
+  const sources: SslSource[] = [
+    {
+      name: "config.url sets ssl to ",
+      config: { connectionString: url },
+      advice: URL_SSL_ADVICE,
+    },
+  ];
+  if (pool.connectionString) {
+    sources.push({
+      name: "config.pool.connectionString sets ssl to ",
+      config: { connectionString: pool.connectionString },
+      advice: URL_SSL_ADVICE,
+    });
+  }
+  sources.push({
+    name: "config.pool.ssl is ",
+    config: { connectionString: url, ...pool },
+    advice: POOL_SSL_ADVICE,
+  });
+  return sources;
+}
+
+/** Refuses an `ssl` setting `pg` would end the process on, naming where it comes from. */
+function AssertUsableSsl(url: string, pool: PoolConfig): void {
+  for (const { name, config, advice } of SslSources(url, pool)) {
+    const unusable = UnusableSsl(config);
+    if (unusable !== undefined) {
+      throw new Error(`${name}${unusable}, which pg cannot use: ${advice}`);
+    }
+  }
+}
+
 function ResolveUrl(mode: Mode, options?: Options): string {
   if (options?.url !== undefined && options.url.trim() !== "") {
     return options.url;
@@ -187,6 +277,7 @@ function ResolveUrl(mode: Mode, options?: Options): string {
 export function SetOptions(options?: Options): ResolvedOptions {
   const mode = ResolveMode(options);
   const url = ResolveUrl(mode, options);
+  AssertUsableSsl(url, options?.pool ?? {});
   resolved = {
     mode,
     url,
