@@ -145,6 +145,21 @@ describe("the categories of an external column", function () {
     expect(results.join("\n")).to.not.include("disputed");
   });
 
+  it("names a value seen 5 times and folds one seen 4 times in the database", async () => {
+    const { answer, results } = await Received(() =>
+      Profile({ relation: "sales.tallies", columns: ["label"] }),
+    );
+    expect(CategoriesOf(answer, "label")).to.deep.equal({
+      values: [
+        { value: "many", rows: 20 },
+        { value: "five", rows: 5 },
+      ],
+      other: 4,
+    });
+    expect(results.join("\n")).to.include('"five"');
+    expect(results.join("\n")).to.not.include("four");
+  });
+
   it("folds a value seen fewer than 5 times in a sample in the database, as it did in the driver", async () => {
     const { answer, results } = await Received(() =>
       Profile({ relation: "sales.big_events", columns: ["kind"] }),

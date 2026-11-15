@@ -138,6 +138,10 @@ export const FIXTURE: readonly string[] = [
       1 + (g % 20000), CASE WHEN g % 4 = 0 THEN 900000 + g ELSE 1 + g END,
       date '2025-01-01' + (g % 400)
     FROM generate_series(1, 1000) g`,
+  "CREATE TABLE sales.tallies (id int PRIMARY KEY, label text NOT NULL)",
+  `INSERT INTO sales.tallies
+    SELECT g, CASE WHEN g <= 4 THEN 'four' WHEN g <= 9 THEN 'five' ELSE 'many' END
+    FROM generate_series(1, 29) g`,
   "ANALYZE",
   `CREATE TABLE sales.big_events (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, kind text NOT NULL, at timestamptz NOT NULL
