@@ -35,6 +35,9 @@ export const LOCKED_DATABASE = "probe_locked";
 const READERS_GROUP = "probe_readers";
 const TEAM_GROUP = "probe_team";
 const TRAP_SCHEMA = "probe_trap";
+
+/** A schema whose `has_any_column_privilege` writes a row, for a URL that puts it on the path. */
+export const SCRIBBLE_SCHEMA = "probe_scribble";
 const GROUPS = [READERS_GROUP, TEAM_GROUP];
 const ROLES = [...Object.values(LOGIN), NO_LOGIN, ...GROUPS];
 
@@ -46,6 +49,7 @@ function Quoted(role: string): string {
 const TEARDOWN = [
   `DROP DATABASE IF EXISTS ${LOCKED_DATABASE}`,
   `DROP SCHEMA IF EXISTS ${TRAP_SCHEMA} CASCADE`,
+  `DROP SCHEMA IF EXISTS ${SCRIBBLE_SCHEMA} CASCADE`,
   `DO $$ DECLARE role text; BEGIN
      FOREACH role IN ARRAY ARRAY[${ROLES.map((role) => `'${role}'`).join(", ")}] LOOP
        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role) THEN
@@ -77,6 +81,12 @@ const SETUP = [
     LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'the listing is refused'; END $$`,
   `GRANT USAGE ON SCHEMA ${TRAP_SCHEMA} TO ${LOGIN.trapped}`,
   `ALTER ROLE ${LOGIN.trapped} SET search_path = ${TRAP_SCHEMA}, pg_catalog`,
+  `CREATE SCHEMA ${SCRIBBLE_SCHEMA}`,
+  `CREATE TABLE ${SCRIBBLE_SCHEMA}.marks (n int)`,
+  `CREATE FUNCTION ${SCRIBBLE_SCHEMA}.has_any_column_privilege(oid, text) RETURNS boolean
+    LANGUAGE plpgsql AS $$ BEGIN INSERT INTO ${SCRIBBLE_SCHEMA}.marks VALUES (1); RETURN true; END $$`,
+  `GRANT USAGE ON SCHEMA ${SCRIBBLE_SCHEMA} TO ${LOGIN.writer}`,
+  `GRANT INSERT ON ${SCRIBBLE_SCHEMA}.marks TO ${LOGIN.writer}`,
   `CREATE DATABASE ${LOCKED_DATABASE}`,
   `REVOKE CONNECT ON DATABASE ${LOCKED_DATABASE} FROM PUBLIC`,
 ];
@@ -98,6 +108,42 @@ async function RunAsOwner(statements: readonly string[]): Promise<void> {
     }
   } finally {
     await client.end();
+  }
+}
+
+/** How many rows `relation` holds, counted by the client database's owner. */
+export async function CountAsOwner(relation: string): Promise<number> {
+  const client = new Client({ connectionString: OwnerUrl() });
+  await client.connect();
+  try {
+    const { rows } = await client.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM ${relation}`,
+    );
+    return rows[0].n;
+  } finally {
+    await client.end();
+  }
+}
+
+/** Runs `check` with the environment variables `values` set, then puts each one back. */
+export async function WithEnvironment(
+  values: Readonly<Record<string, string>>,
+  check: () => Promise<void>,
+): Promise<void> {
+  const previous = new Map(
+    Object.keys(values).map((name) => [name, process.env[name]]),
+  );
+  Object.assign(process.env, values);
+  try {
+    await check();
+  } finally {
+    for (const [name, value] of previous) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
   }
 }
 

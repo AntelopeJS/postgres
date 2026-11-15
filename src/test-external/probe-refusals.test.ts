@@ -9,32 +9,19 @@ import {
   OnPort,
   Probe,
   TIMEOUT_MS,
+  WithEnvironment,
   WithProbeLogins,
 } from "./probe-fixture";
-import { ClosedPort, StartPasswordServer } from "./relays";
+import {
+  CLEARTEXT_PASSWORD_REQUEST,
+  ClosedPort,
+  StartRecordingServer,
+} from "./relays";
 
 function WithoutPassword(url: string): string {
   return Altered(url, (target) => {
     target.password = "";
   });
-}
-
-/** Runs `check` with `PGPASSWORD` set to `password`, then puts the environment back. */
-async function WithPgPassword(
-  password: string,
-  check: () => Promise<void>,
-): Promise<void> {
-  const previous = process.env.PGPASSWORD;
-  process.env.PGPASSWORD = password;
-  try {
-    await check();
-  } finally {
-    if (previous === undefined) {
-      delete process.env.PGPASSWORD;
-    } else {
-      process.env.PGPASSWORD = previous;
-    }
-  }
 }
 
 /** PostgreSQL's SSLRequest: length 8, then the request code 80877103. */
@@ -87,26 +74,32 @@ describe("the connection probe's refusals", function () {
 
   it("never fills a password the URL lacks from PGPASSWORD", async () => {
     const reader = LoginUrl(LOGIN.reader);
-    await WithPgPassword(new URL(reader).password, async () => {
-      expect(await Probe(WithoutPassword(reader))).to.include({
-        outcome: "refused",
-        refusal: "sign-in-required",
-      });
-    });
-  });
-
-  it("sends nothing to a server asking for a cleartext password the URL lacks", async () => {
-    const server = await StartPasswordServer();
-    try {
-      await WithPgPassword("the probing process's own secret", async () => {
-        const url = WithoutPassword(
-          OnPort(LoginUrl(LOGIN.reader), server.port),
-        );
-        expect(await Probe(url)).to.include({
+    await WithEnvironment(
+      { PGPASSWORD: new URL(reader).password },
+      async () => {
+        expect(await Probe(WithoutPassword(reader))).to.include({
           outcome: "refused",
           refusal: "sign-in-required",
         });
-      });
+      },
+    );
+  });
+
+  it("sends nothing to a server asking for a cleartext password the URL lacks", async () => {
+    const server = await StartRecordingServer(CLEARTEXT_PASSWORD_REQUEST);
+    try {
+      await WithEnvironment(
+        { PGPASSWORD: "the probing process's own secret" },
+        async () => {
+          const url = WithoutPassword(
+            OnPort(LoginUrl(LOGIN.reader), server.port),
+          );
+          expect(await Probe(url)).to.include({
+            outcome: "refused",
+            refusal: "sign-in-required",
+          });
+        },
+      );
       expect(server.received()).to.equal(0);
     } finally {
       await server.close();
@@ -114,7 +107,7 @@ describe("the connection probe's refusals", function () {
   });
 
   it("asks for TLS before anything else when the URL says ssl=no-verify", async () => {
-    const server = await StartPasswordServer();
+    const server = await StartRecordingServer(CLEARTEXT_PASSWORD_REQUEST);
     try {
       const url = Altered(
         OnPort(LoginUrl(LOGIN.reader), server.port),

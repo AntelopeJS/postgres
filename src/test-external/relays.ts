@@ -195,42 +195,64 @@ export function WatchClientSockets(port: number): ClientSockets {
 }
 
 /** PostgreSQL's AuthenticationCleartextPassword: an `R` message of length 8 asking for method 3. */
-const CLEARTEXT_PASSWORD_REQUEST = Buffer.from([
+export const CLEARTEXT_PASSWORD_REQUEST = Buffer.from([
   0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x03,
 ]);
 
-/** A server that answers every startup by asking for a cleartext password, and what came after. */
-export interface PasswordServer {
+/** PostgreSQL's AuthenticationOk then ReadyForQuery: signed in, and idle. */
+export const SIGNED_IN = Buffer.from([
+  0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x5a, 0x00, 0x00, 0x00,
+  0x05, 0x49,
+]);
+
+/** A server that answers each client's first packet the same way, and what clients sent it. */
+export interface RecordingServer {
   port: number;
+  /** How many clients connected. */
+  connections: () => number;
   /** The first packet a client sent, before the server said anything. */
   first: () => Buffer | undefined;
-  /** The bytes clients sent after the server asked for a password. */
+  /** The bytes clients sent after the server answered their first packet. */
   received: () => number;
   close: () => Promise<void>;
 }
 
-/** Starts a server that asks every client for a cleartext password and counts what it sends back. */
-export async function StartPasswordServer(): Promise<PasswordServer> {
+/**
+ * Starts a server that answers every client's first packet with `reply`, then never answers
+ * again; with no `reply` it hangs up after the first packet.
+ */
+export async function StartRecordingServer(
+  reply?: Buffer,
+): Promise<RecordingServer> {
   const sockets = new Set<Socket>();
   let received = 0;
   let first: Buffer | undefined;
   const server = createServer((socket) => {
     sockets.add(socket);
-    let asked = false;
+    let answered = false;
     socket.on("data", (chunk: Buffer) => {
-      if (asked) {
+      if (answered) {
         received += chunk.length;
         return;
       }
-      asked = true;
+      answered = true;
       first ??= chunk;
-      socket.write(CLEARTEXT_PASSWORD_REQUEST);
+      if (reply) {
+        socket.write(reply);
+      } else {
+        socket.destroy();
+      }
     });
     socket.on("close", () => sockets.delete(socket));
     socket.on("error", () => undefined);
   });
+  let connections = 0;
+  server.on("connection", () => {
+    connections += 1;
+  });
   return {
     port: await Listen(server),
+    connections: () => connections,
     first: () => first,
     received: () => received,
     close: async () => {

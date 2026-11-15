@@ -6,7 +6,6 @@ import type {
   ProbeRefusal,
 } from "@antelopejs/interface-database-catalog";
 import { Client, DatabaseError } from "pg";
-import { parse } from "pg-connection-string";
 
 import {
   AccessOf,
@@ -14,11 +13,16 @@ import {
   type RelationAccess,
   type RelationPrivileges,
 } from "./implementations/database/external-access";
+import { OverrideParameters } from "./probe-parameters";
+import { ReadUrl } from "./probe-url";
 
 /** How long a client may take to close before its sockets are shut. */
 const CLOSE_GRACE_MS = 250;
 
 const ACCOUNT_SQL = "SELECT current_user AS role";
+
+/** Holds the listing to reads, whatever functions the session's `search_path` resolves to. */
+const READ_ONLY_SQL = "BEGIN TRANSACTION READ ONLY";
 
 const ABORTED = "The probe was aborted.";
 
@@ -61,28 +65,32 @@ function WithholdPassword(): never {
 }
 
 /**
- * Opens a client on `url` as the driver's pool reads it, TLS settings included, except that the
- * password is the URL's own: one it lacks is never filled in from `PGPASSWORD` or `.pgpass`, which
- * would send the probing process's own secret to the host the URL names.
+ * Opens a client on `url` as the driver's pool reads it, TLS settings included, except for the
+ * parameters `OverrideParameters` sets and the password, which is the URL's own: one it lacks is
+ * never filled in from `PGPASSWORD` or `.pgpass`, which would send the probing process's own
+ * secret to the host the URL names.
  */
-function Open(url: string, timeoutMs: number): Session {
+function Open(
+  url: string,
+  password: string | undefined,
+  timeoutMs: number,
+): Session {
   const sockets: Socket[] = [];
   const client = new Client({
     connectionString: url,
     connectionTimeoutMillis: timeoutMs,
-    query_timeout: timeoutMs,
-    statement_timeout: timeoutMs,
     stream: () => {
       const socket = new Socket();
       sockets.push(socket);
       return socket;
     },
   });
+  OverrideParameters(client, timeoutMs);
   Object.defineProperty(client, "password", {
     configurable: true,
     enumerable: false,
     writable: true,
-    value: parse(url).password || WithholdPassword,
+    value: password || WithholdPassword,
   });
   client.on("error", Ignore);
   return { client, sockets };
@@ -174,6 +182,7 @@ async function Read(client: Client): Promise<ProbeAnswer> {
     const account = await client.query<AccountRow>(ACCOUNT_SQL);
     answer.latencyMs = Math.ceil(performance.now() - started);
     answer.user = account.rows[0].role;
+    await client.query(READ_ONLY_SQL);
     const relations = await client.query<RelationPrivileges>(PRIVILEGES_SQL, [
       null,
     ]);
@@ -229,7 +238,11 @@ export const probe: Probe = async ({ url, timeoutMs, signal }) => {
   let session: Session | undefined;
   const aborted = WhenAborted(signal, () => session && Shut(session));
   try {
-    session = Open(url, timeoutMs);
+    const reading = ReadUrl(url);
+    if (reading.kind === "refused") {
+      return { outcome: "refused", refusal: "other", message: reading.message };
+    }
+    session = Open(url, reading.url.password, timeoutMs);
     return await Promise.race([SignIn(session), aborted.answer]);
   } catch (err) {
     return Unanswered(err);
