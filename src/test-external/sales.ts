@@ -3,7 +3,8 @@ import {
   type SchemaDefinition,
 } from "@antelopejs/interface-database/schema";
 
-import type { QueryResultRow } from "pg";
+import assert from "node:assert";
+import { Client, type QueryResultRow } from "pg";
 
 import { Query } from "../connection";
 import { WaitForSchemaReady } from "../implementations/database/schema";
@@ -128,10 +129,34 @@ export type SalesRow = { _id?: string } & Record<string, SalesValue>;
 /** Registers the declaration and waits for it, as a generated module's startup does. */
 export type SalesTables = Record<string, SalesRow>;
 
+/**
+ * How long a registration of the fixture may take to settle: on the Windows CI runner it settled in
+ * 0.02 to 1.13 s in 22 of 23 runs, and past mocha's 2 s default in the other.
+ */
+export const REGISTRATION_TIMEOUT_MS = 30_000;
+
+/** Every registration {@link RegisterSales} started that has not settled yet, the latest or not. */
+const inFlight = new Set<Promise<void>>();
+
 export async function RegisterSales(): Promise<Schema<SalesTables>> {
   const schema = new Schema<SalesTables>(SALES, SALES_DEFINITION);
-  await WaitForSchemaReady(SALES);
+  const settled = WaitForSchemaReady(SALES);
+  inFlight.add(settled);
+  try {
+    await settled;
+  } finally {
+    inFlight.delete(settled);
+  }
   return schema;
+}
+
+/**
+ * Settles once every registration {@link RegisterSales} started has settled, including one a timed
+ * out hook left running, which a schema's readiness gate no longer answers for once a later
+ * registration replaced it.
+ */
+export async function RegistrationsSettled(): Promise<void> {
+  await Promise.allSettled(inFlight);
 }
 
 /** The answer a native query over the same rows gives, which is what every read is held to. */
@@ -140,6 +165,35 @@ export async function Native<T extends QueryResultRow>(
   params: unknown[] = [],
 ): Promise<T[]> {
   return (await Query<T>(sql, params)).rows;
+}
+
+/**
+ * How long the owner waits for its lock: it is granted at once unless another session is reading the
+ * relation, and then the test fails on that rather than queueing every later reader behind it.
+ */
+const OWNER_LOCK_TIMEOUT_MS = 1000;
+
+/**
+ * Runs `body` while the fixture's owner holds `relation` in `ACCESS EXCLUSIVE` mode on a connection
+ * of its own, so every read of it made inside `body` waits until `body` has settled.
+ */
+export async function WhileLocked<T>(
+  relation: string,
+  body: () => Promise<T>,
+): Promise<T> {
+  const url = process.env.PG_TEST_CLIENT_OWNER_URL;
+  assert(url, "the external test setup exports the fixture owner's URL");
+  const owner = new Client({ connectionString: url });
+  await owner.connect();
+  try {
+    await owner.query("BEGIN");
+    await owner.query(`SET LOCAL lock_timeout = ${OWNER_LOCK_TIMEOUT_MS}`);
+    await owner.query(`LOCK TABLE ${relation} IN ACCESS EXCLUSIVE MODE`);
+    return await body();
+  } finally {
+    await owner.query("ROLLBACK");
+    await owner.end();
+  }
 }
 
 export async function NativeCount(

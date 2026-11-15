@@ -26,7 +26,7 @@ import {
   WaitForSchemaReady,
 } from "../implementations/database/schema";
 import { BIG_EVENTS_ROWS, CLIENT_ROLE } from "./fixture";
-import { Native, NativeCount } from "./sales";
+import { Native, NativeCount, WhileLocked } from "./sales";
 
 const SALES = "sales";
 const SAMPLE_THRESHOLD = 1_000_000;
@@ -276,10 +276,9 @@ describe("a profile of an external relation", function () {
   it("answers timeout for a measure past its time, and still answers the profile", async () => {
     SetMeasureTimeoutForTests(1);
     try {
-      const big = await Profile({
-        relation: "sales.big_events",
-        columns: ["kind"],
-      });
+      const big = await WhileLocked("sales.big_events", () =>
+        Profile({ relation: "sales.big_events", columns: ["kind"] }),
+      );
       const [kind] = big.columns;
       expect(kind.distinct).to.deep.equal({ status: "timeout" });
     } finally {

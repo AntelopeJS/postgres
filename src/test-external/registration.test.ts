@@ -10,6 +10,7 @@ import {
   GetTableModel,
   WaitForSchemaReady,
 } from "../implementations/database/schema";
+import { REGISTRATION_TIMEOUT_MS, RegistrationsSettled } from "./sales";
 
 const SCHEMA_ID = "sales";
 
@@ -61,6 +62,14 @@ function KeyColumns(tableId: string): string[] | undefined {
 }
 
 describe("registering an external schema", () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
+    await Promise.allSettled([
+      WaitForSchemaReady(SCHEMA_ID),
+      RegistrationsSettled(),
+    ]);
+  });
+
   it("fails, naming the table, when a declared table does not exist", async () => {
     const message = await Refusal({ invoices: Table({ total: "number" }) });
     expect(message)

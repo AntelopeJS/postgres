@@ -12,7 +12,13 @@ import {
   ApplyStages,
   CompileRelation,
 } from "../implementations/database/pipeline";
-import { Native, NativeCount, RegisterSales, type SalesTables } from "./sales";
+import {
+  Native,
+  NativeCount,
+  REGISTRATION_TIMEOUT_MS,
+  RegisterSales,
+  type SalesTables,
+} from "./sales";
 
 type IntegerComparison = "gt" | "ge" | "lt" | "le" | "eq";
 
@@ -49,7 +55,8 @@ async function Plan(query: StagedObject): Promise<string> {
 }
 
 describe("an external key that its column cannot hold", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
   });
 
@@ -78,7 +85,8 @@ describe("an external key that its column cannot hold", () => {
 });
 
 describe("the indexes that serve reads of an external relation", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
   });
 
@@ -111,7 +119,8 @@ describe("the indexes that serve reads of an external relation", () => {
 });
 
 describe("numbers read from an external relation's exact types", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
   });
 
@@ -150,7 +159,8 @@ describe("numbers read from an external relation's exact types", () => {
 });
 
 describe("inequality against an external column's own type", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
   });
 

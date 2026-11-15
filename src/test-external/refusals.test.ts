@@ -1,7 +1,12 @@
 import { expect } from "chai";
 import type { Schema } from "@antelopejs/interface-database/schema";
 
-import { Native, RegisterSales, type SalesTables } from "./sales";
+import {
+  Native,
+  REGISTRATION_TIMEOUT_MS,
+  RegisterSales,
+  type SalesTables,
+} from "./sales";
 
 let sales: Schema<SalesTables>;
 
@@ -39,7 +44,8 @@ async function AccountsUnchanged(): Promise<void> {
 }
 
 describe("what an external relation refuses", () => {
-  before(async () => {
+  before(async function () {
+    this.timeout(REGISTRATION_TIMEOUT_MS);
     sales = await RegisterSales();
   });
 
