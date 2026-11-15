@@ -1,5 +1,6 @@
 import { GetRuntimeInfo } from "@antelopejs/interface-core/runtime";
 import type { PoolConfig } from "pg";
+import { type ConnectionOptions, parse } from "pg-connection-string";
 
 /**
  * How aggressively schema registration is allowed to alter existing tables.
@@ -172,8 +173,35 @@ function ResolveMode(options?: Options): Mode {
   return mode;
 }
 
+/** Whether the parser left `ssl` as the URL's own text, which only `no-verify` may be. */
+function IsSslText(ssl: ConnectionOptions["ssl"]): ssl is string {
+  return typeof ssl === "string";
+}
+
+/**
+ * Refuses an `ssl` value `pg` cannot use. The parser turns `true`, `1` and `0` into a boolean and
+ * leaves any other value as text, unless `sslmode` or a certificate replaces it; `pg` reads
+ * `no-verify` and then, once the server accepts TLS, throws on any other text inside a socket
+ * event, where no promise catches it and the process exits. A URL the parser cannot read is left
+ * for `pg` to refuse as it always has.
+ */
+function AssertUsableSsl(url: string): void {
+  let ssl: ConnectionOptions["ssl"];
+  try {
+    ({ ssl } = parse(url));
+  } catch {
+    return;
+  }
+  if (IsSslText(ssl) && ssl !== "no-verify") {
+    throw new Error(
+      `config.url sets ssl=${ssl}, which pg cannot use: write ssl=true or an sslmode for TLS, ssl=0 or sslmode=disable for none, or ssl=no-verify`,
+    );
+  }
+}
+
 function ResolveUrl(mode: Mode, options?: Options): string {
   if (options?.url !== undefined && options.url.trim() !== "") {
+    AssertUsableSsl(options.url);
     return options.url;
   }
   if (mode === "external") {
