@@ -99,21 +99,21 @@ function UnusableConfigs(port: number): [string, string][] {
   const url = `postgres://reader:secret@127.0.0.1:${port}/erp`;
   const unusable = `${url}?ssl=false`;
   return [
-    ["config.url sets ssl=false", JSON.stringify({ url: unusable })],
+    ['config.url sets ssl to "false"', JSON.stringify({ url: unusable })],
     [
-      "config.url sets ssl=false",
+      'config.url sets ssl to "false"',
       JSON.stringify({ url: unusable, pool: { connectionString: url } }),
     ],
     [
-      "config.pool.connectionString sets ssl=false",
+      'config.pool.connectionString sets ssl to "false"',
       JSON.stringify({ url, pool: { connectionString: unusable } }),
     ],
     [
-      "config.pool.connectionString sets ssl=false",
+      'config.pool.connectionString sets ssl to "false"',
       JSON.stringify({ url, pool: { connectionString: unusable, ssl: false } }),
     ],
     [
-      "config.pool.ssl is false",
+      'config.pool.ssl is "false"',
       JSON.stringify({ url, pool: { ssl: "false" } }),
     ],
     ["config.pool.ssl is 1", JSON.stringify({ url, pool: { ssl: 1 } })],
@@ -144,7 +144,19 @@ describe("a config.url with an ssl value pg cannot use", function () {
   for (const value of UNUSABLE) {
     it(`is refused for ssl=${value}, naming it`, () => {
       expect(() => Configured({ url: `${BASE}?ssl=${value}` })).to.throw(
-        `ssl=${value}`,
+        `config.url sets ssl to "${value}"`,
+      );
+    });
+  }
+
+  for (const [ssl, shown] of [
+    [Symbol("x"), "Symbol(x)"],
+    [BigInt(1), "1"],
+  ] as const) {
+    it(`is refused for a programmatic pool.ssl of ${shown}, naming it`, () => {
+      const pool = Object.fromEntries([["ssl", ssl]]);
+      expect(() => Configured({ url: BASE, pool })).to.throw(
+        `config.pool.ssl is ${shown}, `,
       );
     });
   }

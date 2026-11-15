@@ -1,7 +1,18 @@
 import type { ConnectionOptions } from "node:tls";
 
-/** The TLS setting `pg` connects with: off, on, its options, or text it did not convert. */
-export type ConnectionSsl = boolean | string | ConnectionOptions | undefined;
+/**
+ * The TLS setting `pg` connects with: off, on, its options, or a value it did not convert, which a
+ * URL gives as text and a programmatic `pool.ssl` as any primitive.
+ */
+export type ConnectionSsl =
+  | boolean
+  | string
+  | number
+  | bigint
+  | symbol
+  | ConnectionOptions
+  | null
+  | undefined;
 
 declare module "pg" {
   interface Client {

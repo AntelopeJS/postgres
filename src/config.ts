@@ -1,8 +1,6 @@
 import { GetRuntimeInfo } from "@antelopejs/interface-core/runtime";
 import { Client, type ClientConfig, type PoolConfig } from "pg";
 
-import type { ConnectionOptions } from "node:tls";
-
 import type { ConnectionSsl } from "./pg-connection-parameters";
 
 /**
@@ -189,17 +187,23 @@ interface SslSource {
   advice: string;
 }
 
-function IsSslText(ssl: ConnectionSsl): ssl is string {
+/** A primitive `pg` cannot read as a TLS setting: it reads only `true`, an object or a falsy value. */
+type UnusableSsl = string | number | bigint | symbol;
+
+const UNUSABLE_SSL_KINDS = new Set(["string", "number", "bigint", "symbol"]);
+
+/** Whether `pg` throws on `ssl` once the server accepts TLS: a truthy primitive other than `true`. */
+function IsUnusableSsl(ssl: ConnectionSsl): ssl is UnusableSsl {
+  return Boolean(ssl) && UNUSABLE_SSL_KINDS.has(typeof ssl);
+}
+
+function IsText(ssl: UnusableSsl): ssl is string {
   return typeof ssl === "string";
 }
 
-function IsTlsOptions(ssl: ConnectionSsl): ssl is ConnectionOptions {
-  return typeof ssl === "object";
-}
-
-/** `pg` skips TLS for a falsy `ssl` and reads `true` or an object; it throws on anything else. */
-function IsUsableSsl(ssl: ConnectionSsl): boolean {
-  return !ssl || ssl === true || IsTlsOptions(ssl);
+/** Text quoted, so `"false"` cannot be read as the boolean the advice asks for. */
+function Described(ssl: UnusableSsl): string {
+  return IsText(ssl) ? JSON.stringify(ssl) : String(ssl);
 }
 
 /**
@@ -217,10 +221,7 @@ function UnusableSsl(config: ClientConfig): string | undefined {
   } catch {
     return undefined;
   }
-  if (IsUsableSsl(ssl)) {
-    return undefined;
-  }
-  return IsSslText(ssl) ? ssl : JSON.stringify(ssl);
+  return IsUnusableSsl(ssl) ? Described(ssl) : undefined;
 }
 
 /**
@@ -231,14 +232,14 @@ function UnusableSsl(config: ClientConfig): string | undefined {
 function SslSources(url: string, pool: PoolConfig): SslSource[] {
   const sources: SslSource[] = [
     {
-      name: "config.url sets ssl=",
+      name: "config.url sets ssl to ",
       config: { connectionString: url },
       advice: URL_SSL_ADVICE,
     },
   ];
   if (pool.connectionString) {
     sources.push({
-      name: "config.pool.connectionString sets ssl=",
+      name: "config.pool.connectionString sets ssl to ",
       config: { connectionString: pool.connectionString },
       advice: URL_SSL_ADVICE,
     });
