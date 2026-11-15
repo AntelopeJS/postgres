@@ -202,6 +202,8 @@ const CLEARTEXT_PASSWORD_REQUEST = Buffer.from([
 /** A server that answers every startup by asking for a cleartext password, and what came after. */
 export interface PasswordServer {
   port: number;
+  /** The first packet a client sent, before the server said anything. */
+  first: () => Buffer | undefined;
   /** The bytes clients sent after the server asked for a password. */
   received: () => number;
   close: () => Promise<void>;
@@ -211,6 +213,7 @@ export interface PasswordServer {
 export async function StartPasswordServer(): Promise<PasswordServer> {
   const sockets = new Set<Socket>();
   let received = 0;
+  let first: Buffer | undefined;
   const server = createServer((socket) => {
     sockets.add(socket);
     let asked = false;
@@ -220,6 +223,7 @@ export async function StartPasswordServer(): Promise<PasswordServer> {
         return;
       }
       asked = true;
+      first ??= chunk;
       socket.write(CLEARTEXT_PASSWORD_REQUEST);
     });
     socket.on("close", () => sockets.delete(socket));
@@ -227,6 +231,7 @@ export async function StartPasswordServer(): Promise<PasswordServer> {
   });
   return {
     port: await Listen(server),
+    first: () => first,
     received: () => received,
     close: async () => {
       for (const socket of sockets) {

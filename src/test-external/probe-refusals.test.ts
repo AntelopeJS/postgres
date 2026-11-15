@@ -37,6 +37,9 @@ async function WithPgPassword(
   }
 }
 
+/** PostgreSQL's SSLRequest: length 8, then the request code 80877103. */
+const SSL_REQUEST = Buffer.from([0, 0, 0, 8, 0x04, 0xd2, 0x16, 0x2f]);
+
 function OnDatabase(url: string, database: string): string {
   return Altered(url, (target) => {
     target.pathname = `/${database}`;
@@ -104,6 +107,23 @@ describe("the connection probe's refusals", function () {
           refusal: "sign-in-required",
         });
       });
+      expect(server.received()).to.equal(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("asks for TLS before anything else when the URL says ssl=no-verify", async () => {
+    const server = await StartPasswordServer();
+    try {
+      const url = Altered(
+        OnPort(LoginUrl(LOGIN.reader), server.port),
+        (target) => {
+          target.searchParams.set("ssl", "no-verify");
+        },
+      );
+      await Probe(url);
+      expect(server.first()).to.deep.equal(SSL_REQUEST);
       expect(server.received()).to.equal(0);
     } finally {
       await server.close();

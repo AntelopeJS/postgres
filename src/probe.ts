@@ -6,7 +6,7 @@ import type {
   ProbeRefusal,
 } from "@antelopejs/interface-database-catalog";
 import { Client, DatabaseError } from "pg";
-import { parseIntoClientConfig } from "pg-connection-string";
+import { parse } from "pg-connection-string";
 
 import {
   AccessOf,
@@ -61,15 +61,14 @@ function WithholdPassword(): never {
 }
 
 /**
- * Opens a client on `url` alone: a password the URL lacks is never filled in from `PGPASSWORD` or
- * `.pgpass`, which would send the probing process's own secret to the host the URL names.
+ * Opens a client on `url` as the driver's pool reads it, TLS settings included, except that the
+ * password is the URL's own: one it lacks is never filled in from `PGPASSWORD` or `.pgpass`, which
+ * would send the probing process's own secret to the host the URL names.
  */
 function Open(url: string, timeoutMs: number): Session {
   const sockets: Socket[] = [];
-  const config = parseIntoClientConfig(url);
   const client = new Client({
-    ...config,
-    password: config.password || WithholdPassword,
+    connectionString: url,
     connectionTimeoutMillis: timeoutMs,
     query_timeout: timeoutMs,
     statement_timeout: timeoutMs,
@@ -78,6 +77,12 @@ function Open(url: string, timeoutMs: number): Session {
       sockets.push(socket);
       return socket;
     },
+  });
+  Object.defineProperty(client, "password", {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: parse(url).password || WithholdPassword,
   });
   client.on("error", Ignore);
   return { client, sockets };
