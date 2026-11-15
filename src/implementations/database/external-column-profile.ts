@@ -70,8 +70,9 @@ interface DistinctRow {
   distinct: number;
 }
 
+/** A named category, or with a `null` value the rows of every rarer one, folded by the database. */
 interface GroupRow {
-  value: string | number | boolean;
+  value: string | number | boolean | null;
   rows: number;
 }
 
@@ -215,16 +216,30 @@ function CategoryValue(column: ProfiledColumn): string {
   )(column.quoted);
 }
 
-/** Values counted often enough to be categories; every rarer value only adds to `other`. */
+/**
+ * The most frequent values, at most one more than {@link CATEGORY_LIMIT}, with every value counted
+ * fewer than {@link CATEGORY_MIN_ROWS} times folded into one row of `null` value inside the query, so
+ * a rare value never leaves the database.
+ */
+function CategoriesSql(column: ProfiledColumn, source: Source): string {
+  return `SELECT CASE WHEN top.rows >= ${CATEGORY_MIN_ROWS} THEN top.value END AS value,
+      sum(top.rows)::float8 AS rows
+    FROM (SELECT ${CategoryValue(column)} AS value, count(*)::float8 AS rows FROM ${source.from}
+      WHERE ${column.quoted} IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT ${CATEGORY_LIMIT + 1}) AS top
+    GROUP BY 1 ORDER BY 2 DESC, 1`;
+}
+
 function AsCategories(rows: GroupRow[]): Categories {
-  const named = rows.filter((row) => row.rows >= CATEGORY_MIN_ROWS);
-  const other = rows
-    .filter((row) => row.rows < CATEGORY_MIN_ROWS)
-    .reduce((total, row) => total + row.rows, 0);
-  return {
-    values: named.map(({ value, rows: count }) => ({ value, rows: count })),
-    other,
-  };
+  const values: Categories["values"] = [];
+  let other = 0;
+  for (const { value, rows: count } of rows) {
+    if (value === null) {
+      other = count;
+    } else {
+      values.push({ value, rows: count });
+    }
+  }
+  return { values, other };
 }
 
 async function MeasureCategories(
@@ -239,8 +254,7 @@ async function MeasureCategories(
     return undefined;
   }
   const measured = await session.measure<GroupRow>(
-    `SELECT ${CategoryValue(column)} AS value, count(*)::float8 AS rows FROM ${source.from}
-      WHERE ${column.quoted} IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT ${CATEGORY_LIMIT + 1}`,
+    CategoriesSql(column, source),
   );
   return Mapped(measured, AsCategories);
 }
