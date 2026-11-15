@@ -19,7 +19,7 @@ const CLOSE_GRACE_MS = 250;
 
 const ACCOUNT_SQL = "SELECT current_user AS role";
 
-const ABORTED = "the probe was aborted";
+const ABORTED = "The probe was aborted.";
 
 const REFUSALS = new Map<string, ProbeRefusal>([
   ["28P01", "credentials"],
@@ -106,27 +106,46 @@ function Failure(err: unknown): ProbeAnswer {
   return { outcome: "unreachable", message };
 }
 
+function AbortedAnswer(): ProbeAnswer {
+  return { outcome: "unreachable", message: ABORTED };
+}
+
+/** Settles with {@link AbortedAnswer} once `signal` aborts, and withdraws its listener when told to. */
+function WhenAborted(signal: AbortSignal, onAbort: () => void) {
+  let withdraw = Ignore;
+  const answer = new Promise<ProbeAnswer>((resolve) => {
+    const abort = () => {
+      onAbort();
+      resolve(AbortedAnswer());
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    withdraw = () => signal.removeEventListener("abort", abort);
+  });
+  return { answer, withdraw };
+}
+
 /**
  * Signs in to PostgreSQL with `pg` and answers what the account may do over the relations the
  * catalog's `ListRelations` sees, judged per relation as the catalog judges them. Every client it
- * opens is closed once it answers, and shut at once when `signal` aborts.
+ * opens is closed once it answers. When `signal` aborts before then, or has already aborted, it
+ * shuts every socket at once, or opens none, and answers {@link AbortedAnswer} whatever the server said.
  */
 export const probe: Probe = async ({ url, timeoutMs, signal }) => {
   if (signal.aborted) {
-    return { outcome: "unreachable", message: ABORTED };
+    return AbortedAnswer();
   }
   let session: Session | undefined;
-  const abort = () => session && Shut(session);
-  signal.addEventListener("abort", abort, { once: true });
+  const aborted = WhenAborted(signal, () => session && Shut(session));
   try {
     session = Open(url, timeoutMs);
-    return await SignIn(session.client);
+    return await Promise.race([
+      SignIn(session.client).catch(Failure),
+      aborted.answer,
+    ]);
   } catch (err) {
-    return signal.aborted
-      ? { outcome: "unreachable", message: ABORTED }
-      : Failure(err);
+    return Failure(err);
   } finally {
-    signal.removeEventListener("abort", abort);
+    aborted.withdraw();
     if (session) {
       Close(session);
     }

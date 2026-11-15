@@ -115,7 +115,7 @@ const answer = await probe({ url, timeoutMs: 5000, signal });
 - `unreachable` means no server answered, or it stopped answering within `timeoutMs`.
 - `signed-in` carries `user`, the account's `current_user`, and `latencyMs`, its first query rounded up. `canWrite` holds when the account may insert, update or delete in any relation the catalog's `ListRelations` sees. `canRead` holds when it may read one of those relations as a whole, or sees none. Each relation is judged as `ListRelations` judges it, so a relation readable on some columns only does not count.
 
-The probe closes its connection once it answers, and shuts the socket when the server has not closed it 250 ms later. When `signal` aborts, it shuts every socket at once.
+The probe closes its connection once it answers, and shuts the socket when the server has not closed it 250 ms later. When `signal` aborts before the probe answers, it shuts every socket at once and answers `{ outcome: "unreachable", message: "The probe was aborted." }`, whatever the server has said so far. A signal that has already aborted gets the same answer, and nothing is opened.
 
 ## The catalog
 

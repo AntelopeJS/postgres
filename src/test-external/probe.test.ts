@@ -30,6 +30,10 @@ const CLOSE_SETTLE_MS = 1000;
 const ABORT_SETTLE_MS = 100;
 const EXTERNAL = "external";
 const SECRET = randomBytes(6).toString("hex");
+const ABORTED_ANSWER = {
+  outcome: "unreachable",
+  message: "The probe was aborted.",
+};
 
 /** The first byte of a simple query message, PostgreSQL's Query. */
 const QUERY_MESSAGE = 0x51;
@@ -237,7 +241,7 @@ function ClosingCases() {
     });
   });
 
-  it("closes at once when the signal aborts", async () => {
+  it("answers aborted at once and shuts its socket when the signal aborts", async () => {
     const controller = new AbortController();
     let abortedAt = 0;
     const stall = (chunk: Buffer, fromClient: boolean) => {
@@ -249,11 +253,36 @@ function ClosingCases() {
       return stalls;
     };
     await WithRelay(await StartRelayTo(ServerPort(), stall), async (relay) => {
-      const url = OnPort(LoginUrl(READER), relay.port);
-      const answer = await Probe(url, controller.signal);
-      expect(performance.now() - abortedAt).to.be.lessThan(TIMEOUT_MS / 2);
-      expect(answer.outcome).to.equal("unreachable");
-      expect(await relay.openAfter(ABORT_SETTLE_MS)).to.equal(0);
+      const sockets = WatchClientSockets(relay.port);
+      try {
+        const url = OnPort(LoginUrl(READER), relay.port);
+        const answer = await Probe(url, controller.signal);
+        expect(performance.now() - abortedAt).to.be.lessThan(ABORT_SETTLE_MS);
+        expect(answer).to.deep.equal(ABORTED_ANSWER);
+        expect(await sockets.settle(ABORT_SETTLE_MS)).to.deep.equal({
+          opened: 1,
+          open: 0,
+        });
+      } finally {
+        sockets.stop();
+      }
+    });
+  });
+
+  it("answers aborted and opens nothing when the signal has already aborted", async () => {
+    await WithRelay(await StartRelayTo(ServerPort()), async (relay) => {
+      const sockets = WatchClientSockets(relay.port);
+      try {
+        const url = OnPort(LoginUrl(READER), relay.port);
+        const answer = await Probe(url, AbortSignal.abort());
+        expect(answer).to.deep.equal(ABORTED_ANSWER);
+        expect(await sockets.settle(ABORT_SETTLE_MS)).to.deep.equal({
+          opened: 0,
+          open: 0,
+        });
+      } finally {
+        sockets.stop();
+      }
     });
   });
 }
