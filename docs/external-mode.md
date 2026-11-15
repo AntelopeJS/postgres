@@ -111,7 +111,7 @@ import { probe } from "@antelopejs/postgres/dist/probe";
 const answer = await probe({ url, timeoutMs: 5000, signal });
 ```
 
-- `refused` names why the server turned the sign-in down: `credentials` for `28P01`, `host` for `28000`, `database` for `3D000`, `database-denied` for `42501` (no `CONNECT` on the database), and `other`, with the server's message, for any other server error. `sign-in-required` means the server asked for a password the URL does not give.
+- `refused` names why the server turned the sign-in down: `credentials` for `28P01`, `host` for `28000`, `database` for `3D000`, `database-denied` for `42501` (no `CONNECT` on the database), and `other`, with the server's message, for any other server error. `sign-in-required` means the server asked for a password the URL does not give. The probe uses the URL's credentials only: it never takes a missing password from `PGPASSWORD` or `.pgpass`, so the probing process's own secret never reaches the host the URL names.
 - `unreachable` means no server answered, or it stopped answering within `timeoutMs`.
 - `signed-in` carries `user`, the account's `current_user`, and `latencyMs`, its first query rounded up. `canWrite` holds when the account may insert, update or delete in any relation the catalog's `ListRelations` sees. `canRead` holds when it may read one of those relations as a whole, or sees none. Each relation is judged as `ListRelations` judges it, so a relation readable on some columns only does not count. When the server refuses the relation listing after the sign-in, the answer says `unreadable: "cannot-list"`, with `canRead` and `canWrite` false.
 

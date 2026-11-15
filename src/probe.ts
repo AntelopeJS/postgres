@@ -6,6 +6,7 @@ import type {
   ProbeRefusal,
 } from "@antelopejs/interface-database-catalog";
 import { Client, DatabaseError } from "pg";
+import { parseIntoClientConfig } from "pg-connection-string";
 
 import {
   AccessOf,
@@ -29,12 +30,15 @@ const REFUSALS = new Map<string, ProbeRefusal>([
   ["42501", "database-denied"],
 ]);
 
-/** The `pg` connection events of a server asking the client for a password. */
-const PASSWORD_REQUESTS = [
-  "authenticationCleartextPassword",
-  "authenticationMD5Password",
-  "authenticationSASL",
-];
+const PASSWORD_REQUIRED =
+  "the server asks for a password the URL does not give";
+
+/** Thrown instead of answering a password request the URL has no password for. */
+class PasswordRequired extends Error {
+  constructor() {
+    super(PASSWORD_REQUIRED);
+  }
+}
 
 type SignedIn = Extract<ProbeAnswer, { outcome: "signed-in" }>;
 
@@ -42,24 +46,30 @@ interface AccountRow {
   role: string;
 }
 
-/**
- * A client, every socket it opened, which `pg` does not shut when the server ignores its goodbye,
- * and whether the server asked it for a password.
- */
+/** A client and every socket it opened, which `pg` does not shut when the server ignores its goodbye. */
 interface Session {
   client: Client;
   sockets: Socket[];
-  askedPassword: boolean;
 }
 
 function Ignore(): void {
   return undefined;
 }
 
+function WithholdPassword(): never {
+  throw new PasswordRequired();
+}
+
+/**
+ * Opens a client on `url` alone: a password the URL lacks is never filled in from `PGPASSWORD` or
+ * `.pgpass`, which would send the probing process's own secret to the host the URL names.
+ */
 function Open(url: string, timeoutMs: number): Session {
   const sockets: Socket[] = [];
+  const config = parseIntoClientConfig(url);
   const client = new Client({
-    connectionString: url,
+    ...config,
+    password: config.password || WithholdPassword,
     connectionTimeoutMillis: timeoutMs,
     query_timeout: timeoutMs,
     statement_timeout: timeoutMs,
@@ -70,13 +80,7 @@ function Open(url: string, timeoutMs: number): Session {
     },
   });
   client.on("error", Ignore);
-  const session = { client, sockets, askedPassword: false };
-  for (const request of PASSWORD_REQUESTS) {
-    client.connection.once(request, () => {
-      session.askedPassword = true;
-    });
-  }
-  return session;
+  return { client, sockets };
 }
 
 function Shut(session: Session): void {
@@ -137,16 +141,16 @@ function Unanswered(err: unknown): ProbeAnswer {
 }
 
 /** A failed sign-in: the server's refusal, a password the server asked for and the URL lacks, or no answer. */
-function Refusal(err: unknown, session: Session): ProbeAnswer {
+function Refusal(err: unknown): ProbeAnswer {
   if (err instanceof DatabaseError) {
     const refusal = (err.code && REFUSALS.get(err.code)) || "other";
     return { outcome: "refused", refusal, message: err.message };
   }
-  if (session.askedPassword) {
+  if (err instanceof PasswordRequired) {
     return {
       outcome: "refused",
       refusal: "sign-in-required",
-      message: MessageOf(err),
+      message: err.message,
     };
   }
   return Unanswered(err);
@@ -183,7 +187,7 @@ async function SignIn(session: Session): Promise<ProbeAnswer> {
   try {
     await session.client.connect();
   } catch (err) {
-    return Refusal(err, session);
+    return Refusal(err);
   }
   return Read(session.client);
 }

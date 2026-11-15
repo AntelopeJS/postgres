@@ -193,3 +193,46 @@ export function WatchClientSockets(port: number): ClientSockets {
     },
   };
 }
+
+/** PostgreSQL's AuthenticationCleartextPassword: an `R` message of length 8 asking for method 3. */
+const CLEARTEXT_PASSWORD_REQUEST = Buffer.from([
+  0x52, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x03,
+]);
+
+/** A server that answers every startup by asking for a cleartext password, and what came after. */
+export interface PasswordServer {
+  port: number;
+  /** The bytes clients sent after the server asked for a password. */
+  received: () => number;
+  close: () => Promise<void>;
+}
+
+/** Starts a server that asks every client for a cleartext password and counts what it sends back. */
+export async function StartPasswordServer(): Promise<PasswordServer> {
+  const sockets = new Set<Socket>();
+  let received = 0;
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    let asked = false;
+    socket.on("data", (chunk: Buffer) => {
+      if (asked) {
+        received += chunk.length;
+        return;
+      }
+      asked = true;
+      socket.write(CLEARTEXT_PASSWORD_REQUEST);
+    });
+    socket.on("close", () => sockets.delete(socket));
+    socket.on("error", () => undefined);
+  });
+  return {
+    port: await Listen(server),
+    received: () => received,
+    close: async () => {
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      await Stop(server);
+    },
+  };
+}

@@ -11,7 +11,31 @@ import {
   TIMEOUT_MS,
   WithProbeLogins,
 } from "./probe-fixture";
-import { ClosedPort } from "./relays";
+import { ClosedPort, StartPasswordServer } from "./relays";
+
+function WithoutPassword(url: string): string {
+  return Altered(url, (target) => {
+    target.password = "";
+  });
+}
+
+/** Runs `check` with `PGPASSWORD` set to `password`, then puts the environment back. */
+async function WithPgPassword(
+  password: string,
+  check: () => Promise<void>,
+): Promise<void> {
+  const previous = process.env.PGPASSWORD;
+  process.env.PGPASSWORD = password;
+  try {
+    await check();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PGPASSWORD;
+    } else {
+      process.env.PGPASSWORD = previous;
+    }
+  }
+}
 
 function OnDatabase(url: string, database: string): string {
   return Altered(url, (target) => {
@@ -52,13 +76,38 @@ describe("the connection probe's refusals", function () {
   });
 
   it("refuses a URL without the password the server asks for as sign-in-required", async () => {
-    const url = Altered(LoginUrl(LOGIN.reader), (target) => {
-      target.password = "";
-    });
-    expect(await Probe(url)).to.include({
+    expect(await Probe(WithoutPassword(LoginUrl(LOGIN.reader)))).to.include({
       outcome: "refused",
       refusal: "sign-in-required",
     });
+  });
+
+  it("never fills a password the URL lacks from PGPASSWORD", async () => {
+    const reader = LoginUrl(LOGIN.reader);
+    await WithPgPassword(new URL(reader).password, async () => {
+      expect(await Probe(WithoutPassword(reader))).to.include({
+        outcome: "refused",
+        refusal: "sign-in-required",
+      });
+    });
+  });
+
+  it("sends nothing to a server asking for a cleartext password the URL lacks", async () => {
+    const server = await StartPasswordServer();
+    try {
+      await WithPgPassword("the probing process's own secret", async () => {
+        const url = WithoutPassword(
+          OnPort(LoginUrl(LOGIN.reader), server.port),
+        );
+        expect(await Probe(url)).to.include({
+          outcome: "refused",
+          refusal: "sign-in-required",
+        });
+      });
+      expect(server.received()).to.equal(0);
+    } finally {
+      await server.close();
+    }
   });
 
   it("answers a port nothing listens on as unreachable, within the timeout", async () => {
