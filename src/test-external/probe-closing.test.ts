@@ -19,6 +19,8 @@ import {
 } from "./relays";
 
 const CLOSE_SETTLE_MS = 1000;
+/** Past the 250 ms grace with room to spare, but short of what a longer grace would need. */
+const GRACE_SETTLE_MS = 500;
 /** Shorter than the 250 ms grace, so only an abort that shuts at once passes. */
 const ABORT_SETTLE_MS = 100;
 
@@ -65,7 +67,7 @@ describe("the connection probe's closing", function () {
     await WithRelay(relay, async (_, sockets) => {
       const answer = SignedIn(await Probe(ReaderOn(relay)));
       expect(answer).to.include({ user: LOGIN.reader, canRead: true });
-      expect(await sockets.settle(CLOSE_SETTLE_MS)).to.deep.equal({
+      expect(await sockets.settle(GRACE_SETTLE_MS)).to.deep.equal({
         opened: 1,
         open: 0,
       });

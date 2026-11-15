@@ -58,7 +58,7 @@ const SETUP = [
   `GRANT ${READERS_GROUP} TO ${TEAM_GROUP}`,
   `GRANT ${TEAM_GROUP} TO ${Quoted(LOGIN.grantee)}`,
   `CREATE SCHEMA ${TRAP_SCHEMA}`,
-  `CREATE FUNCTION ${TRAP_SCHEMA}.obj_description(oid, name) RETURNS text
+  `CREATE FUNCTION ${TRAP_SCHEMA}.has_any_column_privilege(oid, text) RETURNS boolean
     LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'the listing is refused'; END $$`,
   `GRANT USAGE ON SCHEMA ${TRAP_SCHEMA} TO ${LOGIN.trapped}`,
   `ALTER ROLE ${LOGIN.trapped} SET search_path = ${TRAP_SCHEMA}, pg_catalog`,

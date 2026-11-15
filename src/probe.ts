@@ -9,9 +9,9 @@ import { Client, DatabaseError } from "pg";
 
 import {
   AccessOf,
-  RELATIONS_SQL,
+  PRIVILEGES_SQL,
   type RelationAccess,
-  type RelationRow,
+  type RelationPrivileges,
 } from "./implementations/database/external-access";
 
 /** How long a client may take to close before its sockets are shut. */
@@ -165,7 +165,9 @@ async function Read(client: Client): Promise<ProbeAnswer> {
     const account = await client.query<AccountRow>(ACCOUNT_SQL);
     answer.latencyMs = Math.ceil(performance.now() - started);
     answer.user = account.rows[0].role;
-    const relations = await client.query<RelationRow>(RELATIONS_SQL, [null]);
+    const relations = await client.query<RelationPrivileges>(PRIVILEGES_SQL, [
+      null,
+    ]);
     return { ...answer, ...Privileges(relations.rows.map(AccessOf)) };
   } catch (err) {
     if (!(err instanceof DatabaseError)) {
