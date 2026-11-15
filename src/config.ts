@@ -1,6 +1,7 @@
 import { GetRuntimeInfo } from "@antelopejs/interface-core/runtime";
-import type { PoolConfig } from "pg";
-import { type ConnectionOptions, parse } from "pg-connection-string";
+import { Client, type ClientConfig, type PoolConfig } from "pg";
+
+import type { ConnectionSsl } from "./pg-connection-parameters";
 
 /**
  * How aggressively schema registration is allowed to alter existing tables.
@@ -173,35 +174,52 @@ function ResolveMode(options?: Options): Mode {
   return mode;
 }
 
-/** Whether the parser left `ssl` as the URL's own text, which only `no-verify` may be. */
-function IsSslText(ssl: ConnectionOptions["ssl"]): ssl is string {
+const SSL_SPELLINGS =
+  "write ssl=true or an sslmode for TLS, ssl=0 or sslmode=disable for none, or ssl=no-verify";
+
+/** Whether `pg` kept `ssl` as text, which it reads only when empty. */
+function IsSslText(ssl: ConnectionSsl): ssl is string {
   return typeof ssl === "string";
 }
 
 /**
- * Refuses an `ssl` value `pg` cannot use. The parser turns `true`, `1` and `0` into a boolean and
- * leaves any other value as text, unless `sslmode` or a certificate replaces it; `pg` reads
- * `no-verify` and then, once the server accepts TLS, throws on any other text inside a socket
- * event, where no promise catches it and the process exits. A URL the parser cannot read is left
- * for `pg` to refuse as it always has.
+ * The `ssl` text `pg` would connect with under `config`, read from `pg`'s own connection parameters
+ * after every conversion it makes. `pg` turns `true` and `no-verify` into a TLS setting and skips
+ * TLS for empty text; once the server accepts TLS, it throws on any other text inside a socket
+ * event, where no promise catches it and the process exits. A config `pg` cannot read is left for
+ * `pg` to refuse at connect, as it always has.
  */
-function AssertUsableSsl(url: string): void {
-  let ssl: ConnectionOptions["ssl"];
+function UnusableSsl(config: ClientConfig): string | undefined {
+  let ssl: ConnectionSsl;
   try {
-    ({ ssl } = parse(url));
+    ssl = new Client(config).connectionParameters.ssl;
   } catch {
-    return;
+    return undefined;
   }
-  if (IsSslText(ssl) && ssl !== "no-verify") {
+  return IsSslText(ssl) && ssl !== "" ? ssl : undefined;
+}
+
+/**
+ * Refuses an `ssl` setting `pg` would end the process on, from `url` alone as the change-feed
+ * listener connects, and from `url` with `pool` merged over it as the pool does.
+ */
+function AssertUsableSsl(url: string, pool: PoolConfig): void {
+  const fromUrl = UnusableSsl({ connectionString: url });
+  if (fromUrl !== undefined) {
     throw new Error(
-      `config.url sets ssl=${ssl}, which pg cannot use: write ssl=true or an sslmode for TLS, ssl=0 or sslmode=disable for none, or ssl=no-verify`,
+      `config.url sets ssl=${fromUrl}, which pg cannot use: ${SSL_SPELLINGS}`,
+    );
+  }
+  const fromPool = UnusableSsl({ connectionString: url, ...pool });
+  if (fromPool !== undefined) {
+    throw new Error(
+      `config.pool sets ssl to "${fromPool}", which pg cannot use: set pool.ssl to true, false or an object of TLS options, or ${SSL_SPELLINGS} in the URL`,
     );
   }
 }
 
 function ResolveUrl(mode: Mode, options?: Options): string {
   if (options?.url !== undefined && options.url.trim() !== "") {
-    AssertUsableSsl(options.url);
     return options.url;
   }
   if (mode === "external") {
@@ -215,6 +233,7 @@ function ResolveUrl(mode: Mode, options?: Options): string {
 export function SetOptions(options?: Options): ResolvedOptions {
   const mode = ResolveMode(options);
   const url = ResolveUrl(mode, options);
+  AssertUsableSsl(url, options?.pool ?? {});
   resolved = {
     mode,
     url,
