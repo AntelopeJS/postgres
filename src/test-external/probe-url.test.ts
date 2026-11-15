@@ -88,9 +88,6 @@ const STARTUP_ROWS = [
   { name: "options", value: "-c search_path=x", sent: "-c search_path=x" },
 ];
 
-/** PostgreSQL's SSLRequest: length 8, then the request code 80877103. */
-const SSL_REQUEST = Buffer.from([0, 0, 0, 8, 0x04, 0xd2, 0x16, 0x2f]);
-
 /** Long enough that work worse than linear in it would take seconds. */
 const HOSTILE_LENGTH = 1_000_000;
 
@@ -160,7 +157,13 @@ function CredentialCases() {
 }
 
 function WorkCases() {
-  for (const path of ["/dev/zero", __dirname]) {
+  const ROOT_CERTIFICATES = [
+    "/dev/zero",
+    __dirname,
+    "/proc/self/pagemap",
+    __filename,
+  ];
+  for (const path of ROOT_CERTIFICATES) {
     it(`refuses sslrootcert=${path} without reading it`, async () => {
       await WithServer(await StartRecordingServer(), async (server) => {
         const url = WithParameter(
@@ -179,32 +182,14 @@ function WorkCases() {
     });
   }
 
-  it("keeps an sslrootcert that names a small regular file, and asks for TLS", async () => {
-    await WithServer(await StartRecordingServer(), async (server) => {
-      const url = WithParameter(
-        OnPort(LoginUrl(LOGIN.reader), server.port),
-        "sslrootcert",
-        __filename,
-      );
-      await Bounded(url);
-      expect(server.connections()).to.equal(1);
-      expect(server.first()).to.deep.equal(SSL_REQUEST);
+  it("refuses many sslrootcert keys within its bound", async () => {
+    const url = `${OnPort(LoginUrl(LOGIN.reader), await ClosedPort())}?${`sslrootcert=${__filename}&`.repeat(10_000)}`;
+    const started = performance.now();
+    expect(await Bounded(url)).to.include({
+      outcome: "refused",
+      refusal: "other",
     });
-  });
-
-  it("refuses sslrootcert=/proc/self/pagemap, which stat calls empty, without reading it all", async () => {
-    await WithServer(await StartRecordingServer(), async (server) => {
-      const url = WithParameter(
-        OnPort(LoginUrl(LOGIN.reader), server.port),
-        "sslrootcert",
-        "/proc/self/pagemap",
-      );
-      expect(await Bounded(url)).to.include({
-        outcome: "refused",
-        refusal: "other",
-      });
-      expect(Seen(server)).to.deep.equal(NO_CONNECTION);
-    });
+    expect(performance.now() - started).to.be.lessThan(BOUND_MS);
   });
 
   for (const [key, character] of [

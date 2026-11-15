@@ -1,9 +1,4 @@
-import { closeSync, openSync, readSync, statSync } from "node:fs";
-
 import { type ConnectionOptions, parse } from "pg-connection-string";
-
-/** Larger than any CA bundle, small enough to read at once. */
-const MAX_ROOT_CERTIFICATE_BYTES = 1 << 20;
 
 /** The first character code past the C0 controls. */
 const FIRST_PRINTABLE = 0x20;
@@ -15,7 +10,7 @@ const CLIENT_CERTIFICATE =
   "the URL presents a client certificate of the probing host (sslcert, sslkey), which the probe never sends";
 
 const ROOT_CERTIFICATE =
-  "the URL's sslrootcert is not a regular file of at most 1 MiB the probe can read";
+  "the URL names a CA file of the probing host (sslrootcert), and the probe reads no file: a read of one cannot be bounded in time";
 
 const NO_USER =
   "the URL names no user, and the probe signs in as no user of the probing process";
@@ -53,51 +48,15 @@ function HasControlCharacter(url: string): boolean {
   return false;
 }
 
-/** Whether reading `descriptor` to its end takes at most `limit` bytes, never trusting its size. */
-function EndsWithin(descriptor: number, limit: number): boolean {
-  const buffer = Buffer.alloc(limit + 1);
-  let total = 0;
-  while (total <= limit) {
-    const read = readSync(descriptor, buffer, total, limit + 1 - total, null);
-    if (read === 0) {
-      return true;
-    }
-    total += read;
-  }
-  return false;
-}
-
 /**
- * Whether `path` is a regular file that ends within the limit when read. Its reported size is not
- * trusted: a `/proc` file reports 0 and can return gigabytes.
- */
-function IsSmallRegularFile(path: string): boolean {
-  try {
-    if (!statSync(path).isFile()) {
-      return false;
-    }
-    const descriptor = openSync(path, "r");
-    try {
-      return EndsWithin(descriptor, MAX_ROOT_CERTIFICATE_BYTES);
-    } finally {
-      closeSync(descriptor);
-    }
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Why the parser must not see the URL: it would read a client certificate of the probing host, or
- * read a CA file without bound (a device, a FIFO, a huge file) and block the event loop before
- * `timeoutMs` or the signal could stop it.
+ * Why the parser must not see the URL: it would read a file of the probing host synchronously, a
+ * client certificate that must not be sent or a CA file whose read no time bound can stop.
  */
 function FileRefusal(query: URLSearchParams): string | undefined {
   if (query.has("sslcert") || query.has("sslkey")) {
     return CLIENT_CERTIFICATE;
   }
-  const roots = query.getAll("sslrootcert").filter((path) => path !== "");
-  return roots.every(IsSmallRegularFile) ? undefined : ROOT_CERTIFICATE;
+  return query.has("sslrootcert") ? ROOT_CERTIFICATE : undefined;
 }
 
 /** Why the parsed URL would sign in with the probing process's user name or host. */

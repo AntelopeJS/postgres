@@ -117,8 +117,8 @@ const answer = await probe({ url, timeoutMs: 5000, signal });
 
 The probe signs in to the host the URL names with the user name and password the URL carries, and nothing else:
 
-- A URL with no user or no host is refused as `other` before connecting: `pg` would take them from `PGUSER`, the OS user name or `PGHOST`. A password the URL lacks is never taken from `PGPASSWORD`, `PGPASSFILE` or `~/.pgpass`.
-- `sslcert` and `sslkey` are refused as `other` before connecting, because a client certificate of the probing host is a credential. `sslrootcert` is kept when it names a regular file of at most 1 MiB, and refused otherwise. Every other TLS option of the URL is kept, as the driver's pool reads it.
+- A URL with a control character, no user or no host is refused as `other` before connecting: `pg` would take them from `PGUSER`, the OS user name or `PGHOST`. A password the URL lacks is never taken from `PGPASSWORD`, `PGPASSFILE` or `~/.pgpass`.
+- `sslcert`, `sslkey` and `sslrootcert` are refused as `other` before connecting: the probe reads no file of the probing host. A client certificate of that host is a credential, and a read of a CA file cannot be bounded in time. Every other TLS option of the URL is kept, as the driver's pool reads it.
 - `timeoutMs` bounds each answer whatever the URL says: the probe sets `query_timeout`, `statement_timeout`, `lock_timeout` and `idle_in_transaction_session_timeout` itself, and opens no replication session. The relation listing runs in a read-only transaction, so a `search_path` from the URL's `options` cannot make it write.
 
 The probe closes its connection once it answers, and shuts the socket when the server has not closed it 250 ms later. When `signal` aborts before the probe answers, it shuts every socket at once and answers `{ outcome: "unreachable", message: "The probe was aborted." }`, whatever the server has said so far. A signal that has already aborted gets the same answer, and nothing is opened. An abort while the probe waits for the server to close shuts the socket at once too.
