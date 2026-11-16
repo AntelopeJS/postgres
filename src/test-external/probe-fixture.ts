@@ -26,11 +26,16 @@ export const LOGIN = {
   unseen: "probe_unseen",
   grantee: "probe@grantee",
   trapped: "probe_trapped",
+  owner: "probe_owner",
+  schemer: "probe_schemer",
 } as const;
 
 export const NO_LOGIN = "probe_nologin";
 
 export const LOCKED_DATABASE = "probe_locked";
+
+/** A database with no relation, owned by `probe_owner`, in which `probe_schemer` may create schemas. */
+export const EMPTY_DATABASE = "probe_empty";
 
 const READERS_GROUP = "probe_readers";
 const TEAM_GROUP = "probe_team";
@@ -48,6 +53,7 @@ function Quoted(role: string): string {
 /** Drops whatever an earlier run left, so a run killed midway does not wedge the next one. */
 const TEARDOWN = [
   `DROP DATABASE IF EXISTS ${LOCKED_DATABASE}`,
+  `DROP DATABASE IF EXISTS ${EMPTY_DATABASE}`,
   `DROP SCHEMA IF EXISTS ${TRAP_SCHEMA} CASCADE`,
   `DROP SCHEMA IF EXISTS ${SCRIBBLE_SCHEMA} CASCADE`,
   `DO $$ DECLARE role text; BEGIN
@@ -89,6 +95,8 @@ const SETUP = [
   `GRANT INSERT ON ${SCRIBBLE_SCHEMA}.marks TO ${LOGIN.writer}`,
   `CREATE DATABASE ${LOCKED_DATABASE}`,
   `REVOKE CONNECT ON DATABASE ${LOCKED_DATABASE} FROM PUBLIC`,
+  `CREATE DATABASE ${EMPTY_DATABASE} OWNER ${LOGIN.owner}`,
+  `GRANT CREATE ON DATABASE ${EMPTY_DATABASE} TO ${LOGIN.schemer}`,
 ];
 
 function OwnerUrl(): string {

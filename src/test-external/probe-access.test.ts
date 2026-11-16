@@ -9,6 +9,8 @@ import { GetOptions } from "../config";
 import { Connect } from "../connection";
 import { ListRelations } from "../implementations/catalog";
 import {
+  Altered,
+  EMPTY_DATABASE,
   LOGIN,
   LoginUrl,
   Probe,
@@ -78,6 +80,25 @@ describe("the connection probe's access", function () {
         expect(answer.latencyMs).to.be.at.least(1);
         expect({ canRead, canWrite }).to.deep.equal(await CatalogAccess(login));
       });
+    }
+  });
+
+  /**
+   * Fails on a probe that judges write access by the relations alone, which answers no write
+   * access on a database with none, or that counts a right other than creating tables there.
+   */
+  it("answers write access on an empty database only to a login that may create tables in it", async () => {
+    for (const [role, canWrite] of [
+      [LOGIN.reader, false],
+      [LOGIN.owner, true],
+      [LOGIN.schemer, true],
+    ] as const) {
+      const empty = Altered(LoginUrl(role), (target) => {
+        target.pathname = `/${EMPTY_DATABASE}`;
+      });
+      const answer = SignedIn(await Probe(empty));
+      expect(answer, role).to.include({ user: role, canRead: true, canWrite });
+      expect(answer, role).to.not.have.property("unreadable");
     }
   });
 

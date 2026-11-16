@@ -24,6 +24,17 @@ const ACCOUNT_SQL = "SELECT current_user AS role";
 /** Holds the listing to reads, whatever functions the session's `search_path` resolves to. */
 const READ_ONLY_SQL = "BEGIN TRANSACTION READ ONLY";
 
+/**
+ * Whether the role may create a table in the database: in a schema that grants it `CREATE`, or in
+ * a schema the database lets it create. `pg_temp_*` and `pg_toast` are left out with the rest of `pg_*`.
+ */
+const CREATES_SQL = `SELECT pg_catalog.has_database_privilege(pg_catalog.current_database(), 'CREATE')
+    OR EXISTS (
+      SELECT 1 FROM pg_catalog.pg_namespace n
+      WHERE n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg\\_%'
+        AND pg_catalog.has_schema_privilege(n.oid, 'CREATE')
+    ) AS creates`;
+
 const ABORTED = "The probe was aborted.";
 
 /** What a server error during the sign-in refuses. Any other code is `other`. */
@@ -48,6 +59,10 @@ type SignedIn = Extract<ProbeAnswer, { outcome: "signed-in" }>;
 
 interface AccountRow {
   role: string;
+}
+
+interface CreatesRow {
+  creates: boolean;
 }
 
 /** A client and every socket it opened, which `pg` does not shut when the server ignores its goodbye. */
@@ -125,15 +140,20 @@ function Close(session: Session, signal: AbortSignal): void {
   session.client.end().then(settle, Ignore);
 }
 
-/** The probe's rule over the catalog's per-relation access: any relation decides, none reads. */
-function Privileges(access: RelationAccess[]) {
+/**
+ * The probe's rule over the catalog's per-relation access: any relation decides, none reads. The
+ * right to create a table writes too, so an empty database the role may build in is not read-only.
+ */
+function Privileges(access: RelationAccess[], creates: boolean) {
   return {
     canRead:
       access.length === 0 ||
       access.some(({ unmappable }) => unmappable === undefined),
-    canWrite: access.some(
-      ({ writes }) => writes.insert || writes.update || writes.delete,
-    ),
+    canWrite:
+      creates ||
+      access.some(
+        ({ writes }) => writes.insert || writes.update || writes.delete,
+      ),
   };
 }
 
@@ -186,7 +206,11 @@ async function Read(client: Client): Promise<ProbeAnswer> {
     const relations = await client.query<RelationPrivileges>(PRIVILEGES_SQL, [
       null,
     ]);
-    return { ...answer, ...Privileges(relations.rows.map(AccessOf)) };
+    const creates = await client.query<CreatesRow>(CREATES_SQL);
+    return {
+      ...answer,
+      ...Privileges(relations.rows.map(AccessOf), creates.rows[0].creates),
+    };
   } catch (err) {
     if (!(err instanceof DatabaseError)) {
       return Unanswered(err instanceof Error ? err : new Error(String(err)));
@@ -226,7 +250,8 @@ function WhenAborted(signal: AbortSignal, onAbort: () => void) {
 
 /**
  * Signs in to PostgreSQL with `pg` and answers what the account may do over the relations the
- * catalog's `ListRelations` sees, judged per relation as the catalog judges them. Every client it
+ * catalog's `ListRelations` sees, judged per relation as the catalog judges them, and whether it
+ * may create a table in the database, which counts as write access. Every client it
  * opens is closed once it answers. When `signal` aborts before then, or has already aborted, it
  * shuts every socket at once, or opens none, and answers {@link AbortedAnswer} whatever the server
  * said. An abort during the close shuts every socket at once too.
