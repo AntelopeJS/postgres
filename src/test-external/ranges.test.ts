@@ -38,6 +38,15 @@ describe("the range of an external column", function () {
     expect(measured).to.not.include("platinum");
   });
 
+  it("ends a column typed as a domain over an enum like an enum column, and counts its nulls", async () => {
+    const { profile } = await ProfiledColumn("grade", "sales.domain_grades");
+    expect(profile?.range).to.deep.equal({
+      status: "ok",
+      value: { min: "silver", max: "gold" },
+    });
+    expect(profile?.nulls).to.deep.equal({ status: "ok", value: 1 });
+  });
+
   it("ends an integer column at values seen 5 times, past values seen 4 times", async () => {
     const { profile, results } = await ProfiledColumn("level");
     expect(profile?.range).to.deep.equal({

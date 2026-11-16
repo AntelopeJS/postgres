@@ -55,6 +55,8 @@ export interface ProfiledColumn {
   family: NativeFamily;
   kind: SqlType;
   quoted: string;
+  /** The base type, which an enum is counted as so a domain over it keeps the enum's aggregates. */
+  castType: string;
 }
 
 interface BaseRow {
@@ -92,6 +94,7 @@ export function Profiled(column: CatalogColumn): ProfiledColumn | undefined {
     family,
     kind: proposed.kind,
     quoted: `${SOURCE_ALIAS}.${QuoteIdentifier(column.name)}`,
+    castType: column.castType,
   };
 }
 
@@ -121,12 +124,15 @@ function Instant(column: ProfiledColumn, value: string): string {
 }
 
 /**
- * The value a column's rows are counted by: text as written, any other value as stored, so no
- * conversion merges values that differ, such as two `int8` values one `float8`.
+ * The value a column's rows are counted by: text as written, an enum as its base type, any other
+ * value as stored, so no conversion merges values that differ, such as two `int8` values one `float8`.
  */
 function CountedKey(column: ProfiledColumn): string {
-  return TEXT_FAMILIES.includes(column.family)
-    ? `(${column.quoted})::text`
+  if (TEXT_FAMILIES.includes(column.family)) {
+    return `(${column.quoted})::text`;
+  }
+  return column.family === "enum"
+    ? `(${column.quoted})::${column.castType}`
     : column.quoted;
 }
 
