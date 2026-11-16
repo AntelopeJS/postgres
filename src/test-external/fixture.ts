@@ -149,6 +149,12 @@ export const FIXTURE: readonly string[] = [
       CASE WHEN g <= 4 THEN 'bronze' WHEN g <= 9 THEN 'silver' WHEN g <= 17 THEN 'gold' ELSE 'platinum' END::sales.grade,
       CASE WHEN g <= 4 THEN 7001 WHEN g <= 9 THEN 7002 WHEN g <= 14 THEN 7008 ELSE 7009 END
     FROM generate_series(1, 18) g`,
+  "CREATE DOMAIN sales.known_grade AS sales.grade",
+  "CREATE TABLE sales.domain_grades (id int PRIMARY KEY, grade sales.known_grade)",
+  `INSERT INTO sales.domain_grades
+    SELECT g,
+      CASE WHEN g <= 4 THEN 'bronze' WHEN g <= 9 THEN 'silver' WHEN g <= 17 THEN 'gold' WHEN g <= 18 THEN NULL ELSE 'platinum' END::sales.grade
+    FROM generate_series(1, 19) g`,
   "CREATE TABLE sales.snowflakes (id int PRIMARY KEY, ref bigint NOT NULL)",
   "INSERT INTO sales.snowflakes SELECT g, 1500000000000000000 + g FROM generate_series(1, 5) g",
   "ANALYZE",
