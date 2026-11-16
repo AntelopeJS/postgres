@@ -4,7 +4,7 @@ import { catalogDescribe, catalogRefused } from "./journeys-catalog.ts";
 import { externalReadWrite, externalRegistration } from "./journeys-external.ts";
 import { changeFeeds } from "./journeys-feeds.ts";
 import { configOptions, configRefused } from "./journeys-module.ts";
-import { readQueries } from "./journeys-reads.ts";
+import { readNestedPaths, readQueries } from "./journeys-reads.ts";
 import { migrations, storageLayout } from "./journeys-schemas.ts";
 import { insertValues, updateReplaceDelete } from "./journeys-writes.ts";
 import { DATABASE, ownedConfig, SERVICE } from "./session.ts";
@@ -90,6 +90,7 @@ const config: VerifyConfig = {
     "insert-values": insertValues,
     "update-replace-delete": updateReplaceDelete,
     "read-queries": readQueries,
+    "read-nested-paths": readNestedPaths,
     "change-feeds": changeFeeds,
     "external-read-write": externalReadWrite,
     "external-registration": externalRegistration,

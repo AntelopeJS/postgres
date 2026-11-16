@@ -1,7 +1,9 @@
 ---
 covers:
   - src/connect-failure.ts
+  - src/probe.ts
   - src/implementations/catalog/**
+  - src/implementations/database/external-access.ts
   - src/implementations/database/external-catalog.ts
   - src/implementations/database/external-discovery.ts
   - src/implementations/database/external-declarations.ts
@@ -44,4 +46,6 @@ pnpm exec antelopejs-verify journey "$RUN" catalog
 - `external-catalog.ts` reads the columns and keys that external registration uses too, so `external` covers it as well.
 - `estimatedRows` comes from PostgreSQL's statistics and is not asserted.
 - The refusal under `ajs project start` without `catalog.enabled` is not driven, because `context.dev` runs only `ajs project dev`.
+- `src/probe.ts` (`@antelopejs/postgres/dist/probe`, #98, #106) loads in plain Node outside the runtime, so no journey, which runs under `ajs project dev`, drives it; `src/test-external/probe-*.test.ts` do. `module`'s `src/*.ts` glob matches it too.
+- The ranges a profile answers for an enum or integer column (#105) are not asserted; `src/test-external/ranges.test.ts` covers them.
 - `CheckReference` and the inbound and reference parts of a profile are not driven.
