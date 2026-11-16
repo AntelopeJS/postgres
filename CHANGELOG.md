@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.4.3
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.4.2...v0.4.3)
+
+### 🩹 Fixes
+
+- **catalog:** End an enum or integer range at values counted 5 times ([#105](https://github.com/AntelopeJS/postgres/pull/105))
+- **probe:** Count the right to create tables as write access ([#106](https://github.com/AntelopeJS/postgres/pull/106))
+- **catalog:** Profile a domain over an enum like an enum column ([#109](https://github.com/AntelopeJS/postgres/pull/109))
+
+### 📦 Build
+
+- Move to @antelopejs/tooling-configs 0.8 and the three-tier CI ([#103](https://github.com/AntelopeJS/postgres/pull/103))
+
+### ✅ Tests
+
+- **verify:** Journey for dotted nested reads and skill upkeep ([#107](https://github.com/AntelopeJS/postgres/pull/107))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.4.2
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.4.1...v0.4.2)
