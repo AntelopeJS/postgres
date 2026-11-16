@@ -92,6 +92,7 @@ describe("the connection probe's access", function () {
       [LOGIN.reader, false],
       [LOGIN.owner, true],
       [LOGIN.schemer, true],
+      [LOGIN.builder, true],
     ] as const) {
       const empty = Altered(LoginUrl(role), (target) => {
         target.pathname = `/${EMPTY_DATABASE}`;

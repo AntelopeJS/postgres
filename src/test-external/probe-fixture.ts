@@ -28,13 +28,17 @@ export const LOGIN = {
   trapped: "probe_trapped",
   owner: "probe_owner",
   schemer: "probe_schemer",
+  builder: "probe_builder",
 } as const;
 
 export const NO_LOGIN = "probe_nologin";
 
 export const LOCKED_DATABASE = "probe_locked";
 
-/** A database with no relation, owned by `probe_owner`, in which `probe_schemer` may create schemas. */
+/**
+ * A database with no relation, owned by `probe_owner`, in which `probe_schemer` may create schemas
+ * and `probe_builder` may create tables in `public` only.
+ */
 export const EMPTY_DATABASE = "probe_empty";
 
 const READERS_GROUP = "probe_readers";
@@ -107,8 +111,11 @@ function OwnerUrl(): string {
   return url;
 }
 
-async function RunAsOwner(statements: readonly string[]): Promise<void> {
-  const client = new Client({ connectionString: OwnerUrl() });
+async function RunAsOwner(
+  statements: readonly string[],
+  url = OwnerUrl(),
+): Promise<void> {
+  const client = new Client({ connectionString: url });
   await client.connect();
   try {
     for (const statement of statements) {
@@ -157,7 +164,15 @@ export async function WithEnvironment(
 
 /** Creates the probe suites' logins and database before a suite, and drops them after it. */
 export function WithProbeLogins(): void {
-  before(() => RunAsOwner(SETUP));
+  before(async () => {
+    await RunAsOwner(SETUP);
+    await RunAsOwner(
+      [`GRANT CREATE ON SCHEMA public TO ${LOGIN.builder}`],
+      Altered(OwnerUrl(), (target) => {
+        target.pathname = `/${EMPTY_DATABASE}`;
+      }),
+    );
+  });
   after(() => RunAsOwner(TEARDOWN));
 }
 
