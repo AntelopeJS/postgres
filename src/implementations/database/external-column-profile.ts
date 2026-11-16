@@ -55,6 +55,8 @@ export interface ProfiledColumn {
   family: NativeFamily;
   kind: SqlType;
   quoted: string;
+  /** The base type, which an enum is counted as so a domain over it keeps the enum's aggregates. */
+  castType: string;
 }
 
 interface BaseRow {
@@ -92,20 +94,23 @@ export function Profiled(column: CatalogColumn): ProfiledColumn | undefined {
     family,
     kind: proposed.kind,
     quoted: `${SOURCE_ALIAS}.${QuoteIdentifier(column.name)}`,
+    castType: column.castType,
   };
 }
 
-/** A date read as the instant registration reads it, an enum by its label, a number as one. */
-function RangeExpression(column: ProfiledColumn): string | undefined {
+/** How a column's ends are read: a date as the instant registration reads it, an enum by its label, a number as one. */
+function RangeReading(
+  column: ProfiledColumn,
+): ((value: string) => string) | undefined {
   if (column.family === "enum") {
-    return `(${column.quoted})`;
+    return (value) => `(${value})`;
   }
   if (!RANGED_KINDS.includes(column.kind.kind)) {
     return undefined;
   }
   return column.kind.kind === "timestamp"
-    ? InstantExpression(column)
-    : `(${column.quoted})::float8`;
+    ? (value) => Instant(column, value)
+    : (value) => `(${value})::float8`;
 }
 
 const INSTANTS: Partial<Record<NativeFamily, (column: string) => string>> = {
@@ -114,16 +119,57 @@ const INSTANTS: Partial<Record<NativeFamily, (column: string) => string>> = {
   date: (column) => `((${column})::timestamp AT TIME ZONE 'UTC')`,
 };
 
-function InstantExpression(column: ProfiledColumn): string {
-  return (INSTANTS[column.family] ?? ((value: string) => value))(column.quoted);
+function Instant(column: ProfiledColumn, value: string): string {
+  return (INSTANTS[column.family] ?? ((read: string) => read))(value);
+}
+
+/**
+ * The value a column's rows are counted by: text as written, an enum as its base type, any other
+ * value as stored, so no conversion merges values that differ, such as two `int8` values one `float8`.
+ */
+function CountedKey(column: ProfiledColumn): string {
+  if (TEXT_FAMILIES.includes(column.family)) {
+    return `(${column.quoted})::text`;
+  }
+  return column.family === "enum"
+    ? `(${column.quoted})::${column.castType}`
+    : column.quoted;
+}
+
+/** How a base query reads a column's ends: a `WITH` clause it opens with, and its two columns. */
+interface RangeClauses {
+  prefix: string;
+  ends: string;
+}
+
+/**
+ * The ends of a column. Those of a column whose values can be categories are taken among values
+ * counted at least {@link CATEGORY_MIN_ROWS} times inside the query, so a rare value never leaves
+ * the database; the `WITH` clause is read twice and so grouped once.
+ */
+function RangeSql(column: ProfiledColumn, source: Source): RangeClauses {
+  const read = RangeReading(column);
+  if (!read) {
+    return { prefix: "", ends: "NULL AS min, NULL AS max" };
+  }
+  if (!CATEGORY_FAMILIES.includes(column.family)) {
+    const value = read(column.quoted);
+    return { prefix: "", ends: `min(${value}) AS min, max(${value}) AS max` };
+  }
+  return {
+    prefix: `WITH counted AS (SELECT ${CountedKey(column)} AS key FROM ${source.from}
+      WHERE ${column.quoted} IS NOT NULL GROUP BY 1 HAVING count(*) >= ${CATEGORY_MIN_ROWS})
+    `,
+    ends: `${read("(SELECT min(key) FROM counted)")} AS min, ${read("(SELECT max(key) FROM counted)")} AS max`,
+  };
 }
 
 function BaseSql(column: ProfiledColumn, source: Source): string {
-  const range = RangeExpression(column);
+  const range = RangeSql(column, source);
   const isText = TEXT_FAMILIES.includes(column.family);
   const length = `length(${column.quoted})`;
-  return `SELECT (count(*) - count(${column.quoted}))::float8 AS nulls,
-    ${range ? `min(${range})` : "NULL"} AS min, ${range ? `max(${range})` : "NULL"} AS max,
+  return `${range.prefix}SELECT (count(*) - count(${column.quoted}))::float8 AS nulls,
+    ${range.ends},
     ${isText ? `min(${length})` : "NULL"}::float8 AS "minLength",
     ${isText ? `avg(${length})` : "NULL"}::float8 AS "avgLength",
     ${isText ? `max(${length})` : "NULL"}::float8 AS "maxLength"
@@ -169,7 +215,7 @@ async function MeasureBase(
   const measured = await session.measure<BaseRow>(BaseSql(column, source));
   const base: BaseMeasures = { nulls: FirstRow(measured, (row) => row.nulls) };
   const row = ValueOf(measured)?.[0];
-  if (RangeExpression(column)) {
+  if (RangeReading(column)) {
     base.range =
       measured.status === "ok"
         ? Present(row && RangeValue(column, row))
@@ -210,10 +256,10 @@ const CATEGORY_VALUES: Partial<
   bool: (column) => column,
 };
 
-function CategoryValue(column: ProfiledColumn): string {
+function CategoryValue(column: ProfiledColumn, key: string): string {
   return (
     CATEGORY_VALUES[column.family] ?? ((value: string) => `(${value})::text`)
-  )(column.quoted);
+  )(key);
 }
 
 /**
@@ -222,10 +268,10 @@ function CategoryValue(column: ProfiledColumn): string {
  * a rare value never leaves the database.
  */
 function CategoriesSql(column: ProfiledColumn, source: Source): string {
-  return `SELECT CASE WHEN top.rows >= ${CATEGORY_MIN_ROWS} THEN top.value END AS value,
+  return `SELECT CASE WHEN top.rows >= ${CATEGORY_MIN_ROWS} THEN ${CategoryValue(column, "top.key")} END AS value,
       sum(top.rows)::float8 AS rows
-    FROM (SELECT ${CategoryValue(column)} AS value, count(*)::float8 AS rows FROM ${source.from}
-      WHERE ${column.quoted} IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT ${CATEGORY_LIMIT + 1}) AS top
+    FROM (SELECT ${CountedKey(column)} AS key, count(*)::float8 AS rows FROM ${source.from}
+      WHERE ${column.quoted} IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, ${CategoryValue(column, CountedKey(column))} LIMIT ${CATEGORY_LIMIT + 1}) AS top
     GROUP BY 1 ORDER BY 2 DESC, 1`;
 }
 
@@ -268,7 +314,7 @@ async function MeasureMonths(
     return undefined;
   }
   const measured = await session.measure<MonthRow>(
-    `SELECT to_char(date_trunc('month', ${InstantExpression(column)} AT TIME ZONE 'UTC'), 'YYYY-MM') AS month,
+    `SELECT to_char(date_trunc('month', ${Instant(column, column.quoted)} AT TIME ZONE 'UTC'), 'YYYY-MM') AS month,
       count(*)::float8 AS rows FROM ${source.from}
       WHERE ${column.quoted} IS NOT NULL GROUP BY 1 ORDER BY 1 DESC LIMIT ${MONTH_LIMIT}`,
   );

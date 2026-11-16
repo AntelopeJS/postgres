@@ -142,6 +142,21 @@ export const FIXTURE: readonly string[] = [
   `INSERT INTO sales.tallies
     SELECT g, CASE WHEN g <= 4 THEN 'four' WHEN g <= 9 THEN 'five' ELSE 'many' END
     FROM generate_series(1, 29) g`,
+  "CREATE TYPE sales.grade AS ENUM ('bronze', 'silver', 'gold', 'platinum')",
+  "CREATE TABLE sales.grades (id int PRIMARY KEY, grade sales.grade NOT NULL, level int NOT NULL)",
+  `INSERT INTO sales.grades
+    SELECT g,
+      CASE WHEN g <= 4 THEN 'bronze' WHEN g <= 9 THEN 'silver' WHEN g <= 17 THEN 'gold' ELSE 'platinum' END::sales.grade,
+      CASE WHEN g <= 4 THEN 7001 WHEN g <= 9 THEN 7002 WHEN g <= 14 THEN 7008 ELSE 7009 END
+    FROM generate_series(1, 18) g`,
+  "CREATE DOMAIN sales.known_grade AS sales.grade",
+  "CREATE TABLE sales.domain_grades (id int PRIMARY KEY, grade sales.known_grade)",
+  `INSERT INTO sales.domain_grades
+    SELECT g,
+      CASE WHEN g <= 4 THEN 'bronze' WHEN g <= 9 THEN 'silver' WHEN g <= 17 THEN 'gold' WHEN g <= 18 THEN NULL ELSE 'platinum' END::sales.grade
+    FROM generate_series(1, 19) g`,
+  "CREATE TABLE sales.snowflakes (id int PRIMARY KEY, ref bigint NOT NULL)",
+  "INSERT INTO sales.snowflakes SELECT g, 1500000000000000000 + g FROM generate_series(1, 5) g",
   "ANALYZE",
   `CREATE TABLE sales.big_events (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, kind text NOT NULL, at timestamptz NOT NULL
