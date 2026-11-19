@@ -2,9 +2,10 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  merge_group:
   push:
-    branches: [next]
+    branches: [main]
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
@@ -29,12 +30,16 @@ jobs:
           PGPASSWORD=root "$pg_bin/createdb" -U postgres antelopejs_test
           echo "PG_TEST_URL=postgres://postgres:root@localhost:5432/antelopejs_test" >> "$GITHUB_ENV"
         fi
+      affected-tests: true
     permissions:
       contents: read
+    secrets:
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
   renovate-sync:
     if: >-
       github.event_name == 'pull_request' && startsWith(github.head_ref, 'renovate/') && github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: write
       actions: write
+      statuses: write
     uses: AntelopeJS/.github/.github/workflows/ci-renovate-sync.yml@v2
