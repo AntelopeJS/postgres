@@ -159,12 +159,12 @@ Nothing else changes. Without `url`, an external instance still refuses to const
 Each consumer reaches the catalog through a connection on its own module entry. Two consumers of the same database give their connections the same id:
 
 ```typescript fragment
-"dms-builder": {
+"dms": {
     importOverrides: [
         { interface: "@antelopejs/interface-database-catalog", source: "postgres-erp", id: "erp" },
     ],
 },
-"dms-ai": {
+"dms-database": {
     importOverrides: [
         { interface: "@antelopejs/interface-database-catalog", source: "postgres-erp", id: "erp" },
     ],
