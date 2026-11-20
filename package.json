@@ -53,7 +53,7 @@
   "dependencies": {
     "@antelopejs/interface-core": ">=0.5.0 <0.6.0",
     "@antelopejs/interface-database": ">=0.4.1 <0.5.0",
-    "@antelopejs/interface-database-catalog": ">=0.1.0 <0.2.0",
+    "@antelopejs/interface-database-catalog": "0.1.1-next.44.gee21aa3",
     "pg": "^8.22.0",
     "pg-connection-string": "^2.14.0"
   },
