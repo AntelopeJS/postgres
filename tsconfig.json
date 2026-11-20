@@ -10,6 +10,11 @@
     "noImplicitAny": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
+    "paths": {
+      "@antelopejs/interface-database-catalog/testing": [
+        "./node_modules/@antelopejs/interface-database-catalog/dist/testing.d.ts"
+      ]
+    },
     "removeComments": true,
     "preserveConstEnums": true,
     "experimentalDecorators": true,
