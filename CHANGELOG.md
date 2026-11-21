@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.4.4
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.4.3...v0.4.4)
+
+### 🩹 Fixes
+
+- **deps:** Depend on the stable @antelopejs/interface-database-catalog
+
+### 📖 Documentation
+
+- **external-mode:** Name the current catalog consumers ([#111](https://github.com/AntelopeJS/postgres/pull/111))
+
+### ✅ Tests
+
+- **external-mode:** Run the shared fewer-than-5 profile check ([#112](https://github.com/AntelopeJS/postgres/pull/112))
+
+### 🤖 CI
+
+- Move to trunk CI on main with the merge queue ([#110](https://github.com/AntelopeJS/postgres/pull/110))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.4.3
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.4.2...v0.4.3)
