@@ -126,7 +126,7 @@ describe("the replace statement's asserted identity", () => {
     expect(Sql(written)).to.not.contain('SET "_id"');
   });
 
-  it("empties the row for a payload that names only the key", () => {
+  it("empties the row for a payload that names only the key, rather than writing _id as a field to write", () => {
     expect(Sql(Replace({ _id: KEY }))).to.equal(
       Replaces(
         `${SILENT_COLUMNS}, ${EMPTY_EXTRA}`,
@@ -140,14 +140,14 @@ describe("the replace statement's asserted identity", () => {
     expect(Sql(Replace({ _id: undefined }))).to.equal(Sql(Replace({})));
   });
 
-  it("refuses a key asserted over a selection of many rows, naming what to do", () => {
+  it("refuses a key asserted over a selection of many rows, where narrowing it silently reaches at most one", () => {
     const keyed = { _id: KEY, name: NAME };
     expect(() => Write(Root().replace(keyed))).to.throw(
       "The 'replace' stage was given a payload naming '_id' over a selection of many rows: address the row with get(_id) first, or leave '_id' out of the payload",
     );
   });
 
-  it("asserts nothing for a key the payload set to null", () => {
+  it("asserts nothing for a key the payload set to null, where an asserted null matches no row", () => {
     expect(Sql(Replace({ _id: null, name: NAME }))).to.equal(
       Sql(Replace({ name: NAME })),
     );

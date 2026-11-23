@@ -157,7 +157,7 @@ describe("the update statement's asserted identity", () => {
     );
   });
 
-  it("asserts nothing for a key the payload set to null", () => {
+  it("asserts nothing for a key the payload set to null, where an asserted null matches no row", () => {
     expect(Sql(Update({ _id: null, age: AGE }))).to.equal(
       Sql(Update({ age: AGE })),
     );
@@ -231,7 +231,7 @@ describe("the count an update answers", () => {
     );
   });
 
-  it("leaves the mapper's expression body counting the rows it matched", () => {
+  it("leaves the mapper's expression body counting the rows it matched, rather than testing the derived table a second time", () => {
     const written = Write(Root().update((doc) => doc.key("meta")));
     expect(Sql(written)).to.not.contain("IS DISTINCT FROM");
   });
@@ -262,7 +262,7 @@ describe("the update statement's refusals", () => {
     );
   });
 
-  it("writes a document whose leading argument is a list of something else", () => {
+  it("writes a document whose leading argument is a list of something else, rather than telling it from a mapper by stage name alone", () => {
     const written = Update({ stage: "func", args: [["a"], RECORDED_ARGUMENT] });
     expect(Sql(written)).to.contain(`"_extra" = (${EXISTING_EXTRA} ||`);
     expect(Sql(written)).to.not.contain('AS "doc"');

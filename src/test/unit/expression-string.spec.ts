@@ -224,7 +224,7 @@ describe("str_match's pattern, which is a different regex language", () => {
     expect(Bound("[a\\]\\b]\\bx")).to.deep.equal(["[a\\]\\b]\\yx"]);
   });
 
-  it("rewrites an unescaped dot to the class JavaScript's dot means", () => {
+  it("rewrites an unescaped dot to the class JavaScript's dot means, where ARE's dot matches a newline and answers rows a caller expects skipped", () => {
     expect(Bound("a.z")).to.deep.equal(["a[^\n\r\u2028\u2029]z"]);
   });
 

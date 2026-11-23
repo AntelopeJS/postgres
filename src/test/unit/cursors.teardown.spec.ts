@@ -242,7 +242,7 @@ describe("the cursor registry", () => {
 describe("the cursor registry", () => {
   GuardTheRegistry();
 
-  it("closes every open cursor, and empties the registry", async () => {
+  it("closes every open cursor, and empties the registry, where counting only this file's cursors misses a client that blocks pool.end()", async () => {
     const first = Recorder();
     const second = Recorder();
     await Read(NextReqId(), Requesting(first, [Rows(1, 2, 3)]));
