@@ -174,7 +174,7 @@ describe("PlanTable", () => {
     ]);
   });
 
-  it("moves each added column's field out of the overflow document, in the same transaction", () => {
+  it("moves each added column's field out of the overflow document, in the same transaction, where leaving the pre-column copy shadows the new empty column", () => {
     const actual = Existing([
       { name: "_id", type: "text" },
       { name: "_instance", type: "text" },

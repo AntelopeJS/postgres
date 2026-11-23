@@ -349,7 +349,13 @@ export function Count(log: Recording, statement: string): number {
 
 export let baseline = 0;
 
-/** Registers the per-spec registry guard of the cursor suites. */
+/**
+ * Registers the per-spec registry guard of the cursor suites.
+ *
+ * The check is a ceiling on the count rather than an equality with the baseline: the sweep specs
+ * leave less than they found, and `CloseAllCursors` also reclaims what the live adapter this
+ * process shares had open, which an equality would read as this file's leak.
+ */
 export function GuardTheRegistry(): void {
   beforeEach(() => {
     baseline = CountOpenCursors();

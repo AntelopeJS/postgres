@@ -283,7 +283,7 @@ describe("the statement a cursor declares", () => {
     expect(refused.message).to.not.contain(CURSOR_HINT);
   });
 
-  it("awaits the readiness gate before it builds the root", async () => {
+  it("awaits the readiness gate before it builds the root, where a root built first compiles against unconverged shapes", async () => {
     const log = OpenRecorder();
     const gate = await Refusal(Schemas.register(GATED_SCHEMA_ID, BAD_SCHEMA));
     const stages = TableOf(GATED_SCHEMA_ID).build();

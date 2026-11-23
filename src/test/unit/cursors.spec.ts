@@ -277,7 +277,7 @@ describe("the cursor registry", () => {
     expect(CountOpenCursors()).to.equal(baseline);
   });
 
-  it("answers an empty batch, acquiring nothing, after a close that preceded every read", async () => {
+  it("answers an empty batch, acquiring nothing, after a close that preceded every read, where a close registering nothing lets the next read open and serve row 0", async () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Reopening(log, 1, 2);
@@ -288,7 +288,7 @@ describe("the cursor registry", () => {
     expect(CountOpenCursors()).to.equal(baseline);
   });
 
-  it("forgets a close that preceded every read, like any other ending", async () => {
+  it("forgets a close that preceded every read, like any other ending, where an entry outside the endings queue stays resident and answers an empty batch", async () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Reopening(log, 1, 2);
