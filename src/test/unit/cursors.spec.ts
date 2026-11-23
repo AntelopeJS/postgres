@@ -35,7 +35,7 @@ import {
 describe("the cursor registry", () => {
   GuardTheRegistry();
 
-  it("refuses both ends of a forgotten range, its highest id evicted first", async () => {
+  it("refuses both ends of a forgotten range, where a range tracking only the latest eviction reopens the highest id", async () => {
     const upper = Recorder();
     const lower = Recorder();
     const upperId = NextReqId();
