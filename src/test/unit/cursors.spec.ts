@@ -35,21 +35,6 @@ import {
 describe("the cursor registry", () => {
   GuardTheRegistry();
 
-  /**
-   * The top of the forgotten range is fixed by the first eviction the process ever makes.
-   *
-   * `Evicted` widens the range with `Math.max`, so the highest `reqId` it will ever carry is the
-   * highest one it ever drops — and every id this file allocates is lower than the last. Only the
-   * spec that owns the first two endings can therefore name the range's **upper** endpoint, which
-   * is why this one runs first and asserts the id it was handed. A spec inserted above it takes
-   * that endpoint out of reach, and the equality below says so rather than passing on quietly.
-   *
-   * The two endings are then evicted highest-first, so the range's top is the id evicted *earliest*
-   * and its bottom the id evicted last. That order is what makes the widening observable at all: a
-   * range that merely tracked the most recent eviction would answer this exact pair with a top
-   * below its own bottom, and the highest id — refused here — would re-open and serve its first row
-   * a second time.
-   */
   it("refuses both ends of a forgotten range, its highest id evicted first", async () => {
     const upper = Recorder();
     const lower = Recorder();
@@ -292,16 +277,6 @@ describe("the cursor registry", () => {
     expect(CountOpenCursors()).to.equal(baseline);
   });
 
-  /**
-   * A close arriving before the first read ends the cursor rather than leaving it openable.
-   *
-   * `IterableCursor` calls `CloseCursor` unconditionally on `return()`, so a cursor that is
-   * constructed and closed without ever being iterated reaches this module on a `reqId` it has
-   * never seen — and a close that registered nothing would leave that id looking new. The next
-   * read then takes the *open* path: a client acquired, the query declared and row 0 served to a
-   * consumer that has already closed the iterator. Nothing orders a first read against a close, so
-   * this is a remembered ending one step earlier rather than a second problem.
-   */
   it("answers an empty batch, acquiring nothing, after a close that preceded every read", async () => {
     const log = Recorder();
     const reqId = NextReqId();
@@ -313,14 +288,6 @@ describe("the cursor registry", () => {
     expect(CountOpenCursors()).to.equal(baseline);
   });
 
-  /**
-   * The ending a close-before-open records is an ending like any other, and is forgotten like one.
-   *
-   * Registering a `reqId` without retiring it through the same path would leave one entry resident
-   * for the life of the process per cursor closed unread, and the refusal below is what tells the
-   * two apart: an entry that never joined the endings queue would still be there afterwards,
-   * answering an empty batch where a genuinely forgotten `reqId` is refused.
-   */
   it("forgets a close that preceded every read, like any other ending", async () => {
     const log = Recorder();
     const reqId = NextReqId();

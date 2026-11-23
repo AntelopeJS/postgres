@@ -83,10 +83,6 @@ describe("the connection probe's access", function () {
     }
   });
 
-  /**
-   * Fails on a probe that judges write access by the relations alone, which answers no write
-   * access on a database with none, or that counts a right other than creating tables there.
-   */
   it("answers write access on an empty database only to a login that may create tables in it", async () => {
     for (const [role, canWrite] of [
       [LOGIN.reader, false],

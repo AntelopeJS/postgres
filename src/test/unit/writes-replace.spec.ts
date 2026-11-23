@@ -126,10 +126,6 @@ describe("the replace statement's asserted identity", () => {
     expect(Sql(written)).to.not.contain('SET "_id"');
   });
 
-  /**
-   * The round trip the whole assertion exists for: a document read back carries its `_id`, and
-   * writing it out again states the row it came from rather than naming a field to write.
-   */
   it("empties the row for a payload that names only the key", () => {
     expect(Sql(Replace({ _id: KEY }))).to.equal(
       Replaces(
@@ -144,7 +140,6 @@ describe("the replace statement's asserted identity", () => {
     expect(Sql(Replace({ _id: undefined }))).to.equal(Sql(Replace({})));
   });
 
-  /** The same refusal `update` makes, reached through the statement the two share. */
   it("refuses a key asserted over a selection of many rows, naming what to do", () => {
     const keyed = { _id: KEY, name: NAME };
     expect(() => Write(Root().replace(keyed))).to.throw(
@@ -152,10 +147,6 @@ describe("the replace statement's asserted identity", () => {
     );
   });
 
-  /**
-   * `_id` is `NOT NULL`, so an asserted null is unsatisfiable and would turn writing a document
-   * whose key was cleared into a silent no-op answering 0. A null key asserts nothing instead.
-   */
   it("asserts nothing for a key the payload set to null", () => {
     expect(Sql(Replace({ _id: null, name: NAME }))).to.equal(
       Sql(Replace({ name: NAME })),

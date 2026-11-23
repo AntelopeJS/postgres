@@ -356,14 +356,6 @@ export function GuardTheRegistry(): void {
     claimed = [];
   });
 
-  /**
-   * A spec leaves nothing of its own checked out, and the sweep specs leave *less* than they found.
-   *
-   * `CloseAllCursors` is global, so a spec that drives it also reclaims whatever the live adapter
-   * this process shares had open when the spec started. The check is therefore a
-   * ceiling on the count rather than an equality with the baseline, which would read another
-   * subsystem's reclaimed cursor as this file's leak.
-   */
   afterEach(async () => {
     const held = CountOpenCursors();
     await Promise.all(claimed.map((reqId) => CloseOneCursor(reqId)));

@@ -218,15 +218,6 @@ describe("a subquery correlated to the query containing it", () => {
   });
 });
 
-/**
- * A grouped query is `aggregated` and **not** `single`, which is the pair that reaches this branch.
- *
- * `stages-aggregate.ts:SetAggregate` sets both, so a stream aggregate takes the single-row branch
- * and never gets here — which was the whole argument for leaving `aggregated` out of
- * `SUBQUERY_BLOCKERS`, and `group` is what ended it. Unwrapped, the `jsonb_agg` absorbs into a
- * relation that already carries a `GROUP BY` and an aggregate in its select list: `42803 aggregate
- * function calls cannot be nested`, at execution, losing the whole statement.
- */
 describe("a grouped query used as a value", () => {
   function CountedByName(): string {
     return SubquerySql(

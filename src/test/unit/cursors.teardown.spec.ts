@@ -242,15 +242,6 @@ describe("the cursor registry", () => {
 describe("the cursor registry", () => {
   GuardTheRegistry();
 
-  /**
-   * The one place this file asks the absolute question, because the sweep is the one global answer.
-   *
-   * Every other count is read against the baseline the spec started from — these specs share their
-   * process with a live adapter, and a cursor this file never opened is not its leak.
-   * `CloseAllCursors` is the exception by contract: it is what runs before `pool.end()`, which was
-   * measured not to resolve while **any** client is checked out, so "none of ours" would be the
-   * wrong claim to make about it.
-   */
   it("closes every open cursor, and empties the registry", async () => {
     const first = Recorder();
     const second = Recorder();
@@ -375,17 +366,6 @@ describe("the cursor registry", () => {
     expect(log.releases).to.equal(1);
   });
 
-  /**
-   * `SettleBeforeDisconnect` is handed a probe in place of `EndPool`, so no pool is ever ended.
-   *
-   * That substitution is the whole reason this spec can exist here: the real teardown would take
-   * the adapter this process shares with the conformance suites down with it, while
-   * the probe runs at exactly the instant `pool.end()` would and reads what it would have found.
-   *
-   * What it reads is absolute, and deliberately so. `pool.end()` was measured not to resolve while
-   * **any** client is checked out, so the property the before-disconnect wire has to deliver is
-   * that nothing at all is still out — not merely nothing this spec opened.
-   */
   it("hands every client back before the pool is ended", async () => {
     const log = Recorder();
     const reqId = NextReqId();

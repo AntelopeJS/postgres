@@ -401,9 +401,12 @@ describe("selecting the rows an external write changes", () => {
     );
     const split = SplitWrite(root.rest);
     const relation = ApplyStages(root.relation, split.pipeline, context);
+    if (split.write === undefined) {
+      throw new Error("expected a write stage");
+    }
     const statement = CompileWrite(
       WriteTargetOf(root, relation),
-      split.write!,
+      split.write,
       context,
     );
     const client = await AcquireClient();

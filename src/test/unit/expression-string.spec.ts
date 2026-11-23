@@ -202,10 +202,6 @@ describe("str_match", () => {
   });
 });
 
-/**
- * `\b` is a backspace in ARE and `\y` is the word boundary, so the pattern every JavaScript author
- * writes matched nothing on every input — accepted, and silently always false.
- */
 describe("str_match's pattern, which is a different regex language", () => {
   function Bound(pattern: string): unknown[] {
     const context = NewContext();
@@ -228,11 +224,6 @@ describe("str_match's pattern, which is a different regex language", () => {
     expect(Bound("[a\\]\\b]\\bx")).to.deep.equal(["[a\\]\\b]\\yx"]);
   });
 
-  /**
-   * ARE's `.` matches a newline and JavaScript's does not without the `s` flag, so `^a.*z$` answered
-   * rows a caller expects it to skip. All four codepoints JavaScript's dot declines are excluded,
-   * since they cost the same in a bound parameter.
-   */
   it("rewrites an unescaped dot to the class JavaScript's dot means", () => {
     expect(Bound("a.z")).to.deep.equal(["a[^\n\r\u2028\u2029]z"]);
   });

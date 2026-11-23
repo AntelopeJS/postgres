@@ -174,11 +174,6 @@ describe("PlanTable", () => {
     ]);
   });
 
-  /**
-   * Without this the existing rows stayed self-inconsistent forever: `DecodeRow` merges the overflow
-   * document last, so the row went on displaying the pre-column copy while `filter` and `getAll`
-   * read the new empty column and matched nothing.
-   */
   it("moves each added column's field out of the overflow document, in the same transaction", () => {
     const actual = Existing([
       { name: "_id", type: "text" },
