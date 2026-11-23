@@ -247,11 +247,6 @@ describe("the lookup stage", () => {
   });
 });
 
-/**
- * The form is a static choice, so a key the schema does not describe has no answer rather than a
- * default one. Taking the scalar form correlated against nothing and merged `{"key": null}` over the
- * document, which lost a stored array with no error anywhere.
- */
 describe("a lookup whose local key has no declared type", () => {
   it("refuses, naming the key and both forms", () => {
     expect(() => Sql(OpaqueLookup())).to.throw(/'name'.*array.*one row/);

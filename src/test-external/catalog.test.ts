@@ -31,10 +31,16 @@ import { Native, NativeCount, WhileLocked } from "./sales";
 const SALES = "sales";
 const SAMPLE_THRESHOLD = 1_000_000;
 
+function Present<T>(value: T | undefined | null, what: string): T {
+  if (value === undefined || value === null) {
+    throw new Error(`expected ${what} to be present`);
+  }
+  return value;
+}
+
 function Named(relations: RelationSummary[], name: string): RelationSummary {
   const found = relations.find((relation) => relation.name === name);
-  expect(found, name).to.not.equal(undefined);
-  return found!;
+  return Present(found, name);
 }
 
 /** The schema a generator writes from the catalog: every column as the declaration proposed first. */
@@ -197,7 +203,10 @@ describe("a profile of an external relation", function () {
   });
 
   function Of(name: string): RelationProfile {
-    return profiles.find((profile) => profile.relation === `${SALES}.${name}`)!;
+    return Present(
+      profiles.find((profile) => profile.relation === `${SALES}.${name}`),
+      name,
+    );
   }
 
   it("never answers a text value, a text extreme or a value counted fewer than 5 times", () => {
@@ -209,9 +218,10 @@ describe("a profile of an external relation", function () {
   });
 
   it("answers an enum's categories with their counts", async () => {
-    const status = Of("accounts").columns.find(
-      (column) => column.name === "status",
-    )!;
+    const status = Present(
+      Of("accounts").columns.find((column) => column.name === "status"),
+      "accounts.status",
+    );
     expect(status.traits).to.include("enum-like");
     const native = await Native<{ status: string; n: string }>(
       "SELECT status::text AS status, count(*) AS n FROM sales.accounts GROUP BY 1",
@@ -228,9 +238,10 @@ describe("a profile of an external relation", function () {
   });
 
   it("folds a value seen fewer than 5 times into other", () => {
-    const kind = Of("invoices").columns.find(
-      (column) => column.name === "kind",
-    )!;
+    const kind = Present(
+      Of("invoices").columns.find((column) => column.name === "kind"),
+      "invoices.kind",
+    );
     expect(kind.traits).to.include("enum-like");
     expect(kind.categories).to.deep.include({ status: "ok" });
     if (kind.categories?.status === "ok") {
@@ -242,7 +253,10 @@ describe("a profile of an external relation", function () {
   it("finds a label, a time axis and a measure", () => {
     const columns = Of("accounts").columns;
     const traits = (name: string) =>
-      columns.find((column) => column.name === name)!.traits;
+      Present(
+        columns.find((column) => column.name === name),
+        name,
+      ).traits;
     expect(traits("name")).to.include("label-candidate");
     expect(traits("created_at")).to.include("time-axis");
     expect(traits("revenue")).to.include("measure");
@@ -265,8 +279,8 @@ describe("a profile of an external relation", function () {
 
   it("samples a relation above the threshold, and says so", async () => {
     const big = await Profile({ relation: "sales.big_events" });
-    expect(big.sample).to.not.equal(null);
-    expect(big.sample!.rows).to.be.above(0).and.below(SAMPLE_THRESHOLD);
+    const sample = Present(big.sample, "the sample");
+    expect(sample.rows).to.be.above(0).and.below(SAMPLE_THRESHOLD);
     expect(big.rows).to.deep.equal({
       status: "ok",
       value: { rows: BIG_EVENTS_ROWS, exact: false },

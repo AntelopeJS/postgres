@@ -157,20 +157,12 @@ describe("the update statement's asserted identity", () => {
     );
   });
 
-  /**
-   * `_id` is `NOT NULL`, so an asserted null matches no row on any dataset — the write would answer
-   * 0 for a payload mistake and read as "no such row". A null key is an absent one instead.
-   */
   it("asserts nothing for a key the payload set to null", () => {
     expect(Sql(Update({ _id: null, age: AGE }))).to.equal(
       Sql(Update({ age: AGE })),
     );
   });
 
-  /**
-   * A key asserted over rows the write did not address one by one is a mistake, not a narrowing:
-   * the caller wrote one document over a selection of many and would silently reach at most one.
-   */
   it("refuses a key asserted over a selection of many rows, naming what to do", () => {
     const keyed = { _id: KEY, age: AGE };
     expect(() => Write(Root().update(keyed))).to.throw(
@@ -205,10 +197,6 @@ describe("the update statement's asserted identity", () => {
 });
 
 describe("the count an update answers", () => {
-  /**
-   * The contract types the answer as the number of modified documents, and the driver reports the
-   * number matched — so the statement asks the question itself, in the text and with no new `$n`.
-   */
   it("leaves a row the assignment would not change out of the rows it writes", () => {
     expect(Sql(Update({ age: AGE }))).to.contain(
       ' AND (("w0"."age") IS DISTINCT FROM (($3::double precision)))',
@@ -229,7 +217,6 @@ describe("the count an update answers", () => {
     expect(Occurrences(Sql(written), "$3")).to.equal(RESPELLED);
   });
 
-  /** The two differ wherever `PgIdentifier` truncated the name apart. */
   it("names the column rather than the field it was declared under", () => {
     const written = Write(NotesRoot().update({ summary: "s" }));
     expect(Sql(written)).to.contain(
@@ -244,11 +231,6 @@ describe("the count an update answers", () => {
     );
   });
 
-  /**
-   * The one path left answering rows matched: the body is a derived table in the `SET` list, and
-   * testing it would spell that table a second time — measured at 1.6× to 1.8× the whole statement,
-   * and a second evaluation of the mapper on every candidate row.
-   */
   it("leaves the mapper's expression body counting the rows it matched", () => {
     const written = Write(Root().update((doc) => doc.key("meta")));
     expect(Sql(written)).to.not.contain("IS DISTINCT FROM");
@@ -280,11 +262,6 @@ describe("the update statement's refusals", () => {
     );
   });
 
-  /**
-   * A recorded lambda is a plain `{ stage, args }` object, so the two are told apart by shape —
-   * and a caller's own document may spell both keys. The refusal reads the parameter-id list as
-   * well as the stage name for exactly this payload, which is a document and is written as one.
-   */
   it("writes a document whose leading argument is a list of something else", () => {
     const written = Update({ stage: "func", args: [["a"], RECORDED_ARGUMENT] });
     expect(Sql(written)).to.contain(`"_extra" = (${EXISTING_EXTRA} ||`);

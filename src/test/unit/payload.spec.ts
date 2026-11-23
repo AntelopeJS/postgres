@@ -183,12 +183,6 @@ describe("SplitPayload over declared fields", () => {
     expect(applied.context.params.all()).to.deep.equal([3]);
   });
 
-  /**
-   * The three scalar columns clear themselves through the projection guard, which is SQL NULL for a
-   * json null. A jsonb column is the one the cast leaves alone, and storing the literal there is
-   * what made one value answer three ways — dropped by `DecodeRow`, returned by `pluck`, and
-   * reported present by `hasfields`.
-   */
   it("clears a declared jsonb column rather than storing a json null in it", () => {
     const applied = Split(ClassifyMember({ metadata: null }));
     expect(Columns(applied)).to.deep.equal(["metadata"]);
@@ -375,10 +369,6 @@ describe("SplitPayload over the reserved columns", () => {
     expect(applied.context.params.all()).to.deep.equal([]);
   });
 
-  /**
-   * The one distinction a null `_id` must not spread to: an undeclared key is a stored value and a
-   * json null is one of the values it can store, which is what tells it apart from a removal.
-   */
   it("keeps a null under an undeclared key while dropping one under the key column", () => {
     const applied = Split(ClassifyMember({ _id: null, tags: null }), INSERTED);
     expect(applied.split.extra?.sql).to.equal(

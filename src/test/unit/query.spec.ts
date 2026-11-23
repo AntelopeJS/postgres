@@ -138,12 +138,6 @@ describe("DecodeResult in value mode", () => {
   });
 });
 
-/**
- * The two decoders over the relation that separates them, asserted side by side.
- *
- * A cursor over a `get` must be immediately done where a `get` answers its absent value, and
- * neither half says that alone.
- */
 describe("DecodeRows over a relation that yields at most one row", () => {
   it("yields the row as one element where DecodeResult yields the row", () => {
     const relation = RowMode();
@@ -281,15 +275,6 @@ describe("the statement a cursor declares", () => {
     expect(log.roots).to.equal(1);
   });
 
-  /**
-   * The refusal `changes` earns is the fold's own, and this is what says so.
-   *
-   * `for await (const doc of table.changes())` reaches `ReadCursor` before a stage is compiled, so
-   * every change-feed case answered the cursor scaffold's message until now. Once the open compiles,
-   * the stage reaches `REJECTED_STAGES` like any other — which is the first time that permanent
-   * message is reachable through the contract's own suite, and the whole conformance signal of this
-   * sub-plan.
-   */
   it("raises the changes stage's own refusal rather than one about cursors", async () => {
     const log = OpenRecorder();
     const stages = TableOf(SCHEMA_ID).changes().build();
@@ -298,13 +283,6 @@ describe("the statement a cursor declares", () => {
     expect(refused.message).to.not.contain(CURSOR_HINT);
   });
 
-  /**
-   * A gate that rejects proves the ordering where a gate that resolves cannot.
-   *
-   * Compilation is synchronous and reads shapes a registration has not converged yet,
-   * so the gate has to be awaited first. The stubbed registry answers any table, so a root built
-   * before the gate would compile happily and the failure would surface nowhere.
-   */
   it("awaits the readiness gate before it builds the root", async () => {
     const log = OpenRecorder();
     const gate = await Refusal(Schemas.register(GATED_SCHEMA_ID, BAD_SCHEMA));
