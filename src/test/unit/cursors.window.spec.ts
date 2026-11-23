@@ -83,7 +83,7 @@ describe("the cursor registry", () => {
     expect(CountOpenCursors()).to.equal(baseline);
   });
 
-  it("keeps serving a live cursor the forgotten range has grown around", async () => {
+  it("keeps serving a live cursor the forgotten range has grown around, where checking the range before the registry ends it mid-iteration", async () => {
     const live = Recorder();
     const ended = Recorder();
     const liveId = NextReqId();
@@ -104,7 +104,7 @@ describe("the cursor registry", () => {
     expect(CountOpenCursors()).to.equal(baseline);
   });
 
-  it("refuses a reqId whose failed open it has forgotten, rather than answering an empty batch", async () => {
+  it("refuses a reqId whose failed open it has forgotten, where an open that records no ending leaves it answering an empty batch", async () => {
     const log = Recorder();
     const reqId = NextReqId();
     const open = Requesting(log, [], DECLARE);

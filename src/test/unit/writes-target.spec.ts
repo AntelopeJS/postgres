@@ -175,7 +175,7 @@ describe("delete under CROSS_INSTANCE", () => {
     expect(written.context.params.all()).to.deep.equal([]);
   });
 
-  it("removes one row through a get, which is what a SingleSelection selects", () => {
+  it("removes one row through a get by bounding the delete, where an unbounded one removes the row of every instance", () => {
     const sql = Sql(Write(CrossInstanceRoot().get(KEY).delete()));
     expect(sql).to.contain(`ORDER BY "${ROOT_ALIAS}"."_instance" ASC`);
     expect(sql).to.contain("LIMIT");

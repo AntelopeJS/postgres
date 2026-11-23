@@ -83,7 +83,7 @@ describe("the connection probe's access", function () {
     }
   });
 
-  it("answers write access on an empty database only to a login that may create tables in it", async () => {
+  it("answers write access on an empty database from the right to create tables in it, not from the relations alone or another right", async () => {
     for (const [role, canWrite] of [
       [LOGIN.reader, false],
       [LOGIN.owner, true],

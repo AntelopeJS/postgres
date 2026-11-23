@@ -163,7 +163,7 @@ describe("the update statement's asserted identity", () => {
     );
   });
 
-  it("refuses a key asserted over a selection of many rows, naming what to do", () => {
+  it("refuses a key asserted over a selection of many rows, where narrowing it silently reaches at most one", () => {
     const keyed = { _id: KEY, age: AGE };
     expect(() => Write(Root().update(keyed))).to.throw(
       "The 'update' stage was given a payload naming '_id' over a selection of many rows: address the row with get(_id) first, or leave '_id' out of the payload",
