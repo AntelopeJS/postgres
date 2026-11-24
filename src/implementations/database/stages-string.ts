@@ -105,8 +105,12 @@ const MatchStage = LiftRaw((value, stage, context) => {
         stage,
         FIRST_OPERAND,
       );
+  const matched = `${Text(value).sql} ${MATCH_OPERATOR} ${Text(pattern).sql}`;
   return {
-    sql: `(${Text(value).sql} ${MATCH_OPERATOR} ${Text(pattern).sql})`,
+    sql:
+      value.type.kind === "json"
+        ? `COALESCE(${matched}, false)`
+        : `(${matched})`,
     type: BOOL,
   };
 });
@@ -152,7 +156,9 @@ const SplitStage = LiftRaw((value, stage, context) => {
  *   astral-plane character. It ends `::double precision` because `length()` returns `integer`.
  * - `str_concat` is a bare `||`, so a NULL operand poisons the whole result. A missing field
  *   yielding NULL rather than the other operand is the intended reading.
- * - `str_match` yields a boolean, as the contract documents, rather than ReQL's match object.
+ * - `str_match` yields a boolean, as the contract documents, rather than ReQL's match object. A
+ *   jsonb operand reads as text only when it holds a string, so every other cell answers `false`
+ *   rather than NULL.
  *   `~` is PostgreSQL's advanced regular expression flavour (ARE), which is not JavaScript's: it
  *   rejects a named capture group at *runtime* with `2201B`, reads `\b` as a backspace rather than
  *   as a word boundary, and lets `.` match a newline. A **literal** pattern is rewritten by

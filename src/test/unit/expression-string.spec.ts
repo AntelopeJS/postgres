@@ -194,10 +194,10 @@ describe("str_match", () => {
     expect(out.type).to.equal(BOOL);
   });
 
-  it("reads both sides through the guarded text projection", () => {
+  it("reads both sides through the guarded text projection and answers false for a non-text operand", () => {
     const out = Compile((doc) => doc.key("nope").match(doc.key("other")));
     expect(out.sql).to.equal(
-      `(${AsText(Extra("nope"))} ~ ${AsText(Extra("other"))})`,
+      `COALESCE(${AsText(Extra("nope"))} ~ ${AsText(Extra("other"))}, false)`,
     );
   });
 });
