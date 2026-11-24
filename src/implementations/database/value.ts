@@ -169,28 +169,9 @@ export interface RecordedFunction {
 }
 
 /**
- * Whether a value is a lambda a caller recorded, for a stage that accepts either a lambda or a plain
- * document.
- *
- * The query builder records one as `{ stage: "func", args: [[argId], body] }` — a plain object
- * carrying no marker class — so `update`, the one stage taking either, can only tell them apart by
- * shape. The parameter-id list is read as well as the stage name because it is the half no
- * caller's own document plausibly carries: testing the stage name alone refuses
- * `{ stage: "func", args: [1] }`, which is a legitimate document of two undeclared keys, while a
- * test that missed a lambda would store `stage` and `args` in the row as ordinary keys. Every read
- * goes through {@link IsPlainObject} first, so the shape is tested rather than asserted. It narrows
- * the value to the stage it tested, so a caller that goes on to compile the body reaches
- * {@link DecodeFunction} without asserting the same shape a second time.
- */
-export function IsRecordedFunction(value: unknown): value is RecordedFunction {
-  return IsLambdaStage(value) && value.args[PARAMETER_IDS].every(IsNumber);
-}
-
-/**
  * Whether a value is a `func` stage whose parameter ids are a list. A stage that takes only a
  * callback accepts whatever ids a `func` rebuilt from JSON may carry, which the adapter has always
- * bound by their property-key text; {@link IsRecordedFunction} stays strict because `update` has to
- * tell a lambda from a document.
+ * bound by their property-key text.
  */
 function IsLambdaStage(value: unknown): value is RecordedFunction {
   if (!IsPlainObject(value) || value.stage !== FUNCTION_STAGE) {

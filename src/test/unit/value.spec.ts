@@ -1,5 +1,4 @@
 import { ClassifyMember as Parsed } from "../../implementations/database/member";
-import assert from "node:assert";
 import { expect } from "chai";
 import { QueryStage } from "@antelopejs/interface-database/common";
 import { Datum, Query, ValueProxy } from "@antelopejs/interface-database";
@@ -20,7 +19,7 @@ import {
 import {
   DecodeFunction,
   DecodeValue,
-  IsRecordedFunction,
+  RecordedLambda,
   type RecordedFunction,
   WithBoundArguments,
 } from "../../implementations/database/value";
@@ -196,9 +195,8 @@ describe("DecodeValue", () => {
   });
 });
 
-function LambdaStage(func: QueryStage): RecordedFunction {
-  assert(IsRecordedFunction(func), "the builder records a lambda this way");
-  return func;
+function LambdaStage(func: QueryStage<"func">): RecordedFunction {
+  return RecordedLambda(QueryStage("update", { by: "function" }, func), 0);
 }
 
 describe("DecodeFunction", () => {
@@ -279,14 +277,6 @@ describe("DecodeFunction", () => {
       /Unbound lambda parameter 99/,
     );
     expect(() => context.arg(7)).to.throw(/7/);
-  });
-});
-
-describe("RecordedLambda", () => {
-  it("does not take text parameter ids for a lambda where a document is allowed", () => {
-    expect(IsRecordedFunction({ stage: "func", args: [["a"], true] })).to.equal(
-      false,
-    );
   });
 });
 

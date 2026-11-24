@@ -15,7 +15,7 @@ import { DeclaredColumns, DocumentKeys, type TableModel } from "./fields";
 import {
   DecodeValue,
   FUNCTION_BODY,
-  IsRecordedFunction,
+  RecordedLambda,
   type RecordedFunction,
   WithBoundArguments,
 } from "./value";
@@ -345,13 +345,18 @@ function MappedColumns(
  * states what it costs.
  */
 export const UpdateWrite: WriteCompiler = (target, stage, context) => {
-  const argument: unknown = stage.args[FIRST_OPERAND];
-  const changed = IsRecordedFunction(argument)
-    ? MappedColumns(target, stage, argument, context)
-    : ChangedColumnsOf(
-        ChangedPayload(ChangedDocument(stage), target, context),
-        stage,
-      );
+  const changed =
+    stage.stage === "update" && stage.options.by === "function"
+      ? MappedColumns(
+          target,
+          stage,
+          RecordedLambda(stage, FIRST_OPERAND),
+          context,
+        )
+      : ChangedColumnsOf(
+          ChangedPayload(ChangedDocument(stage), target, context),
+          stage,
+        );
   return UpdateStatement(target, stage, changed, context);
 };
 

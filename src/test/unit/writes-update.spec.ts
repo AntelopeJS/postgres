@@ -63,7 +63,7 @@ function Updates(assignments: string, asserted?: string): string {
  */
 function NthUpdate(document: WriteDocument): StagedObject {
   return new Query<number>(
-    QueryStage("update", undefined, document),
+    QueryStage("update", { by: "document" }, document),
     Root().nth(NTH_ROW),
   );
 }
