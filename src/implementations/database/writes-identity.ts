@@ -1,4 +1,8 @@
 import assert from "node:assert";
+import {
+  IsQueryStage,
+  UpdatesByFunction,
+} from "@antelopejs/interface-database/common";
 
 import { AsJson } from "./readings";
 import { FIRST_OPERAND } from "./stage";
@@ -15,7 +19,6 @@ import { DeclaredColumns, DocumentKeys, type TableModel } from "./fields";
 import {
   DecodeValue,
   FUNCTION_BODY,
-  RecordedLambda,
   type RecordedFunction,
   WithBoundArguments,
 } from "./value";
@@ -346,13 +349,8 @@ function MappedColumns(
  */
 export const UpdateWrite: WriteCompiler = (target, stage, context) => {
   const changed =
-    stage.stage === "update" && stage.options.by === "function"
-      ? MappedColumns(
-          target,
-          stage,
-          RecordedLambda(stage, FIRST_OPERAND),
-          context,
-        )
+    IsQueryStage(stage, "update") && UpdatesByFunction(stage)
+      ? MappedColumns(target, stage, stage.args[FIRST_OPERAND], context)
       : ChangedColumnsOf(
           ChangedPayload(ChangedDocument(stage), target, context),
           stage,
