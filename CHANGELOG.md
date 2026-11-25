@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.4.5
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.4.4...v0.4.5)
+
+### 🩹 Fixes
+
+- **deps:** Depend on the stable @antelopejs/interface-database
+
+### 💅 Refactors
+
+- Switch update on options.by instead of the lambda shape ([#119](https://github.com/AntelopeJS/postgres/pull/119))
+- Narrow update stages with UpdatesByFunction from interface-database ([#122](https://github.com/AntelopeJS/postgres/pull/122))
+
+### 🏡 Chore
+
+- Adopt tooling-configs 0.10 and satisfy the comment rule ([#116](https://github.com/AntelopeJS/postgres/pull/116))
+- **deps:** Update dependency @types/node to v22.20.5 ([#121](https://github.com/AntelopeJS/postgres/pull/121))
+- **deps:** Update dependency oxlint-tsgolint to v7.0.2008 ([#123](https://github.com/AntelopeJS/postgres/pull/123))
+- **deps:** Update dependency pg-connection-string to v2.14.1 ([#124](https://github.com/AntelopeJS/postgres/pull/124))
+
+### ✅ Tests
+
+- Name the wrong implementation in six test titles ([#117](https://github.com/AntelopeJS/postgres/pull/117))
+- Name the wrong implementation in nine more test titles ([#118](https://github.com/AntelopeJS/postgres/pull/118))
+
+### 🤖 CI
+
+- Re-sync the AntelopeJS pack for the release app ([#114](https://github.com/AntelopeJS/postgres/pull/114))
+- Stop forwarding the retired RELEASE_GITHUB_TOKEN ([#115](https://github.com/AntelopeJS/postgres/pull/115))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.4.4
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.4.3...v0.4.4)

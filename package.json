@@ -1,6 +1,6 @@
 {
   "name": "@antelopejs/postgres",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "PostgreSQL backend for AntelopeJS, implementing the Database interface on relational tables, with an external mode for existing databases.",
   "keywords": [
     "antelopejs",
@@ -52,7 +52,7 @@
   },
   "dependencies": {
     "@antelopejs/interface-core": ">=0.5.0 <0.6.0",
-    "@antelopejs/interface-database": "0.4.4-next.128.g3e7dab7",
+    "@antelopejs/interface-database": ">=0.4.4 <0.5.0",
     "@antelopejs/interface-database-catalog": ">=0.1.1 <0.2.0",
     "pg": "^8.22.0",
     "pg-connection-string": "^2.14.0"
