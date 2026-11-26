@@ -1,3 +1,5 @@
+import type { StagedObject } from "@antelopejs/interface-database/common";
+
 /** Whether a stage argument or caller value is a string. */
 export function IsString(value: unknown): value is string {
   return typeof value === "string";
@@ -26,4 +28,15 @@ export function IsBoolean(value: unknown): value is boolean {
  */
 export function IsDocument(value: unknown): value is Record<string, unknown> {
   return IsObject(value) && !Array.isArray(value);
+}
+
+/**
+ * Whether a caller value is a staged object: an object with a `build` method, which every staged
+ * object of the interface carries. `interface-database` exports no brand guard for it, so this
+ * reads the shape rather than the class, and so holds for one built by another copy of the package.
+ */
+export function IsStagedObject(value: unknown): value is StagedObject {
+  return (
+    IsObject(value) && "build" in value && typeof value.build === "function"
+  );
 }

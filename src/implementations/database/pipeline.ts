@@ -56,7 +56,6 @@ export const PIPELINE_STAGES = {
  */
 export const DEFERRED_STAGES: Record<string, string> = {};
 
-/** Stages this backend declines permanently, with the message it will always give. */
 /**
  * Stages this backend refuses permanently, with the message each is refused by.
  *

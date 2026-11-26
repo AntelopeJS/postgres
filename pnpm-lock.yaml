@@ -28,8 +28,8 @@ importers:
         specifier: ~1.23.1
         version: 1.23.1
       '@antelopejs/tooling-configs':
-        specifier: '>=0.10.0 <0.11.0'
-        version: 0.10.0(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2008))
+        specifier: ^0.10.7
+        version: 0.10.7(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2008))
       '@testcontainers/postgresql':
         specifier: ^12.0.4
         version: 12.0.4
@@ -106,8 +106,8 @@ packages:
     peerDependencies:
       '@antelopejs/interface-core': '>=0.5.1 <0.6.0'
 
-  '@antelopejs/tooling-configs@0.10.0':
-    resolution: {integrity: sha512-5UwQirzbFvd6Elzab7B8sssS2zVp5m2zIc0sAr7hpAMvHq7Cy0JIqY0XEZlwFJ3NwJZez5fBPbTU/6/lYJt+0Q==}
+  '@antelopejs/tooling-configs@0.10.7':
+    resolution: {integrity: sha512-13abD0BhsR9RF6LQoYYKa+XBknlmcrZVB6iW3BwdfHKu6pPG4ClhAQCLJSSPYtbTMuvNU4imI+dVFSB78TdTnQ==}
     engines: {node: '>=22.18.0'}
     hasBin: true
     peerDependencies:
@@ -1363,10 +1363,6 @@ packages:
 
   brace-expansion@2.1.8:
     resolution: {integrity: sha512-BnlDzDYQoplTsZSvPi86CNzmbcb07X8ufR8fk1zivaiEJlXJkiq1MQyDCVmlWcsWbj6aWXqHnrwwevbrm/Saig==}
-
-  brace-expansion@5.0.9:
-    resolution: {integrity: sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==}
-    engines: {node: 20 || >=22}
 
   brace-expansion@5.1.0:
     resolution: {integrity: sha512-aa11Dv491GKnYqxaul3aRJ0szew7yMJMfZPnqD44NjGrZXoj62l41OEDDpdpC4eE2P88vBFfLuSyRhpG91NUvg==}
@@ -3141,7 +3137,7 @@ snapshots:
     dependencies:
       '@antelopejs/interface-core': 0.5.1
 
-  '@antelopejs/tooling-configs@0.10.0(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2008))':
+  '@antelopejs/tooling-configs@0.10.7(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2008))':
     dependencies:
       '@oxlint/plugins': 1.94.0
       dts-bundle-generator: 9.5.1
@@ -4128,10 +4124,6 @@ snapshots:
     dependencies:
       balanced-match: 1.0.2
 
-  brace-expansion@5.0.9:
-    dependencies:
-      balanced-match: 4.0.4
-
   brace-expansion@5.1.0:
     dependencies:
       balanced-match: 4.0.4
@@ -5043,7 +5035,7 @@ snapshots:
 
   minimatch@10.2.6:
     dependencies:
-      brace-expansion: 5.0.9
+      brace-expansion: 5.1.0
 
   minimatch@11.0.9:
     dependencies:

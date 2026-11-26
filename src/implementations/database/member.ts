@@ -1,7 +1,14 @@
-import { Query, ValueProxy } from "@antelopejs/interface-database";
-import { StagedObject } from "@antelopejs/interface-database/common";
+import { IsQuery, IsValueProxy } from "@antelopejs/interface-database";
+import type { StagedObject } from "@antelopejs/interface-database/common";
 
-import { IsBoolean, IsDocument, IsNumber, IsObject, IsString } from "./guards";
+import {
+  IsBoolean,
+  IsDocument,
+  IsNumber,
+  IsObject,
+  IsStagedObject,
+  IsString,
+} from "./guards";
 import type { ConstantJson } from "./sql";
 
 /**
@@ -152,13 +159,13 @@ export function ClassifyMember(
   if (value === null) {
     return of("null");
   }
-  if (value instanceof ValueProxy) {
+  if (IsValueProxy(value)) {
     return { ...of("proxy"), value, identity: value };
   }
-  if (value instanceof Query) {
+  if (IsQuery(value)) {
     return { ...of("query"), value, identity: value };
   }
-  if (value instanceof StagedObject) {
+  if (IsStagedObject(value)) {
     return { ...of("staged"), value, identity: value };
   }
   if (value instanceof Date) {
