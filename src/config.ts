@@ -94,9 +94,43 @@ export interface Options {
   changePollIntervalMs?: number;
   /** The catalog an external instance answers. See {@link CatalogOptions}. */
   catalog?: CatalogOptions;
+  /** External mode only. See {@link InstanceDatabasesOptions}. */
+  instanceDatabases?: InstanceDatabasesOptions;
+}
+
+/** Where the ids of the schema instances an external module serves come from. */
+export interface InstanceListOptions {
+  /** The database the query runs in, on the server `url` names. Unset, the database of `url`. */
+  database?: string;
+  /** A statement whose first column answers one instance id per row. */
+  query: string;
+}
+
+/**
+ * External mode only: a schema instance is a database on the server `url` names.
+ *
+ * The default instance keeps reading the database of `url`, which is also the one registration
+ * reads the catalog from: every instance database is expected to hold the same relations.
+ */
+export interface InstanceDatabasesOptions {
+  /** The database name of an instance, with `{instance}` standing for its id. */
+  database: string;
+  list: InstanceListOptions;
+  /** How many instance pools stay open at once; the least recently used idle one is closed past it. */
+  maxOpenPools?: number;
+  /** An instance pool no query used for this long is closed. */
+  poolIdleMs?: number;
+}
+
+export interface ResolvedInstanceDatabases {
+  database: string;
+  list: InstanceListOptions;
+  maxOpenPools: number;
+  poolIdleMs: number;
 }
 
 export interface ResolvedOptions {
+  instanceDatabases?: ResolvedInstanceDatabases;
   mode: Mode;
   url: string;
   pool: PoolConfig;
@@ -269,11 +303,70 @@ function ResolveUrl(mode: Mode, options?: Options): string {
   return DEFAULT_URL;
 }
 
+const INSTANCE_PLACEHOLDER = "{instance}";
+const DEFAULT_MAX_OPEN_POOLS = 10;
+const DEFAULT_POOL_IDLE_MS = 60_000;
+
+function IsFilledText(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+function ResolveInstanceDatabases(
+  mode: Mode,
+  options?: Options,
+): ResolvedInstanceDatabases | undefined {
+  const supplied = options?.instanceDatabases;
+  if (supplied === undefined) {
+    return undefined;
+  }
+  if (mode !== "external") {
+    throw new Error(
+      `instanceDatabases cannot be set with mode "owned": an owned instance keeps every schema instance in the database of its url`,
+    );
+  }
+  if (
+    !IsFilledText(supplied.database) ||
+    !supplied.database.includes(INSTANCE_PLACEHOLDER)
+  ) {
+    throw new Error(
+      `instanceDatabases.database must be a database name holding ${INSTANCE_PLACEHOLDER}, received ${JSON.stringify(supplied.database)}`,
+    );
+  }
+  if (!IsFilledText(supplied.list?.query)) {
+    throw new Error(
+      "instanceDatabases.list.query must be a statement answering one instance id per row: without it no id could be told from an arbitrary database name",
+    );
+  }
+  if (
+    supplied.list.database !== undefined &&
+    !IsFilledText(supplied.list.database)
+  ) {
+    throw new Error(
+      "instanceDatabases.list.database must be a database name; leave it out to run the list query in the database of url",
+    );
+  }
+  return {
+    database: supplied.database,
+    list: { database: supplied.list.database, query: supplied.list.query },
+    maxOpenPools: PositiveSafeInteger(
+      "instanceDatabases.maxOpenPools",
+      supplied.maxOpenPools,
+      DEFAULT_MAX_OPEN_POOLS,
+    ),
+    poolIdleMs: PositiveSafeInteger(
+      "instanceDatabases.poolIdleMs",
+      supplied.poolIdleMs,
+      DEFAULT_POOL_IDLE_MS,
+    ),
+  };
+}
+
 export function SetOptions(options?: Options): ResolvedOptions {
   const mode = ResolveMode(options);
   const url = ResolveUrl(mode, options);
   AssertUsableSsl(url, options?.pool ?? {});
   resolved = {
+    instanceDatabases: ResolveInstanceDatabases(mode, options),
     mode,
     url,
     pool: options?.pool ?? {},
@@ -320,6 +413,16 @@ export function GetOptions(): ResolvedOptions {
 /** Whether the configured instance serves tables it does not own. */
 export function IsExternal(): boolean {
   return GetOptions().mode === "external";
+}
+
+/**
+ * Whether schema instances are databases here, which only an external instance can be told.
+ *
+ * Answers `false` before `construct()` rather than refusing: the compiler asks it for every external
+ * root, and a statement compiled with no options set has no instance database to route to.
+ */
+export function HasInstanceDatabases(): boolean {
+  return resolved?.instanceDatabases !== undefined;
 }
 
 /** Whether the catalog answers: `catalog.enabled` when set, and otherwise the project's development mode. */

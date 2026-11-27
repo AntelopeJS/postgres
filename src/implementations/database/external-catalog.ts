@@ -1,4 +1,4 @@
-import { Query } from "../../connection";
+import { type Querier, Query } from "../../connection";
 import { RELATION_KINDS } from "./external-access";
 
 /** One column of a relation the adapter did not create, as `pg_catalog` describes it. */
@@ -128,19 +128,26 @@ function ServingIndexes(indexes: CatalogIndex[]): string[][] {
  * Reads a relation's columns, key and indexes out of `pg_catalog`, or nothing when the schema has
  * no relation of that name. Only the catalog is read, which a role with `USAGE` on the schema may.
  */
-export async function ReadColumns(oid: number): Promise<CatalogColumn[]> {
-  return (await Query<CatalogColumn>(COLUMNS_SQL, [oid])).rows;
+export async function ReadColumns(
+  oid: number,
+  query: Querier = Query,
+): Promise<CatalogColumn[]> {
+  return (await query<CatalogColumn>(COLUMNS_SQL, [oid])).rows;
 }
 
-export async function ReadIndexes(oid: number): Promise<CatalogIndex[]> {
-  return (await Query<CatalogIndex>(INDEXES_SQL, [oid])).rows;
+export async function ReadIndexes(
+  oid: number,
+  query: Querier = Query,
+): Promise<CatalogIndex[]> {
+  return (await query<CatalogIndex>(INDEXES_SQL, [oid])).rows;
 }
 
 export async function ReadRelation(
   schemaName: string,
   relationName: string,
+  query: Querier = Query,
 ): Promise<CatalogRelation | undefined> {
-  const found = await Query<RelationRow>(RELATION_SQL, [
+  const found = await query<RelationRow>(RELATION_SQL, [
     schemaName,
     relationName,
   ]);
@@ -148,8 +155,8 @@ export async function ReadRelation(
     return undefined;
   }
   const relation = found.rows[0];
-  const columns = await ReadColumns(relation.oid);
-  const indexes = await ReadIndexes(relation.oid);
+  const columns = await ReadColumns(relation.oid, query);
+  const indexes = await ReadIndexes(relation.oid, query);
   const key = KeyOf(indexes);
   return {
     kind: relation.kind,

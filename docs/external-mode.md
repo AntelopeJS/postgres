@@ -83,9 +83,37 @@ Each of these fails with a message that names what was refused:
 - Writes to a relation without a key, and `atomicMutation`.
 - `update` with an expression mapper, such as `update(row => …)`.
 - `changes()`.
-- A named instance, `createInstance` and `destroyInstance`. `listInstances` answers an empty list. External tables have no instances, so the default instance and `CROSS_INSTANCE` both read every row.
+- A named instance, `createInstance` and `destroyInstance`. `listInstances` answers an empty list. External tables have no instances, so the default instance and `CROSS_INSTANCE` both read every row. [One database per instance](#one-database-per-instance) changes the first and the last of these.
 
 A read does not refuse a field that the declaration does not name. The field is absent, as on any document that lacks it.
+
+## One database per instance
+
+Some applications keep each tenant in a database of its own, all with the same tables, beside a central database that lists the tenants. `instanceDatabases` makes a schema instance name one of those databases:
+
+```typescript fragment
+{
+    mode: "external",
+    url: "postgres://dms_reader@db:5432/tenant_template",
+    instanceDatabases: {
+        database: "tenant-{instance}",
+        list: { database: "central", query: "SELECT id FROM tenants" },
+        maxOpenPools: 10,
+        poolIdleMs: 60000,
+    },
+}
+```
+
+- The default instance reads the database of `url`. Registration reads the catalog there, once, and every instance database is expected to hold the same relations.
+- An instance database is verified on its first query, schema by schema: each declared relation is looked up there, and a missing relation, a missing column, another native type or another key refuses the instance with a message that names the database and every difference. Extra columns and relations are ignored. The other instances keep answering. A refused database is looked at again after 30 seconds, and a verified one when its pool reopens.
+- A named instance reads the database that `database` names, with `{instance}` replaced by its id, on the same server and with the same account as `url`.
+- `list.query` answers one instance id per row, in its first column. It runs in `list.database`, or in the database of `url` when that is left out. `listInstances` answers its rows.
+- An id that `list.query` does not answer is refused before anything connects, so an id never becomes an arbitrary database name. The list is kept for 30 seconds, and read again for an id it does not hold.
+- Each instance database gets a pool of its own, opened on first use with the options of `pool`. A pool that no query used for `poolIdleMs` is closed. Past `maxOpenPools`, the least recently used pool that holds no client is closed first. The server therefore sees at most about `maxOpenPools` times `pool.max` connections from instances, beside the default pool.
+- One statement reads one database. A query whose subqueries or joins name two different instances is refused, and so is `CROSS_INSTANCE`.
+- `createInstance` and `destroyInstance` stay refused. The catalog describes the database of `url` only.
+
+The account needs `CONNECT` and the same grants in every instance database, and `SELECT` on what `list.query` reads.
 
 ## The account to connect with
 

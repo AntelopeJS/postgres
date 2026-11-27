@@ -109,6 +109,25 @@ async function ToleratesConnectFailure(): Promise<boolean> {
 }
 
 /**
+ * Builds a guarded pool on the configured options, for `url` or for another database of its server.
+ *
+ * A given `connectionString` wins over `pool.connectionString`, because an instance database is the
+ * same connection with another database name and nothing else may differ.
+ */
+export function CreatePool(connectionString?: string): Pool {
+  const resolved = GetOptions();
+  return GuardPool(
+    new Pool({
+      statement_timeout: resolved.statementTimeoutMs,
+      ...resolved.pool,
+      connectionString:
+        connectionString ?? resolved.pool.connectionString ?? resolved.url,
+      onConnect: PinSession,
+    }),
+  );
+}
+
+/**
  * Opens the connection pool and verifies the server is reachable.
  *
  * Called before any interface is implemented so no query can observe a
@@ -138,14 +157,7 @@ async function ToleratesConnectFailure(): Promise<boolean> {
 export async function Connect(options?: Options) {
   await Disconnect();
   const resolved = SetOptions(options);
-  const created = GuardPool(
-    new Pool({
-      connectionString: resolved.url,
-      statement_timeout: resolved.statementTimeoutMs,
-      ...resolved.pool,
-      onConnect: PinSession,
-    }),
-  );
+  const created = CreatePool();
   try {
     const client = await created.connect();
     client.release();
@@ -236,6 +248,9 @@ export function Query<T extends QueryResultRow = QueryResultRow>(
 ): Promise<QueryResult<T>> {
   return GetPool().query<T>(sql, params);
 }
+
+/** Runs one statement somewhere: {@link Query} on the default pool, or the same on another one. */
+export type Querier = typeof Query;
 
 function ReportHeldClientError(err: Error) {
   Logger.Warn(HELD_CLIENT_FAILED, err);

@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { CROSS_INSTANCE } from "@antelopejs/interface-database/schema";
 
+import { HasInstanceDatabases } from "../../config";
 import { TEXT } from "./types";
 import { IndexFields } from "./ddl";
 import { ClassifyMember, type Member } from "./member";
@@ -148,6 +149,44 @@ function RefuseNamedInstance(
   }
 }
 
+/**
+ * Claims the instance database a statement runs in, where schema instances are databases.
+ *
+ * The default instance is the database of `url`. A named instance is another database of the same
+ * server, so two roots of one statement cannot name different ones: a statement runs on one
+ * connection. `CROSS_INSTANCE` would be every database at once, which no single statement can read,
+ * so it is refused by name rather than answered with the rows of one of them.
+ */
+function ClaimInstanceDatabase(
+  external: ExternalRelation,
+  instance: QueryStage,
+  context: DecodingContext,
+): void {
+  const id: unknown = OptionsOf(instance)?.id;
+  const relation = QualifiedName(external.schema, external.table);
+  if (id === CROSS_INSTANCE) {
+    throw new Error(
+      `${relation} cannot be read under CROSS_INSTANCE: with instanceDatabases every instance is its own database, and one statement reads one database`,
+    );
+  }
+  assert(
+    id === undefined || id === null || IsString(id),
+    `An instance id must be a string, received ${ClassifyMember(id).kind}`,
+  );
+  const named =
+    id === undefined || id === null || id === DEFAULT_INSTANCE_ID
+      ? undefined
+      : id;
+  const route = context.route;
+  if (route.claimed && route.instance !== named) {
+    throw new Error(
+      `${relation} is read in instance '${named ?? DEFAULT_INSTANCE_ID}' by a statement that already reads instance '${route.instance ?? DEFAULT_INSTANCE_ID}': with instanceDatabases each instance is its own database, and one statement reads one database`,
+    );
+  }
+  route.claimed = true;
+  route.instance = named;
+}
+
 /** An external relation's root: its own names, verbatim, and no instance to filter on. */
 function ExternalRoot(
   origin: TableOrigin,
@@ -155,7 +194,12 @@ function ExternalRoot(
   instance: QueryStage,
   context: DecodingContext,
 ): Relation {
-  RefuseNamedInstance(external, instance);
+  if (HasInstanceDatabases()) {
+    ClaimInstanceDatabase(external, instance, context);
+    context.route.schemaIds.add(origin.schemaId);
+  } else {
+    RefuseNamedInstance(external, instance);
+  }
   const from = QualifiedName(external.schema, external.table);
   return TableRelation(from, context.nextAlias(), origin);
 }

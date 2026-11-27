@@ -19,7 +19,8 @@ Every option that `construct` accepts, and what each one does.
     changeBatchSize: 256,               // Change events read per round trip
     changePollIntervalMs: 5000,         // Fallback poll; NOTIFY is the primary wakeup
     pool: {},                           // Optional pg.Pool options, merged over the URL
-    catalog: {}                         // External mode only: { enabled?: boolean }
+    catalog: {},                        // External mode only: { enabled?: boolean }
+    instanceDatabases: undefined        // External mode only: one database per schema instance
 }
 ```
 
@@ -41,4 +42,5 @@ The module uses the `pg` driver and leaves pooling to `pg.Pool`:
 - `cursorBatchSize` and `cursorIdleTimeoutMs` are refused unless they are positive safe integers. Every other numeric option is taken as given. `FETCH` does not accept a bound parameter for its count, so `cursorBatchSize` is the one configured value that reaches SQL as text and not as a parameter. That is why `construct()` validates it.
 - A `for await` receives `cursorBatchSize` rows per read, and `cursorIdleTimeoutMs` runs from one read to the next. A loop therefore has `cursorIdleTimeoutMs` to work through one batch before the cursor is reclaimed: 60 ms per row with the defaults. For slower work per row, lower `cursorBatchSize` or raise `cursorIdleTimeoutMs`.
 - The three `change*` options are validated the same way. `changeRetentionMs` is a contract, not a tuning value. It sets how long a consumer may stall before its feed is ended. See [Change feeds](./change-feeds.md).
+- `instanceDatabases` makes each schema instance of an external module a database of the same server. It is refused in owned mode, and so are a `database` without `{instance}` and a missing `list.query`. `maxOpenPools` defaults to 10 and `poolIdleMs` to 60000. See [One database per instance](./external-mode.md#one-database-per-instance).
 - `catalog.enabled` turns the catalog of an external instance on or off. Unset, the catalog follows the project's development mode. See [The catalog](./external-mode.md#the-catalog).

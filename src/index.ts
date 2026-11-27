@@ -3,7 +3,14 @@ import { ImplementInterface } from "@antelopejs/interface-core";
 import { IsExternal, type Options } from "./config";
 import { Connect, Disconnect } from "./connection";
 
-export type { CatalogOptions, MigrationMode, Mode, Options } from "./config";
+export type {
+  CatalogOptions,
+  InstanceDatabasesOptions,
+  InstanceListOptions,
+  MigrationMode,
+  Mode,
+  Options,
+} from "./config";
 
 export async function construct(options?: Options) {
   await Connect(options);
