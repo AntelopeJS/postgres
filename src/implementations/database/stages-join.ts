@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { Query } from "@antelopejs/interface-database";
+import { IsQuery } from "@antelopejs/interface-database";
 import type { QueryStage } from "@antelopejs/interface-database/common";
 import { OptionsOf } from "./utils";
 
@@ -80,7 +80,7 @@ function FlavourOf(stage: QueryStage): JoinFlavour {
 function JoinedRelation(stage: QueryStage, context: DecodingContext): Relation {
   const right: unknown = stage.args[FIRST_OPERAND];
   assert(
-    right instanceof Query,
+    IsQuery(right),
     "The 'join' stage takes another query to join against",
   );
   return Nested(context.relation(right.build()), context);
@@ -238,7 +238,7 @@ function FormOf(local: Compiled, key: string): LookupForm {
 function LookedUp(stage: QueryStage, context: DecodingContext): Relation {
   const other: unknown = stage.args[FIRST_OPERAND];
   assert(
-    other instanceof Query,
+    IsQuery(other),
     "The 'lookup' stage takes another query to read the key from",
   );
   return context.relation(other.build());

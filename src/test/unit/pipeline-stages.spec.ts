@@ -2,11 +2,10 @@ import { expect } from "chai";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { SingleSelection } from "@antelopejs/interface-database";
-import {
-  QueryStage,
-  StagedObject,
-} from "@antelopejs/interface-database/common";
+import { QueryStage } from "@antelopejs/interface-database/common";
+import type { StagedObject } from "@antelopejs/interface-database/common";
 
+import { IsStagedObject } from "../../implementations/database/guards";
 import { Root } from "./pipeline-fixture";
 import { WRITE_STAGES } from "../../implementations/database/writes";
 import {
@@ -146,7 +145,7 @@ function RecordedStage(
   const root = make();
   const depth = root.build().length;
   const staged: unknown = method.apply(root, ProbeArguments(name));
-  if (!(staged instanceof StagedObject)) {
+  if (!IsStagedObject(staged)) {
     throw new TypeError(`${name} did not answer a staged object`);
   }
   const stages = staged.build();
