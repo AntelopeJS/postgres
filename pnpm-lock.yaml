@@ -25,8 +25,8 @@ importers:
         version: 2.14.1
     devDependencies:
       '@antelopejs/core':
-        specifier: ~1.23.1
-        version: 1.23.1
+        specifier: ~1.24.0
+        version: 1.24.8
       '@antelopejs/tooling-configs':
         specifier: '>=0.10.0 <0.11.0'
         version: 0.10.0(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.66.0)(oxlint@1.81.0(oxlint-tsgolint@7.0.2008))
@@ -87,14 +87,16 @@ importers:
 
 packages:
 
-  '@antelopejs/core@1.23.1':
-    resolution: {integrity: sha512-0hTjFw5vHNwwTE6HYCvEHErKkJR9MiehE1UmY3P1M0LEky5j+TPWYcf7+Qtzp9U6ErYb+cRljHCzRaBu2pEbIw==}
+  '@antelopejs/core@1.24.8':
+    resolution: {integrity: sha512-zEGT+Xlirpl3yFOgPFd6zCP30WNp83kQrRnZuwQRAvaUjvKtbQjL3YHoNolMOJxAwIzaeKuT6d5KXXyR8shNcA==}
     engines: {node: ^20.19.0 || >=22.12.0}
-    deprecated: 'Update to @antelopejs/core >=1.24.6: interface-core 0.5.2 adds HoldReloads, which older cores do not implement'
     hasBin: true
 
   '@antelopejs/interface-core@0.5.1':
     resolution: {integrity: sha512-ON/7TYA1yyT8UznzKi6vnwyjRU3byNE0OcFXBmf8dE/dqp8hKjeWHVyA2EUPOngmEimCLw4idZqOS5DJqMJx3g==}
+
+  '@antelopejs/interface-core@0.5.4':
+    resolution: {integrity: sha512-5IzF8eGvXugI5KNHj2q+ux3J5AE09Sagul4Sl1k2FFRlfm7WSRE1uzmjL8CT2cqJvWExqW6SGX17InOddI/t/g==}
 
   '@antelopejs/interface-database-catalog@0.1.1':
     resolution: {integrity: sha512-XLzAa26IP7sJKXkspOfMwytk1NcYdY1PEvL2ffvKwCkH+iYrdOr2CHQtuXnmemSzHihsJ3OSRxanIZYzvqQgew==}
@@ -2215,10 +2217,6 @@ packages:
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
 
-  lru-cache@11.5.2:
-    resolution: {integrity: sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g==}
-    engines: {node: 20 || >=22}
-
   lru-cache@11.5.3:
     resolution: {integrity: sha512-U4N8FgzmWxc8k1VH8Kr6lQg18U7Fjvby6wXHVRX/ZZ7IwWbRMgrRbP0Wrb5q5NVinryp4SQampHKdvtecItxUg==}
     engines: {node: 20 || >=22}
@@ -2563,10 +2561,6 @@ packages:
   picomatch@2.3.2:
     resolution: {integrity: sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==}
     engines: {node: '>=8.6'}
-
-  picomatch@4.0.5:
-    resolution: {integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==}
-    engines: {node: '>=12'}
 
   picomatch@4.0.7:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
@@ -3114,9 +3108,9 @@ packages:
 
 snapshots:
 
-  '@antelopejs/core@1.23.1':
+  '@antelopejs/core@1.24.8':
     dependencies:
-      '@antelopejs/interface-core': 0.5.1
+      '@antelopejs/interface-core': 0.5.4
       '@clack/prompts': 1.8.1
       '@types/proper-lockfile': 4.1.4
       commander: 13.1.0
@@ -3124,12 +3118,18 @@ snapshots:
       jiti: 2.7.0
       mocha: 12.0.3
       picocolors: 1.1.1
+      picomatch: 4.0.7
       proper-lockfile: 4.1.2
       reflect-metadata: 0.2.2
       semver: 7.8.5
       typescript: 5.9.3
+      yaml: 2.9.1
 
   '@antelopejs/interface-core@0.5.1':
+    dependencies:
+      reflect-metadata: 0.2.2
+
+  '@antelopejs/interface-core@0.5.4':
     dependencies:
       reflect-metadata: 0.2.2
 
@@ -3889,7 +3889,7 @@ snapshots:
       '@typescript-eslint/visitor-keys': 8.69.0
       debug: 4.4.3(supports-color@8.1.1)
       minimatch: 10.2.6
-      semver: 7.7.3
+      semver: 7.8.5
       tinyglobby: 0.2.15
       ts-api-utils: 2.5.0(typescript@5.9.3)
       typescript: 5.9.3
@@ -4584,10 +4584,6 @@ snapshots:
     dependencies:
       walk-up-path: 4.0.0
 
-  fdir@6.5.0(picomatch@4.0.5):
-    optionalDependencies:
-      picomatch: 4.0.5
-
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
@@ -5021,8 +5017,6 @@ snapshots:
 
   lru-cache@10.4.3: {}
 
-  lru-cache@11.5.2: {}
-
   lru-cache@11.5.3: {}
 
   lru-cache@7.18.3: {}
@@ -5399,7 +5393,7 @@ snapshots:
 
   path-scurry@2.0.2:
     dependencies:
-      lru-cache: 11.5.2
+      lru-cache: 11.5.3
       minipass: 7.1.3
 
   path-scurry@3.0.0:
@@ -5463,8 +5457,6 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@2.3.2: {}
-
-  picomatch@4.0.5: {}
 
   picomatch@4.0.7: {}
 
@@ -5908,8 +5900,8 @@ snapshots:
 
   tinyglobby@0.2.15:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
+      fdir: 6.5.0(picomatch@4.0.7)
+      picomatch: 4.0.7
 
   tinyglobby@0.2.17:
     dependencies:
