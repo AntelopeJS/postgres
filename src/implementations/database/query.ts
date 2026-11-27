@@ -2,8 +2,12 @@ import assert from "node:assert";
 import { DatabaseError } from "pg";
 import { ValidateAtomicMutationTable } from "@antelopejs/interface-database/atomic";
 
-import { Query } from "../../connection";
-import { IsExternal } from "../../config";
+import { HasInstanceDatabases, IsExternal } from "../../config";
+import {
+  AcquireInstanceClient,
+  ListInstanceIds,
+  QueryInstance,
+} from "../../instance-databases";
 import {
   ExternalInstanceRefusal,
   ExternalWriteRefusal,
@@ -16,6 +20,7 @@ import {
   IsDatabaseError,
 } from "./external-errors";
 import { DecodingContext } from "./context";
+import { VerifyInstance } from "./instance-drift";
 import { CompileSubquery } from "./subquery";
 import { CompileExpression } from "./expression";
 import {
@@ -101,6 +106,9 @@ const LIFECYCLE_HANDLERS = new Map<string, LifecycleHandler>([
 /**
  * The lifecycle stages on an external instance, whose relations have no instances: creating or
  * destroying one is refused rather than recorded nowhere, and the list of them is empty.
+ *
+ * With `instanceDatabases` the list is what its query answers. Creating and destroying stay
+ * refused: an instance is then a database, and the module owns none.
  */
 const EXTERNAL_LIFECYCLE = new Map<string, LifecycleHandler>([
   [
@@ -111,7 +119,10 @@ const EXTERNAL_LIFECYCLE = new Map<string, LifecycleHandler>([
     DESTROY_INSTANCE,
     (_schemaId, stage) => Promise.reject(ExternalInstanceRefusal(stage.stage)),
   ],
-  ["listInstances", () => Promise.resolve([])],
+  [
+    "listInstances",
+    () => (HasInstanceDatabases() ? ListInstanceIds() : Promise.resolve([])),
+  ],
 ]);
 
 /**
@@ -214,18 +225,24 @@ async function RunManagedWrite(
   if (stage.stage === ATOMIC_MUTATION) {
     return ExecuteAtomicWrite(statement.sql, context.params.all());
   }
-  const result = await Query(statement.sql, context.params.all());
+  const result = await QueryInstance(
+    undefined,
+    statement.sql,
+    context.params.all(),
+  );
   return statement.ids ?? result.rowCount ?? NO_ROWS;
 }
 
 /** Refuses the write, naming every field, when any value failed its check; runs nothing otherwise. */
 async function Validate(
   validation: WriteValidation | undefined,
+  instance: string | undefined,
 ): Promise<void> {
   if (!validation) {
     return;
   }
-  const result = await Query<Record<string, boolean>>(
+  const result = await QueryInstance<Record<string, boolean>>(
+    instance,
     validation.sql,
     validation.params,
   );
@@ -247,9 +264,15 @@ async function RunExternalWrite(
   external: ExternalRelation,
   context: DecodingContext,
 ): Promise<WriteAnswer> {
-  await Validate(statement.validation);
+  const instance = context.route.instance;
+  await VerifyInstance(context.route);
+  await Validate(statement.validation, instance);
   try {
-    const result = await Query<ResultRow>(statement.sql, context.params.all());
+    const result = await QueryInstance<ResultRow>(
+      instance,
+      statement.sql,
+      context.params.all(),
+    );
     if (statement.returnsIds) {
       return result.rows.map((row) => row[ID_COLUMN]);
     }
@@ -298,7 +321,9 @@ export async function RunQuery(stages: QueryStage[]): Promise<any> {
   }
   const compiled = await ReadyQuery(stages, QueryContext());
   if (!compiled.split.write) {
-    const result = await Query<ResultRow>(
+    await VerifyInstance(compiled.context.route);
+    const result = await QueryInstance<ResultRow>(
+      compiled.context.route.instance,
       Render(compiled.relation),
       compiled.context.params.all(),
     );
@@ -354,10 +379,21 @@ export async function CompileCursor(
     RefuseCursorWrite(compiled.split.write);
   }
   const relation = compiled.relation;
-  return {
+  const instance = context.route.instance;
+  const request: CursorRequest = {
     sql: Render(relation),
     params: context.params.all(),
     decode: (rows) => DecodeRows(relation, rows),
+  };
+  if (instance === undefined) {
+    return request;
+  }
+  return {
+    ...request,
+    acquire: async () => {
+      await VerifyInstance(context.route);
+      return AcquireInstanceClient(instance);
+    },
   };
 }
 

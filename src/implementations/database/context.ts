@@ -60,6 +60,20 @@ export interface Compilers {
 const ALIAS_PREFIX = "t";
 
 /**
+ * The instance database one statement runs in, when schema instances are databases.
+ *
+ * A statement runs on one connection, so every external root it reads has to name the same
+ * instance. The first root claims it and the later ones are checked against it; `instance` stays
+ * `undefined` for the default instance, which is the database of `url`.
+ */
+export interface InstanceRoute {
+  claimed: boolean;
+  instance?: string;
+  /** Every schema an external root of the statement reads, which is what gets verified there. */
+  schemaIds: Set<string>;
+}
+
+/**
  * Mutable state shared by every layer compiling a single statement: the parameter list, the
  * table alias counter and the bindings of lambda parameters.
  *
@@ -85,11 +99,15 @@ export class DecodingContext {
   public constructor(
     private readonly compilers: Compilers,
     public readonly resolveOrigin?: OriginResolver,
+    public readonly route: InstanceRoute = {
+      claimed: false,
+      schemaIds: new Set(),
+    },
   ) {}
 
   /** A context compiling a separate statement, with a ledger of its own and the same compilers. */
   public sibling(): DecodingContext {
-    return new DecodingContext(this.compilers, this.resolveOrigin);
+    return new DecodingContext(this.compilers, this.resolveOrigin, this.route);
   }
 
   public nextAlias(): string {

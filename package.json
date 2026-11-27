@@ -38,6 +38,8 @@
     "test": "docker pull -q postgres:18-alpine >/dev/null 2>&1 & pnpm run build && scripts/test.sh",
     "test:external": "pnpm run build && pnpm run test:external:run",
     "test:external:run": "PG_TEST_MODE=external ajs module test . $(for file in dist/test-external/*.test.js; do printf -- '-f %s ' \"$file\"; done)",
+    "test:instances": "pnpm run build && pnpm run test:instances:run",
+    "test:instances:run": "PG_TEST_MODE=external PG_TEST_INSTANCES=1 ajs module test . $(for file in dist/test-instances/*.test.js; do printf -- '-f %s ' \"$file\"; done)",
     "test:unit": "pnpm run build && mocha \"dist/test/unit/**/*.spec.js\"",
     "typecheck": "tsc --noEmit",
     "format:check": "oxfmt --check .",

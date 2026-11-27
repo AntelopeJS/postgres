@@ -5,6 +5,7 @@ export default antelopeKnipConfig({
     "src/probe.ts",
     "src/test/**/*.spec.ts",
     "src/test-external/**/*.test.ts",
+    "src/test-instances/**/*.test.ts",
   ],
   ignoreDependencies: ["@types/mocha"],
 });
