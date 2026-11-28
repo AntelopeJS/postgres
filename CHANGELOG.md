@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.4.6
+
+[compare changes](https://github.com/AntelopeJS/postgres/compare/v0.4.5...v0.4.6)
+
+### 🩹 Fixes
+
+- **ci:** Start PostgreSQL on Blacksmith's Windows image ([#137](https://github.com/AntelopeJS/postgres/pull/137))
+
+### 📦 Build
+
+- Bump tooling-configs to 0.10.7 and add release age ([#127](https://github.com/AntelopeJS/postgres/pull/127))
+- **ci:** Bump tooling-configs to 0.10.12 and run sync ([#134](https://github.com/AntelopeJS/postgres/pull/134))
+- **deps:** Bump tooling-configs to 0.10.14 and run sync ([#138](https://github.com/AntelopeJS/postgres/pull/138))
+
+### 🏡 Chore
+
+- **deps:** Update dependency rimraf to v6.1.4 ([#125](https://github.com/AntelopeJS/postgres/pull/125))
+- **deps:** Update antelopejs tooling configs ([#126](https://github.com/AntelopeJS/postgres/pull/126))
+- **deps:** Update dependency @antelopejs/core to ~1.24.0 ([#128](https://github.com/AntelopeJS/postgres/pull/128))
+- **deps:** Update dependency @testcontainers/postgresql to v12.2.2 ([#129](https://github.com/AntelopeJS/postgres/pull/129))
+- **deps:** Update dependency @antelopejs/core to v1.24.9 ([#135](https://github.com/AntelopeJS/postgres/pull/135))
+- **deps:** Update dependency @types/chai to v5 ([#130](https://github.com/AntelopeJS/postgres/pull/130))
+- **deps:** Update dependency chai to v6 ([#131](https://github.com/AntelopeJS/postgres/pull/131))
+
+### ❤️ Contributors
+
+- Antony Rizzitelli
+
 ## v0.4.5
 
 [compare changes](https://github.com/AntelopeJS/postgres/compare/v0.4.4...v0.4.5)
