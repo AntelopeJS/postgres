@@ -28,8 +28,8 @@ importers:
         specifier: ~1.24.0
         version: 1.24.9
       '@antelopejs/tooling-configs':
-        specifier: ^0.10.12
-        version: 0.10.12(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.80.0)(oxlint@1.95.0(oxlint-tsgolint@7.0.2008))
+        specifier: ^0.10.14
+        version: 0.10.14(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.80.0)(oxlint@1.95.0(oxlint-tsgolint@7.0.2008))
       '@testcontainers/postgresql':
         specifier: ^12.0.4
         version: 12.2.2(bare-buffer@3.7.3)
@@ -108,8 +108,8 @@ packages:
     peerDependencies:
       '@antelopejs/interface-core': '>=0.5.1 <0.6.0'
 
-  '@antelopejs/tooling-configs@0.10.12':
-    resolution: {integrity: sha512-2Yjx8JxWr4Opz1hA8363Zctf4SUmtG3DFmm/UaPe1447fWzmTX8FgTDRg1qoEIQ94g/U6rte6lj9cIdNEE3Kmg==}
+  '@antelopejs/tooling-configs@0.10.14':
+    resolution: {integrity: sha512-jSEmmtT7P11Ur9uSJ9oVFTUYRgzgLVpwiOdjp1Xo49y3zwcbV1nu/TCnqRcdPOMeZbRlJtnW0B0iYEi7m0dqGw==}
     engines: {node: '>=22.18.0'}
     hasBin: true
     peerDependencies:
@@ -2726,11 +2726,6 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
-  semver@7.8.5:
-    resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
-    engines: {node: '>=10'}
-    hasBin: true
-
   semver@7.8.6:
     resolution: {integrity: sha512-9lpSSU4Mly3mrtruwLs1eLK6+gzbzqeBFwRNjIjE+9LuDpWdYctrQlQ3ej1Ilgi7gknpsTRnPoLP8DpCHqHIJw==}
     engines: {node: '>=10'}
@@ -3130,12 +3125,12 @@ snapshots:
     dependencies:
       '@antelopejs/interface-core': 0.5.1
 
-  '@antelopejs/tooling-configs@0.10.12(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.80.0)(oxlint@1.95.0(oxlint-tsgolint@7.0.2008))':
+  '@antelopejs/tooling-configs@0.10.14(eslint-plugin-perfectionist@5.11.0(eslint@10.10.0(jiti@2.7.0))(typescript@5.9.3))(knip@6.34.0)(oxfmt@0.80.0)(oxlint@1.95.0(oxlint-tsgolint@7.0.2008))':
     dependencies:
       '@oxlint/plugins': 1.95.0
       dts-bundle-generator: 9.5.1
       minimatch: 10.2.6
-      semver: 7.8.5
+      semver: 7.8.6
       typescript: 6.0.3
       yaml: 2.9.1
     optionalDependencies:
@@ -5644,8 +5639,6 @@ snapshots:
   scule@1.3.0: {}
 
   semver@7.7.3: {}
-
-  semver@7.8.5: {}
 
   semver@7.8.6: {}
 
