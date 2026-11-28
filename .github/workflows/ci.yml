@@ -32,9 +32,10 @@ jobs:
         if [[ "$RUNNER_OS" == Windows ]]; then
           pg_bin=$(cygpath -u "$PGBIN")
           pg_data="$RUNNER_TEMP/pgdata"
-          "$pg_bin/initdb" -D "$pg_data" -U postgres -A trust -E UTF8 --locale=C > /dev/null
+          printf root > "$RUNNER_TEMP/pgpass"
+          "$pg_bin/initdb" -D "$pg_data" -U postgres -A scram-sha-256 --pwfile="$RUNNER_TEMP/pgpass" -E UTF8 --locale=C > /dev/null
           "$pg_bin/pg_ctl" start -D "$pg_data" -w -s -l "$RUNNER_TEMP/postgres.log" -o "-c fsync=off" || { cat "$RUNNER_TEMP/postgres.log"; exit 1; }
-          "$pg_bin/createdb" -U postgres antelopejs_test
+          PGPASSWORD=root "$pg_bin/createdb" -U postgres antelopejs_test
           echo "PG_TEST_URL=postgres://postgres:root@localhost:5432/antelopejs_test" >> "$GITHUB_ENV"
         fi
       affected-tests: true
